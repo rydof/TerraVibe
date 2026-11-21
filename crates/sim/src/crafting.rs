@@ -640,6 +640,14 @@ pub fn is_material(id: ItemId) -> bool {
         .any(|recipe| recipe.ingredients.iter().any(|ing| ing.item == id))
 }
 
+/// Returns all crafting recipes that use `item` as an ingredient.
+pub fn recipes_using_material(item: ItemId) -> Vec<&'static Recipe> {
+    RECIPES
+        .iter()
+        .filter(|recipe| recipe.ingredients.iter().any(|ing| ing.item == item))
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CraftError {
     UnknownRecipe,
@@ -1562,5 +1570,31 @@ mod tests {
         assert_eq!(recipe(WORM_FOOD_RECIPE).unwrap().station, Some(DEMON_ALTAR));
         assert_eq!(craft(&mut inv, WORM_FOOD_RECIPE, 1), Ok(1));
         assert_eq!(inv.count_of(WORM_FOOD), 1);
+    }
+
+    #[test]
+    fn recipes_using_material_returns_expected_recipes() {
+        let wood_recipes = recipes_using_material(WOOD);
+        assert!(wood_recipes.iter().any(|r| r.id == WORKBENCH_RECIPE));
+        assert!(wood_recipes.iter().any(|r| r.id == TORCH_RECIPE));
+        assert!(wood_recipes.iter().any(|r| r.id == WOODEN_SWORD_RECIPE));
+
+        let iron_recipes = recipes_using_material(IRON_BAR);
+        assert!(iron_recipes.iter().any(|r| r.id == ANVIL_RECIPE));
+        assert!(iron_recipes.iter().any(|r| r.id == IRON_PICKAXE_RECIPE));
+        assert!(iron_recipes.iter().any(|r| r.id == CHEST_RECIPE));
+
+        let hellstone_recipes = recipes_using_material(HELLSTONE_BAR);
+        assert!(
+            hellstone_recipes
+                .iter()
+                .any(|r| r.id == FIERY_GREATSWORD_RECIPE)
+        );
+
+        let lens_recipes = recipes_using_material(LENS);
+        assert_eq!(lens_recipes.len(), 1);
+        assert_eq!(lens_recipes[0].id, SUSPICIOUS_EYE_RECIPE);
+
+        assert!(recipes_using_material(WOODEN_SWORD).is_empty());
     }
 }

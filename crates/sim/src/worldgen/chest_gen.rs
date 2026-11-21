@@ -22,7 +22,7 @@ const SEARCH: i32 = 12;
 /// Minimum blocks below the column's surface.
 pub const MIN_DEPTH: i32 = 12;
 /// `worldSurface + 25` (gameplay spec): shallower chests use the surface table.
-pub const SURFACE_BAND_DEPTH: i32 = 25;
+pub const SURFACE_BAND_DEPTH: i32 = 30;
 const CLEARANCE: i32 = 2;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub enum Band {
     Underworld,
 }
 
-pub const CAVERN_BAND_DEPTH: i32 = 70;
+pub const CAVERN_BAND_DEPTH: i32 = 115;
 
 pub fn band_for_depth(depth: i32) -> Band {
     if depth < SURFACE_BAND_DEPTH {
@@ -308,7 +308,7 @@ fn chest_in_cell_for_size(seed: u32, cell: [i32; 3], size: WorldSize) -> Option<
     let surface = surface_height_for_size(seed, x, z, size);
     // First stone floor with an air pocket above it, scanning down.
     for y in (y0 - SEARCH..=y0).rev() {
-        if y < 1 || surface - y < MIN_DEPTH {
+        if y <= super::underworld::UNDERWORLD_TOP_Y || surface - y < MIN_DEPTH {
             continue;
         }
         if natural_block_for_size(seed, x, y - 1, z, size) == STONE
@@ -440,7 +440,7 @@ mod tests {
         let mut v = Vec::new();
         for x in 0..chunks {
             for z in 0..chunks {
-                for y in 0..4 {
+                for y in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     v.extend(chests_in(seed, cp(x, y, z)));
                 }
             }

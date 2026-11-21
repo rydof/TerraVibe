@@ -192,7 +192,7 @@ mod tests {
         let mut w = World::new();
         let cx = t.base[0].div_euclid(CS);
         let cz = t.base[2].div_euclid(CS);
-        for cy in 0..4 {
+        for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
             let pos = ChunkPos {
                 x: cx,
                 y: cy,
@@ -253,7 +253,7 @@ mod tests {
         let mut w = World::new();
         for cz in -1..=1 {
             for cx in -1..=1 {
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let pos = ChunkPos {
                         x: cx,
                         y: cy,

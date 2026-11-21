@@ -28,6 +28,9 @@ pub struct LightExt {
     #[texture(103, dimension = "2d_array")]
     #[sampler(104)]
     pub tiles: Handle<Image>,
+    /// Liquid rendering parameters: `x > 0.5` marks liquid chunks, `y` = elapsed time (seconds).
+    #[uniform(105)]
+    pub liquid_params: Vec4,
 }
 
 impl MaterialExtension for LightExt {

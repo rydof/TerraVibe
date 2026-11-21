@@ -519,6 +519,11 @@ impl EscPanels<'_, '_> {
             }
         }
         if let Some(t) = self.town.as_mut() {
+            if t.guide_crafting_open()
+                && let Some(net) = &self.net
+            {
+                let _ = net.send(ClientMsg::CloseGuideCrafting);
+            }
             **t = TownPanel::default();
         }
         if let Some(net) = &self.net {
@@ -1273,6 +1278,34 @@ pub fn click_input(
             }
             return;
         }
+        // While Guide crafting is open, Shift+left on a bag slot places/swaps a material.
+        if extras
+            .town
+            .as_ref()
+            .is_some_and(|t| t.guide_crafting_open())
+            && left
+            && shift(&keys)
+            && let SlotRef::Inv(slot) = at
+            && (slot as usize) < BAG
+        {
+            if let Some(stack) = inv
+                .as_ref()
+                .and_then(|i| i.0.slots.get(slot as usize))
+                .and_then(|s| *s)
+            {
+                if terravibe_sim::crafting::is_material(stack.id) {
+                    if let Some(net) = &net {
+                        let _ = net.send(ClientMsg::GuideSlotShift { slot });
+                    }
+                    if let Some(ref mut t) = extras.town {
+                        t.note.clear();
+                    }
+                } else if let Some(ref mut t) = extras.town {
+                    t.note = "That item is not a crafting material.".to_string();
+                }
+            }
+            return;
+        }
         // While a chest is open, Shift+left on a bag slot transfers it to the chest.
         if chest_open
             && left
@@ -1330,6 +1363,9 @@ pub fn click_input(
 
     if left
         && !panels_open
+        && !extras.town.as_ref().is_some_and(|t| {
+            t.is_open() && crate::hud::town::panel_hit(c, win, t.guide_crafting_open())
+        })
         && held.as_ref().is_some_and(|h| h.0.is_some())
         && let Some(net) = &net
     {

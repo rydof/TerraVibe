@@ -6,7 +6,7 @@ use terravibe_sim::net::{DESPAWN_MARGIN, VIEW_RADIUS_BLOCKS};
 use terravibe_sim::{CHUNK_SIZE, ChunkPos};
 
 /// Chunk layers (y chunk coordinates) the world occupies.
-pub const LAYERS: std::ops::Range<i32> = 0..4;
+pub const LAYERS: std::ops::Range<i32> = 0..terravibe_sim::WORLD_CHUNK_LAYERS;
 
 #[derive(Default)]
 pub struct Interest {
@@ -40,7 +40,7 @@ impl Interest {
         let mut out = Vec::new();
         for x in ox - r..=ox + r {
             for z in oz - r..=oz + r {
-                for y in LAYERS {
+                for y in terravibe_sim::net::vertical_layers_for_y(c[1]) {
                     let p = ChunkPos { x, y, z };
                     let d = horizontal_dist(c, p);
                     if d <= VIEW_RADIUS_BLOCKS {
@@ -53,10 +53,14 @@ impl Interest {
         out.into_iter().map(|(_, p)| p).collect()
     }
 
-    /// True if the chunk is beyond the unload distance.
+    /// True if the chunk is beyond the horizontal or vertical unload distance.
     pub fn too_far(&self, p: ChunkPos) -> bool {
         match self.centre {
-            Some(c) => horizontal_dist(c, p) > VIEW_RADIUS_BLOCKS + DESPAWN_MARGIN,
+            Some(c) => {
+                let cy = (c[1] / CHUNK_SIZE as f32).floor() as i32;
+                horizontal_dist(c, p) > VIEW_RADIUS_BLOCKS + DESPAWN_MARGIN
+                    || (p.y - cy).abs() > terravibe_sim::net::VERTICAL_CHUNK_RADIUS + 1
+            }
             None => true,
         }
     }

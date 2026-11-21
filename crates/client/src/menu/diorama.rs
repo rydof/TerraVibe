@@ -83,13 +83,16 @@ pub(crate) fn setup_diorama(
         return;
     };
 
-    // 1. Generate diorama mini world (5x5 horizontal columns, 4 vertical chunks each)
+    // 1. Generate diorama mini world (5x5 horizontal columns, 3 vertical chunks around surface)
     let mut world = World::new();
     let mut chunks_map: HashMap<ChunkPos, Arc<Chunk>> = HashMap::new();
+    let center_surf = terravibe_sim::worldgen::terrain::surface_height(DIORAMA_SEED, 8, 8);
+    let base_cy =
+        (center_surf / terravibe_sim::CHUNK_SIZE).clamp(1, terravibe_sim::WORLD_CHUNK_LAYERS - 2);
 
     for cx in -2..=2 {
         for cz in -2..=2 {
-            for cy in 2..=5 {
+            for cy in (base_cy - 1)..=(base_cy + 1) {
                 let cp = ChunkPos {
                     x: cx,
                     y: cy,
@@ -103,8 +106,10 @@ pub(crate) fn setup_diorama(
     }
 
     // Find center surface height around (8, 8)
-    let mut surface_y = 52.0;
-    for y in (32..90).rev() {
+    let mut surface_y = center_surf as f32;
+    let y_lo = (base_cy - 1) * terravibe_sim::CHUNK_SIZE;
+    let y_hi = (base_cy + 2) * terravibe_sim::CHUNK_SIZE;
+    for y in (y_lo..y_hi).rev() {
         if world.block(8, y, 8).is_solid() {
             surface_y = y as f32;
             break;

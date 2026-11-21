@@ -15,9 +15,9 @@ use crate::worldgen::corruption::corruption_at_for_size;
 use crate::worldgen::noise::fbm3;
 use crate::worldgen::terrain::{WORLD_HEIGHT, surface_height_for_size};
 
-/// The plan's "220 below the surface datum" is deeper than this 128-block world,
-/// so use absolute Y=24 (deep caves). Lava pools never appear above `LAVA_DEPTH_Y`.
-pub const LAVA_DEPTH_Y: i32 = crate::worldgen::underworld::UNDERWORLD_TOP_Y;
+/// Lava pools begin in the lower Cavern layer (~195 blocks below Forest surface),
+/// well above the Underworld (`UNDERWORLD_TOP_Y = 48`).
+pub const LAVA_DEPTH_Y: i32 = 104;
 
 const CS: usize = CHUNK_SIZE as usize;
 /// No generated liquid in any column within this radius of the world origin.
@@ -26,9 +26,9 @@ const SPAWN_GUARD_RADIUS_SQ: i32 = 48 * 48;
 const SALT_POOL: u32 = 0x504F_4F4C;
 /// Noise threshold for starting a new pool on a cave floor. Tuned so pools are
 /// common enough to be found without flooding the caves.
-const POOL_GATE: f64 = 0.15;
-/// A puddle grows at most this many cells tall (floor + three above).
-const POOL_MAX_HEIGHT: i32 = 4;
+const POOL_GATE: f64 = -0.65;
+/// A puddle grows at most this many cells tall (floor + five above).
+const POOL_MAX_HEIGHT: i32 = 6;
 /// Keep underground pools small; larger cave cross-sections are left dry.
 const MAX_POOL_AREA: usize = 128;
 /// Pools stay at least this many blocks below the column surface.
@@ -484,7 +484,7 @@ mod tests {
         let mut water_cells = 0usize;
         for cx in -45..-39 {
             for cz in -2..=2 {
-                for cy in 0..=2 {
+                for cy in 7..=9 {
                     let chunk = generate(seed, cx, cy, cz, size);
                     for lz in 0..CS {
                         let wz = cz * CHUNK_SIZE + lz as i32;
@@ -494,7 +494,7 @@ mod tests {
                             if !(0..OCEAN_WIDTH).contains(&ed) {
                                 continue;
                             }
-                            if cy == 0 {
+                            if cy == 7 {
                                 ocean_columns += 1;
                             }
                             for ly in 0..CS {
@@ -564,7 +564,7 @@ mod tests {
         let mut checked_columns = 0usize;
         for cx in -2..=2 {
             for cz in -2..=2 {
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let chunk = generate(seed, cx, cy, cz, size);
                     for lz in 0..CS {
                         let wz = cz * CHUNK_SIZE + lz as i32;
@@ -602,7 +602,7 @@ mod tests {
         let mut pond_cells = 0usize;
         for cx in -4..4 {
             for cz in -4..4 {
-                for cy in 0..4 {
+                for cy in 8..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let chunk = generate(seed, cx, cy, cz, size);
                     for lz in 0..CS {
                         let wz = cz * CHUNK_SIZE + lz as i32;
@@ -648,7 +648,7 @@ mod tests {
         let mut checked = 0usize;
         for cx in -4..4 {
             for cz in -4..4 {
-                for cy in 0..4 {
+                for cy in 8..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let chunk = generate(seed, cx, cy, cz, size);
                     for lz in 0..CS {
                         let wz = cz * CHUNK_SIZE + lz as i32;
@@ -702,7 +702,7 @@ mod tests {
         let mut multi_column_pools = 0usize;
         for cx in -3..3 {
             for cz in -3..3 {
-                for cy in 0..3 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let chunk = generate(seed, cx, cy, cz, size);
                     let mut visited = [[[false; CS]; CS]; CS];
                     for lz in 0..CS {
@@ -748,13 +748,14 @@ mod tests {
                                         }
                                     }
                                 }
-                                // Cave pools lie at or below the terrain surface
+                                // Cave pools lie above the Underworld and at or below the terrain surface
                                 // everywhere in the component.
                                 let underground = cells.iter().all(|&(x, y, z)| {
                                     let wx = cx * CHUNK_SIZE + x as i32;
                                     let wy = cy * CHUNK_SIZE + y as i32;
                                     let wz = cz * CHUNK_SIZE + z as i32;
-                                    wy <= surface_height_for_size(seed, wx, wz, size)
+                                    wy > crate::worldgen::underworld::UNDERWORLD_TOP_Y
+                                        && wy <= surface_height_for_size(seed, wx, wz, size)
                                 });
                                 if !underground {
                                     continue;
@@ -893,7 +894,7 @@ mod tests {
         // 4x4-chunk inland sample below the surface.
         for cx in 2..6 {
             for cz in 2..6 {
-                for cy in 0..3 {
+                for cy in 3..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let chunk = generate(seed, cx, cy, cz, size);
                     for lz in 0..CS {
                         let wz = cz * CHUNK_SIZE + lz as i32;

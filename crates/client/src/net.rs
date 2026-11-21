@@ -31,8 +31,6 @@ const SMOOTH_MIN: f32 = 0.01;
 const SNAP_DIST: f32 = 2.0;
 /// Seconds over which a correction fades out.
 pub const SMOOTH_SECS: f32 = 0.1;
-/// Vertical chunk layers the world occupies.
-const LAYERS: i32 = 4;
 
 /// The client's end of the server connection.
 #[derive(Resource)]
@@ -77,6 +75,10 @@ pub struct LocalInventory(pub terravibe_sim::inventory::Inventory);
 /// The stack on the cursor, from `ServerMsg::Held`.
 #[derive(Resource, Default)]
 pub struct LocalHeld(pub Option<terravibe_sim::inventory::ItemStack>);
+
+/// The material stack in the Guide's crafting lookup slot, from `ServerMsg::GuideSlot`.
+#[derive(Resource, Default)]
+pub struct LocalGuideSlot(pub Option<terravibe_sim::inventory::ItemStack>);
 
 /// Whether Creative God Mode is active on the server, synced via `ServerMsg::GodMode`.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,7 +252,9 @@ impl NetState {
             for z in c.z - 1..=c.z + 1 {
                 if self.bounds.chunk_inside(ChunkPos { x, y: 0, z }) {
                     total += 1;
-                    if (0..LAYERS).all(|y| g.contains_key(&ChunkPos { x, y, z })) {
+                    if terravibe_sim::net::vertical_layers_for_y(s[1])
+                        .all(|y| g.contains_key(&ChunkPos { x, y, z }))
+                    {
                         received += 1;
                     }
                 }
@@ -298,6 +302,7 @@ impl Plugin for NetPlugin {
             .init_resource::<crate::hud::boss_bar::BossState>()
             .init_resource::<LocalCharacterFacts>()
             .init_resource::<CharacterFacts>()
+            .init_resource::<LocalGuideSlot>()
             .init_resource::<ClientVanity>()
             .init_resource::<ClientGodMode>()
             .add_systems(OnExit(AppState::InGame), reset_god_mode)
@@ -363,6 +368,8 @@ pub(crate) struct WorldOut<'w> {
     sfx: Option<ResMut<'w, Messages<crate::audio::SfxEvent>>>,
     weather: Option<ResMut<'w, crate::view::weather::WeatherFxState>>,
     god_mode: Option<ResMut<'w, ClientGodMode>>,
+    local_char_facts: Option<Res<'w, LocalCharacterFacts>>,
+    char_facts: Option<Res<'w, CharacterFacts>>,
 }
 
 fn reset_god_mode(mut god_mode: ResMut<ClientGodMode>) {
@@ -407,6 +414,8 @@ pub(crate) fn pump(
         sfx,
         weather,
         god_mode,
+        local_char_facts,
+        char_facts,
     } = &mut out;
     if st.disconnected {
         return;
@@ -787,7 +796,19 @@ pub(crate) fn pump(
                 }
                 saves.write(crate::hud::SaveEvent::WorldSaved);
             }
-            ServerMsg::SyncFacts { world, character } => {
+            ServerMsg::SyncFacts {
+                world,
+                mut character,
+            } => {
+                let already_dismissed = local_char_facts
+                    .as_ref()
+                    .is_some_and(|lcf| lcf.0.onboarding_dismissed)
+                    || char_facts
+                        .as_ref()
+                        .is_some_and(|cf| cf.onboarding_dismissed);
+                if already_dismissed {
+                    character.onboarding_dismissed = true;
+                }
                 let advice = terravibe_sim::facts::current_guide_advice(&world, &character);
                 commands.insert_resource(crate::menu::game::GuideAdviceState {
                     current_advice: advice.to_string(),
@@ -843,6 +864,9 @@ pub(crate) fn pump(
                 if let Some(gm) = god_mode.as_deref_mut() {
                     gm.0 = g;
                 }
+            }
+            ServerMsg::GuideSlot(g) => {
+                commands.insert_resource(LocalGuideSlot(g));
             }
         }
     }
@@ -1080,5 +1104,75 @@ mod tests {
             .set(AppState::Menu);
         app.update();
         assert!(!app.world().resource::<ClientGodMode>().0);
+    }
+
+    #[test]
+    fn stale_sync_facts_never_reopens_dismissed_onboarding() {
+        let (to_client, from_server) = std::sync::mpsc::channel();
+        struct MockTransport(std::sync::Mutex<std::sync::mpsc::Receiver<ServerMsg>>);
+        impl terravibe_sim::net::ClientTransport for MockTransport {
+            fn send(&self, _m: ClientMsg) -> Result<(), terravibe_sim::net::Disconnected> {
+                Ok(())
+            }
+            fn try_recv(&self) -> Result<Option<ServerMsg>, terravibe_sim::net::Disconnected> {
+                Ok(self.0.lock().unwrap().try_recv().ok())
+            }
+        }
+        to_client
+            .send(ServerMsg::SyncFacts {
+                world: terravibe_sim::facts::WorldFacts::default(),
+                character: terravibe_sim::facts::CharacterFacts {
+                    onboarding_dismissed: false,
+                    has_ore: true,
+                    ..default()
+                },
+            })
+            .unwrap();
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.insert_resource(Net::new(MockTransport(std::sync::Mutex::new(from_server))));
+        app.insert_resource(NetState {
+            hello_sent: true,
+            ..default()
+        });
+        app.insert_resource(CharacterFacts {
+            onboarding_dismissed: true,
+            ..default()
+        });
+        app.insert_resource(LocalCharacterFacts(terravibe_sim::facts::CharacterFacts {
+            onboarding_dismissed: true,
+            ..default()
+        }));
+        app.init_resource::<Messages<PlayerEvents>>();
+        app.init_resource::<Messages<crate::view::interact::UseEvents>>();
+        app.init_resource::<Messages<AppExit>>();
+        app.init_resource::<Messages<crate::view::enemies::EnemyMsg>>();
+        app.init_resource::<Messages<crate::view::drops::DropMsg>>();
+        app.init_resource::<Messages<CraftResults>>();
+        app.init_resource::<Messages<ChestMsg>>();
+        app.init_resource::<Messages<crate::view::projectiles::ProjectilesMsg>>();
+        app.init_resource::<Messages<crate::view::stars::StarsMsg>>();
+        app.init_resource::<Messages<crate::hud::town::TownMsg>>();
+        app.init_resource::<Messages<crate::hud::SaveEvent>>();
+        app.init_resource::<Messages<crate::hud::combat_feedback::CombatHitEvent>>();
+        app.init_resource::<crate::hud::death::DeathModalState>();
+        app.init_resource::<crate::hud::boss_bar::BossState>();
+        app.init_resource::<crate::menu::game::GuideAdviceState>();
+        app.add_systems(Update, pump);
+        app.update();
+
+        assert!(
+            app.world()
+                .resource::<CharacterFacts>()
+                .onboarding_dismissed
+        );
+        assert!(
+            app.world()
+                .resource::<LocalCharacterFacts>()
+                .0
+                .onboarding_dismissed
+        );
+        assert!(app.world().resource::<LocalCharacterFacts>().0.has_ore);
     }
 }

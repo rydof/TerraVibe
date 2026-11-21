@@ -658,7 +658,7 @@ mod tests {
         let mut carved = false;
         for cx in base.x - 3..=base.x + 3 {
             for cz in base.z - 3..=base.z + 3 {
-                for cy in 1..=2 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let mut chunk = Chunk::filled(DIRT);
                     apply(
                         seed,
@@ -747,7 +747,7 @@ mod tests {
                 let edge = (cx + 1) * CHUNK_SIZE;
                 let mut left = Vec::new();
                 let mut right = Vec::new();
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let mut a = Chunk::filled(DIRT);
                     let mut b = Chunk::filled(DIRT);
                     apply(
@@ -883,7 +883,7 @@ mod tests {
         // old unclipped chasm carved the column and left the tree floating.
         let (seed, x, z) = (0, -4235, -3605);
         assert_eq!(corruption_at(seed, x, z), 0.0);
-        for cy in 0..4 {
+        for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
             let pos = ChunkPos::of_block(x, cy * CHUNK_SIZE, z);
             let mut chunk = Chunk::filled(DIRT);
             apply(seed, pos, &mut chunk);
@@ -925,7 +925,7 @@ mod tests {
         let mut cells = HashSet::new();
         for cz in c0.z - r..=c0.z + r {
             for cx in c0.x - r..=c0.x + r {
-                for cy in 0..=2 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let mut chunk = Chunk::filled(DIRT);
                     apply(
                         seed,
@@ -1089,7 +1089,7 @@ mod tests {
     fn altar_gen_is_deterministic_and_unique() {
         let seed = 7;
         let origin = altar_region(seed);
-        let center = ChunkPos::of_block(origin[0], 0, origin[2]);
+        let center = ChunkPos::of_block(origin[0], origin[1], origin[2]);
         let cells = altar_cells(seed, center, 1);
         assert!(
             !cells.is_empty(),
@@ -1119,7 +1119,7 @@ mod tests {
         // solid chasm floor directly under the bottom row.
         let seed = 7;
         let origin = altar_region(seed);
-        let cells = altar_cells(seed, ChunkPos::of_block(origin[0], 0, origin[2]), 1);
+        let cells = altar_cells(seed, ChunkPos::of_block(origin[0], origin[1], origin[2]), 1);
         assert!(!cells.is_empty(), "no altars found to check");
         for (group_origin, along_x) in altar_groups(&cells) {
             let [x0, y0, z0] = group_origin;
@@ -1127,7 +1127,7 @@ mod tests {
             for i in 0..3 {
                 let (x, z) = (x0 + dx * i, z0 + dz * i);
                 let surface = surface_height(seed, x, z);
-                let pos = ChunkPos::of_block(x, 0, z);
+                let pos = ChunkPos::of_block(x, y0 - 1, z);
                 let lo = [pos.x, pos.y, pos.z].map(|c| c * CHUNK_SIZE);
                 let chasms = chasms_in(seed, lo, WorldSize::Small);
                 let mut chunk = Chunk::filled(DIRT);
@@ -1169,7 +1169,7 @@ mod tests {
 
         for cx in base.x - 3..=base.x + 3 {
             for cz in base.z - 3..=base.z + 3 {
-                for cy in 0..=2 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let mut chunk = Chunk::filled(DIRT);
                     apply(
                         seed,

@@ -33,8 +33,8 @@ impl Band {
     pub fn of_depth(depth: i32) -> Option<Band> {
         match depth {
             ..0 => None,
-            0..24 => Some(Band::Shallow),
-            24..70 => Some(Band::Mid),
+            0..30 => Some(Band::Shallow),
+            30..115 => Some(Band::Mid),
             _ => Some(Band::Deep),
         }
     }
@@ -246,6 +246,9 @@ pub fn cell_veins(
 }
 
 fn surface_band(seed: u32, origin: [i32; 3], size: WorldSize) -> Option<Band> {
+    if origin[1] <= super::underworld::UNDERWORLD_TOP_Y {
+        return None;
+    }
     Band::of_depth(surface_height_for_size(seed, origin[0], origin[2], size) - origin[1])
 }
 
@@ -388,14 +391,17 @@ mod tests {
         let (mut got, mut volume) = ([0usize; KINDS.len()], [0f64; KINDS.len()]);
         for cx in -8..8 {
             for cz in -8..8 {
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     // Band volume in this cell: count voxels per band by column sampling.
                     let mut vols = [0f64; 3];
                     for x in (0..CELL).step_by(4) {
                         for z in (0..CELL).step_by(4) {
                             let h = surface_height(seed, cx * CELL + x, cz * CELL + z);
                             for y in (0..CELL).step_by(4) {
-                                if let Some(b) = Band::of_depth(h - (cy * CELL + y)) {
+                                let wy = cy * CELL + y;
+                                if wy > crate::worldgen::underworld::UNDERWORLD_TOP_Y
+                                    && let Some(b) = Band::of_depth(h - wy)
+                                {
                                     vols[b as usize] += 64.0;
                                 }
                             }
@@ -435,7 +441,7 @@ mod tests {
         let mut seen = std::collections::BTreeSet::new();
         for cx in -3..3 {
             for cz in -3..3 {
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let c = generate_chunk(seed, cp(cx, cy, cz));
                     for z in 0..CHUNK_SIZE as usize {
                         for y in 0..CHUNK_SIZE as usize {
@@ -458,7 +464,7 @@ mod tests {
         let seed = 11;
         for cx in -2..2 {
             for cz in -2..2 {
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let c = generate_chunk(seed, cp(cx, cy, cz));
                     for z in 0..CHUNK_SIZE as usize {
                         for x in 0..CHUNK_SIZE as usize {

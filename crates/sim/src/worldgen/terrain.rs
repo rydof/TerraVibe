@@ -12,14 +12,17 @@ use crate::chunk::{CHUNK_SIZE, Chunk, ChunkPos};
 use crate::world_bounds::{BEACH_WIDTH, OCEAN_WIDTH, SEA_LEVEL_Y, WorldBounds, WorldSize};
 
 /// Blocks exist only for world y in `0..WORLD_HEIGHT`.
-pub(crate) const WORLD_HEIGHT: i64 = 128;
-const MIN_SURFACE: f64 = 8.0;
-const MAX_SURFACE: f64 = 120.0;
+pub const WORLD_HEIGHT: i64 = 384;
+/// Number of 32-block vertical chunk layers spanning `0..WORLD_HEIGHT`.
+pub const WORLD_CHUNK_LAYERS: i32 = (WORLD_HEIGHT as i32) / CHUNK_SIZE;
+const MIN_SURFACE: f64 = 240.0;
+const MAX_SURFACE: f64 = 356.0;
 
 /// Depth bands corresponding to classic Terraria world layers:
-/// - `Surface`: top surface down to depth 24
-/// - `Underground`: depth 25 to 69 below surface
-/// - `Cavern`: depth 70+ below surface
+/// - `Surface`: top surface down to depth 29
+/// - `Underground`: depth 30 to 114 below surface
+/// - `Cavern`: depth 115+ below surface, above Underworld
+/// - `Underworld`: `y <= UNDERWORLD_TOP_Y`
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DepthBand {
     Surface,
@@ -32,9 +35,9 @@ pub enum DepthBand {
 pub fn depth_band(surface_y: i32, y: i32) -> DepthBand {
     if y <= super::underworld::UNDERWORLD_TOP_Y {
         DepthBand::Underworld
-    } else if y > surface_y - 25 {
+    } else if y > surface_y - 30 {
         DepthBand::Surface
-    } else if y > surface_y - 70 {
+    } else if y > surface_y - 115 {
         DepthBand::Underground
     } else {
         DepthBand::Cavern
@@ -59,22 +62,22 @@ const POND_CHANCE: u32 = 64;
 /// Small enclosed underground rooms that the liquid pass fills as cave pools.
 const SALT_POCKET: u32 = 0x504F_434B;
 const POCKET_CELL: i32 = 16;
-const POCKET_HEIGHT: i32 = 4;
-const POCKET_WIDTH: i32 = 4;
+const POCKET_HEIGHT: i32 = 5;
+const POCKET_WIDTH: i32 = 5;
 /// Distance from a room to its grid cell edge; keeps every room interior at
 /// least four blocks inside one 32-block chunk.
 const POCKET_MARGIN: i32 = 4;
 /// Rooms are only carved at least this many blocks below the column surface.
 const POCKET_MIN_DEPTH: i64 = 12;
-/// Water rooms sit just above `LAVA_DEPTH_Y` (24); lava rooms below it.
-const POCKET_WATER_Y0: i32 = 22;
-const POCKET_WATER_SPAN: u32 = 6;
-const POCKET_LAVA_Y0: i32 = 4;
-const POCKET_LAVA_SPAN: u32 = 16;
+/// Water rooms sit in Underground & Upper Cavern; lava rooms in Lower Cavern.
+const POCKET_WATER_Y0: i32 = 115;
+const POCKET_WATER_SPAN: u32 = 120;
+const POCKET_LAVA_Y0: i32 = 52;
+const POCKET_LAVA_SPAN: u32 = 48;
 
 const CAVE_THRESHOLD: f64 = 0.08;
-const UNDERGROUND_CAVE_THRESHOLD: f64 = 0.11;
-const CAVERN_CAVE_THRESHOLD: f64 = 0.14;
+const UNDERGROUND_CAVE_THRESHOLD: f64 = 0.115;
+const CAVERN_CAVE_THRESHOLD: f64 = 0.13;
 /// Extra cave width at full jungle weight: 1.5x as many caves.
 const JUNGLE_CAVE_EASE: f64 = 0.5;
 
@@ -88,24 +91,24 @@ struct Params {
 fn params(b: Biome) -> Params {
     match b {
         Biome::Forest => Params {
-            base: 64.0,
+            base: 300.0,
             amp: 20.0,
             freq: 1.0 / 96.0,
         },
         // Low dunes: base −4, amp 0.5×.
         Biome::Desert => Params {
-            base: 60.0,
+            base: 296.0,
             amp: 10.0,
             freq: 1.0 / 80.0,
         },
         // Snow: base +10, amp 1.6×.
         Biome::Snow => Params {
-            base: 74.0,
+            base: 310.0,
             amp: 32.0,
             freq: 1.0 / 96.0,
         },
         Biome::Jungle => Params {
-            base: 64.0,
+            base: 300.0,
             amp: 26.0,
             freq: 1.0 / 88.0,
         },
@@ -352,7 +355,7 @@ pub fn in_surface_cave_mouth(seed: u32, x: i32, y: i32, z: i32, size: WorldSize)
             let rel_z = (z - cz) as f64;
             let u = rel_x * cos_t + rel_z * sin_t;
             let v = -rel_x * sin_t + rel_z * cos_t;
-            if v.abs() > 4.7 || u < -2.0 * slope - 3.3 || u > 28.0 * slope + 3.3 {
+            if v.abs() > 4.7 || u < -2.0 * slope - 3.3 || u > 36.0 * slope + 3.3 {
                 continue;
             }
 
@@ -363,7 +366,7 @@ pub fn in_surface_cave_mouth(seed: u32, x: i32, y: i32, z: i32, size: WorldSize)
             }
 
             let sy = surface_height_for_size(seed, cx, cz, size);
-            if y > sy + 6 || y < sy - 32 {
+            if y > sy + 6 || y < sy - 40 {
                 continue;
             }
 
@@ -374,7 +377,7 @@ pub fn in_surface_cave_mouth(seed: u32, x: i32, y: i32, z: i32, size: WorldSize)
             let pz_dir = cos_t;
 
             let t_min = (sy - y - 4).max(-2);
-            let t_max = (sy - y + 4).min(28);
+            let t_max = (sy - y + 4).min(36);
             for ti in t_min..=t_max {
                 let t = ti as f64;
                 let ty = sy as f64 - t;
@@ -447,7 +450,7 @@ fn block_at(seed: u32, x: i64, y: i64, z: i64, c: &Column) -> BlockId {
     let threshold = band_threshold * (1.0 + JUNGLE_CAVE_EASE * jungle);
     if !in_coastal_ring
         && !protected
-        && depth <= 38
+        && depth <= 44
         && in_surface_cave_mouth(seed, x as i32, y as i32, z as i32, c.size)
     {
         return AIR;
@@ -513,10 +516,10 @@ pub fn generate_chunk_sized(seed: u32, pos: ChunkPos, size: WorldSize) -> Chunk 
     super::chest_gen::apply_for_size(seed, pos, size, &mut chunk);
     tree::decorate_for_size(seed, pos, size, &mut chunk);
     super::mushroom::apply_for_size(seed, pos, size, &mut chunk);
-    super::liquid::apply(seed, pos, size, &mut chunk);
-    super::dressing::apply_for_size(seed, pos, size, &mut chunk);
     apply_cabins_for_size(seed, pos, size, &mut chunk);
     super::dungeon::apply_for_size(seed, pos, size, &mut chunk);
+    super::liquid::apply(seed, pos, size, &mut chunk);
+    super::dressing::apply_for_size(seed, pos, size, &mut chunk);
     chunk
 }
 
@@ -671,7 +674,7 @@ mod tests {
             for x in -500..500 {
                 for z in -500..500 {
                     let h = surface_height(seed, x, z);
-                    assert!((8..=120).contains(&h), "seed {seed} ({x},{z}) h {h}");
+                    assert!((240..=356).contains(&h), "seed {seed} ({x},{z}) h {h}");
                 }
             }
         }
@@ -736,7 +739,7 @@ mod tests {
             let ang = (k as f64 + 0.37) * std::f64::consts::TAU / 16.0;
             for r in [10.0f64, 14.0, 18.0] {
                 let (cx, cz) = ((ang.cos() * r) as i32, (ang.sin() * r) as i32);
-                for cy in 0..4 {
+                for cy in 0..WORLD_CHUNK_LAYERS {
                     let c = chunk_at(seed, cx, cy, cz);
                     for lz in 0..CS {
                         for ly in 0..CS {
@@ -752,8 +755,9 @@ mod tests {
         // Trees are chopped by the axe and yield Wood through `chop_tree`,
         // not through the generic block drop table.
         seen.remove(&TRUNK);
-        // The mushroom plant drops its Mushroom pickup, which is not placeable.
+        // The mushroom plant drops its Mushroom pickup, and Life Crystal drops Heart Crystal (consumables).
         seen.remove(&crate::block::MUSHROOM_PLANT);
+        seen.remove(&LIFE_CRYSTAL);
         // Pots drop server-rolled coins/potions and dressing tiles are worldgen-only.
         for dressing in [POT, STALACTITE, MOSS, SMALL_ROCK, SHELF_MUSHROOM] {
             seen.remove(&dressing);
@@ -775,7 +779,7 @@ mod tests {
         let (mut grass, mut ore) = (false, false);
         for cx in 0..2 {
             for cz in 0..2 {
-                for cy in 0..4 {
+                for cy in 0..WORLD_CHUNK_LAYERS {
                     let c = chunk_at(7, cx, cy, cz);
                     for lz in 0..CS {
                         for ly in 0..CS {
@@ -783,14 +787,14 @@ mod tests {
                                 let b = c.get(lx, ly, lz);
                                 grass |= b == GRASS;
                                 ore |= matches!(b, COPPER | IRON | SILVER | GOLD);
-                                if cy == 3 && ly == CS - 1 {
-                                    assert_eq!(b, AIR, "y=127 must be AIR");
+                                if cy == WORLD_CHUNK_LAYERS - 1 && ly == CS - 1 {
+                                    assert_eq!(b, AIR, "y=383 must be AIR");
                                 }
                             }
                         }
                     }
                 }
-                for cy in [4, -1] {
+                for cy in [WORLD_CHUNK_LAYERS, -1] {
                     assert!(
                         chunk_at(7, cx, cy, cz) == Chunk::filled(AIR),
                         "chunk y={cy} must be all AIR"
@@ -816,7 +820,7 @@ mod tests {
         }
         let pos = found.expect("seed 7 has no corruption within 6000 blocks");
         let (mut corrupt, mut plants) = (false, false);
-        for cy in 0..4 {
+        for cy in 0..WORLD_CHUNK_LAYERS {
             let chunk = chunk_at(seed, pos.x, cy, pos.z);
             for lz in 0..CS {
                 for ly in 0..CS {
@@ -881,7 +885,7 @@ mod tests {
             for cx in 18..21 {
                 for cz in -3..0 {
                     let mut chunks = Vec::new();
-                    for cy in 0..4 {
+                    for cy in 0..WORLD_CHUNK_LAYERS {
                         chunks.push(generate_chunk_sized(
                             seed,
                             ChunkPos {
@@ -960,7 +964,7 @@ mod tests {
             .or(any_corrupt)
             .expect("seed 7 Medium world has no column with corruption > 0.5");
         let mut corrupt = false;
-        for cy in 0..4 {
+        for cy in 0..WORLD_CHUNK_LAYERS {
             let chunk = generate_chunk_sized(
                 seed,
                 ChunkPos {
@@ -987,22 +991,23 @@ mod tests {
 
     #[test]
     fn depth_band_matches_terraria_layers() {
-        let surface = 100;
-        // Surface: y > surface_y - 25
-        assert_eq!(depth_band(surface, 105), DepthBand::Surface);
-        assert_eq!(depth_band(surface, 100), DepthBand::Surface);
-        assert_eq!(depth_band(surface, 76), DepthBand::Surface);
+        let surface = 300;
+        // Surface: y > surface_y - 30
+        assert_eq!(depth_band(surface, 305), DepthBand::Surface);
+        assert_eq!(depth_band(surface, 300), DepthBand::Surface);
+        assert_eq!(depth_band(surface, 271), DepthBand::Surface);
 
-        // Underground: surface_y - 25 >= y > surface_y - 70
-        assert_eq!(depth_band(surface, 75), DepthBand::Underground);
-        assert_eq!(depth_band(surface, 50), DepthBand::Underground);
-        assert_eq!(depth_band(surface, 31), DepthBand::Underground);
+        // Underground: surface_y - 30 >= y > surface_y - 115
+        assert_eq!(depth_band(surface, 270), DepthBand::Underground);
+        assert_eq!(depth_band(surface, 220), DepthBand::Underground);
+        assert_eq!(depth_band(surface, 186), DepthBand::Underground);
 
-        // Cavern: y <= surface_y - 70 and y > UNDERWORLD_TOP_Y
-        assert_eq!(depth_band(surface, 30), DepthBand::Cavern);
+        // Cavern: y <= surface_y - 115 and y > UNDERWORLD_TOP_Y
+        assert_eq!(depth_band(surface, 185), DepthBand::Cavern);
+        assert_eq!(depth_band(surface, 49), DepthBand::Cavern);
 
-        // Underworld: y <= UNDERWORLD_TOP_Y (24)
-        assert_eq!(depth_band(surface, 24), DepthBand::Underworld);
+        // Underworld: y <= UNDERWORLD_TOP_Y (48)
+        assert_eq!(depth_band(surface, 48), DepthBand::Underworld);
         assert_eq!(depth_band(surface, 10), DepthBand::Underworld);
         assert_eq!(depth_band(surface, 0), DepthBand::Underworld);
         assert_eq!(depth_band(surface, -20), DepthBand::Underworld);
@@ -1016,9 +1021,9 @@ mod tests {
         for x in (-300..300).step_by(16) {
             for z in (-300..300).step_by(16) {
                 let h = surface_height(seed, x, z);
-                let cavern_top = h - 70;
-                if cavern_top > 0 {
-                    for y in 0..=cavern_top {
+                let cavern_top = h - 115;
+                if cavern_top > super::super::underworld::UNDERWORLD_TOP_Y {
+                    for y in (super::super::underworld::UNDERWORLD_TOP_Y + 1)..=cavern_top {
                         let block = natural_block(seed, x, y, z);
                         if block == AIR {
                             cavern_air += 1;
@@ -1052,7 +1057,7 @@ mod tests {
         for x in (-300..300).step_by(16) {
             for z in (-300..300).step_by(16) {
                 let h = surface_height(seed, x, z);
-                for d in 3..25 {
+                for d in 3..30 {
                     let y = h - d;
                     if y >= 0 {
                         surface_total += 1;
@@ -1061,9 +1066,9 @@ mod tests {
                         }
                     }
                 }
-                let cavern_top = h - 70;
-                if cavern_top > 0 {
-                    for y in 0..=cavern_top {
+                let cavern_top = h - 115;
+                if cavern_top > super::super::underworld::UNDERWORLD_TOP_Y {
+                    for y in (super::super::underworld::UNDERWORLD_TOP_Y + 1)..=cavern_top {
                         cavern_total += 1;
                         if natural_block(seed, x, y, z) == AIR {
                             cavern_air += 1;
@@ -1086,7 +1091,7 @@ mod tests {
         let mut found_cabin = false;
         'outer: for cx in -10..10 {
             for cz in -10..10 {
-                for cy in 0..3 {
+                for cy in 2..WORLD_CHUNK_LAYERS - 1 {
                     let pos = ChunkPos {
                         x: cx,
                         y: cy,
@@ -1150,7 +1155,7 @@ mod tests {
 
         for cx in -2..=2 {
             for cz in -2..=2 {
-                for cy in 0..4 {
+                for cy in 2..WORLD_CHUNK_LAYERS {
                     let pos = ChunkPos {
                         x: cx,
                         y: cy,

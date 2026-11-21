@@ -28,6 +28,16 @@ use crate::world_bounds::WorldSize;
 pub const VIEW_RADIUS_BLOCKS: f32 = 140.0;
 /// Chunks beyond `VIEW_RADIUS_BLOCKS + DESPAWN_MARGIN` are unloaded.
 pub const DESPAWN_MARGIN: f32 = 32.0;
+/// Vertical chunk radius streamed around the player/camera (`cy - 3 ..= cy + 3`, up to 7 layers).
+pub const VERTICAL_CHUNK_RADIUS: i32 = 3;
+
+/// Active vertical chunk layer range `0..WORLD_CHUNK_LAYERS` centered around world `y`.
+pub fn vertical_layers_for_y(y: f32) -> std::ops::Range<i32> {
+    let cy = (y / crate::chunk::CHUNK_SIZE as f32).floor() as i32;
+    let lo = (cy - VERTICAL_CHUNK_RADIUS).max(0);
+    let hi = (cy + VERTICAL_CHUNK_RADIUS + 1).min(crate::WORLD_CHUNK_LAYERS);
+    lo..hi
+}
 
 pub type PlayerId = u32;
 
@@ -169,6 +179,14 @@ pub enum ClientMsg {
     },
     /// Creative mode: execute a creative command.
     CreativeAction(CreativeCmd),
+    /// Player dismissed the first-spawn onboarding card.
+    DismissOnboarding,
+    /// Player closed the Guide crafting lookup tab (return placed material).
+    CloseGuideCrafting,
+    /// Shift-click a bag slot while Guide crafting is open to place/swap a material.
+    GuideSlotShift {
+        slot: u8,
+    },
     Bye,
 }
 
@@ -378,6 +396,8 @@ pub enum ServerMsg {
     },
     /// Creative god-mode state toggled on/off for this player.
     GodMode(bool),
+    /// Current item placed in the Guide's crafting lookup slot.
+    GuideSlot(Option<ItemStack>),
 }
 
 /// The other end of a transport has been dropped.

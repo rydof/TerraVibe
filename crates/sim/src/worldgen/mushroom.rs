@@ -65,7 +65,7 @@ mod tests {
         let mut n = 0;
         for cx in 0..6 {
             for cz in 0..6 {
-                for cy in 0..4 {
+                for cy in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     let pos = ChunkPos {
                         x: cx,
                         y: cy,

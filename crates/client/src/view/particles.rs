@@ -593,6 +593,7 @@ fn step_and_render_particles(
     mut meshes: ResMut<Assets<Mesh>>,
     local_player: Option<Res<crate::view::player::LocalPlayer>>,
     clock: Option<Res<crate::net::ClientClock>>,
+    stream: Option<Res<crate::view::chunks::ChunkStream>>,
     mut vis_q: Query<&mut Visibility>,
 ) {
     let dt = time.delta_secs();
@@ -624,8 +625,74 @@ fn step_and_render_particles(
                 }
                 .is_day()
             });
-            if amb_pool.entries.len() < MAX_AMBIENT_PARTICLES {
+            if amb_pool.entries.len() < max_ambient_particles_for(&settings) {
                 amb_pool.spawn_contextual(center, depth, is_night, is_underworld, &settings);
+            }
+            if let Some(stream) = stream.as_deref()
+                && amb_pool.entries.len() < max_ambient_particles_for(&settings)
+            {
+                let chunks = stream.generated();
+                for _ in 0..8 {
+                    let ox = (amb_pool.next_signed() * 14.0).round() as i32;
+                    let oy = (amb_pool.next_signed() * 8.0).round() as i32;
+                    let oz = (amb_pool.next_signed() * 14.0).round() as i32;
+                    let lx_w = wx + ox;
+                    let ly_w = wy + oy;
+                    let lz_w = wz + oz;
+                    let cp = terravibe_sim::ChunkPos::of_block(lx_w, ly_w, lz_w);
+                    let Some(ch) = chunks.get(&cp) else { continue };
+                    let lx = lx_w.rem_euclid(terravibe_sim::CHUNK_SIZE) as usize;
+                    let ly = ly_w.rem_euclid(terravibe_sim::CHUNK_SIZE) as usize;
+                    let lz = lz_w.rem_euclid(terravibe_sim::CHUNK_SIZE) as usize;
+                    let Some(liq) = ch.liquid(lx, ly, lz) else {
+                        continue;
+                    };
+                    if liq.kind != terravibe_sim::LiquidKind::Lava {
+                        continue;
+                    }
+                    let above_clear = if ly + 1 < terravibe_sim::CHUNK_SIZE as usize {
+                        ch.get(lx, ly + 1, lz) == terravibe_sim::AIR
+                            && ch.liquid(lx, ly + 1, lz).is_none()
+                    } else {
+                        let acp = terravibe_sim::ChunkPos::of_block(lx_w, ly_w + 1, lz_w);
+                        chunks.get(&acp).is_some_and(|ac| {
+                            ac.get(lx, 0, lz) == terravibe_sim::AIR
+                                && ac.liquid(lx, 0, lz).is_none()
+                        })
+                    };
+                    if !above_clear {
+                        continue;
+                    }
+                    let top_y = ly_w as f32 + (liq.amount as f32 / 255.0).max(0.1);
+                    let pos = Vec3::new(
+                        lx_w as f32 + 0.15 + amb_pool.next_unit() * 0.7,
+                        top_y + 0.05,
+                        lz_w as f32 + 0.15 + amb_pool.next_unit() * 0.7,
+                    );
+                    let vel = Vec3::new(
+                        amb_pool.next_signed() * 0.45,
+                        1.2 + amb_pool.next_unit() * 1.6,
+                        amb_pool.next_signed() * 0.45,
+                    );
+                    let col = if amb_pool.next_unit() < 0.4 {
+                        Color::srgb(1.0, 0.85, 0.25)
+                    } else {
+                        Color::srgb(1.0, 0.48, 0.10)
+                    };
+                    let size = 0.08 + amb_pool.next_unit() * 0.07;
+                    let lt = 0.8 + amb_pool.next_unit() * 1.0;
+                    amb_pool.spawn(
+                        AmbientParticleKind::UnderworldEmber,
+                        pos,
+                        vel,
+                        col,
+                        size,
+                        lt,
+                        0.0,
+                        &settings,
+                    );
+                    break;
+                }
             }
         }
     }

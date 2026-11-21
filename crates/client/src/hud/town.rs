@@ -37,6 +37,7 @@ pub enum TownMsg {
 pub enum TownTab {
     #[default]
     Talk,
+    Crafting,
     Housing,
 }
 
@@ -46,9 +47,12 @@ pub struct TownPanel {
     pub text: String,
     pub shop: Vec<(ItemId, u32)>,
     pub sel: usize,
-    /// One-line feedback (trade result, housing status).
+    /// One-line feedback (trade result, housing status, Guide crafting note).
     pub note: String,
     pub tab: TownTab,
+    pub is_guide: bool,
+    pub guide_scroll: usize,
+    pub guide_sel: usize,
     pub housing_query_pos: Option<[i32; 3]>,
     pub housing_status: Option<(bool, u8)>,
     pub room_bounds: Option<([i32; 3], [i32; 3])>,
@@ -65,6 +69,9 @@ impl Default for TownPanel {
             sel: 0,
             note: String::new(),
             tab: TownTab::Talk,
+            is_guide: false,
+            guide_scroll: 0,
+            guide_sel: 0,
             housing_query_pos: None,
             housing_status: None,
             room_bounds: None,
@@ -82,6 +89,11 @@ impl TownPanel {
 
     pub fn is_open(&self) -> bool {
         self.npc.is_some()
+    }
+
+    /// True when the Guide's material-recipe lookup tab is active.
+    pub fn guide_crafting_open(&self) -> bool {
+        self.npc.is_some() && self.is_guide && self.tab == TownTab::Crafting
     }
 }
 
@@ -106,8 +118,17 @@ pub struct TownSpeaker;
 pub struct TownTabButton(pub usize);
 #[derive(Component)]
 pub struct ShopRowIcon(pub usize);
+#[derive(Component)]
+pub struct GuideMaterialSlotBox;
+#[derive(Component)]
+pub struct GuideMaterialIcon;
+#[derive(Component)]
+pub struct GuideMaterialCount;
+#[derive(Component)]
+pub struct GuideRecipeIcon(pub usize);
 
 const MAX_SHOP_ROWS: usize = 12;
+const MAX_GUIDE_ROWS: usize = 7;
 
 /// Reach-check radius when picking an NPC with the crosshair.
 const PICK_RADIUS: f32 = 1.0;
@@ -166,6 +187,26 @@ pub fn panel_pos(win: [f32; 2]) -> [f32; 2] {
     [510.0 * s, 340.0 * s]
 }
 
+/// True when `cursor` lies inside the floating Town panel.
+pub fn panel_hit(cursor: [f32; 2], win: [f32; 2], guide_crafting: bool) -> bool {
+    let pos = panel_pos(win);
+    let k = crate::hud::inventory::scale(win);
+    let h = if guide_crafting { 340.0 } else { 260.0 } * k;
+    cursor[0] >= pos[0]
+        && cursor[0] <= pos[0] + 460.0 * k
+        && cursor[1] >= pos[1]
+        && cursor[1] <= pos[1] + h
+}
+
+/// True when `cursor` lies inside the Guide Material Slot box `(16..60, 44..88)` in panel coords.
+pub fn guide_slot_hit(cursor: [f32; 2], win: [f32; 2]) -> bool {
+    let pos = panel_pos(win);
+    let k = crate::hud::inventory::scale(win);
+    let rel_x = (cursor[0] - pos[0]) / k;
+    let rel_y = (cursor[1] - pos[1]) / k;
+    (16.0..=60.0).contains(&rel_x) && (44.0..=88.0).contains(&rel_y)
+}
+
 pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>>) {
     let win = [window.width(), window.height()];
     let s = crate::hud::inventory::scale(win);
@@ -205,8 +246,9 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                 super::text::HudTextColor(super::style::GOLD_TEXT),
             ));
             for (idx, label_str, left_px, w_px) in [
-                (0usize, "Talk", 130.0, 76.0),
-                (1usize, "Housing", 215.0, 96.0),
+                (0usize, "Talk", 120.0, 68.0),
+                (1usize, "Crafting", 196.0, 92.0),
+                (2usize, "Housing", 296.0, 88.0),
             ] {
                 p.spawn((
                     TownTabButton(idx),
@@ -235,6 +277,64 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                         Node::default(),
                     ));
                 });
+            }
+            p.spawn((
+                GuideMaterialSlotBox,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(16.0 * s),
+                    top: Val::Px(44.0 * s),
+                    width: Val::Px(44.0 * s),
+                    height: Val::Px(44.0 * s),
+                    border: UiRect::all(Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.08, 0.10, 0.18, 0.92)),
+                BorderColor::all(super::style::GOLD_BORDER),
+                Visibility::Hidden,
+            ))
+            .with_children(|slot| {
+                slot.spawn((
+                    GuideMaterialIcon,
+                    Node {
+                        width: Val::Px(30.0 * s),
+                        height: Val::Px(30.0 * s),
+                        ..default()
+                    },
+                    ImageNode::default(),
+                    Visibility::Hidden,
+                ));
+                slot.spawn((
+                    GuideMaterialCount,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: Val::Px(2.0),
+                        bottom: Val::Px(1.0),
+                        ..default()
+                    },
+                    HudText {
+                        text: String::new(),
+                        death: false,
+                    },
+                ));
+            });
+            for i in 0..MAX_GUIDE_ROWS {
+                p.spawn((
+                    GuideRecipeIcon(i),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(72.0 * s),
+                        top: Val::Px(44.0 * s),
+                        width: Val::Px(16.0),
+                        height: Val::Px(16.0),
+                        ..default()
+                    },
+                    ImageNode::default(),
+                    Visibility::Hidden,
+                ));
             }
             for i in 0..MAX_SHOP_ROWS {
                 p.spawn((
@@ -411,16 +511,22 @@ pub fn receive(
     mut panel: ResMut<TownPanel>,
     mut inv: Option<ResMut<InventoryOpen>>,
     mut opts: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    enemies: Query<&ClientEnemy>,
 ) {
     for m in msgs.read() {
         match m {
             TownMsg::Dialogue { npc, text } => {
                 // Free the cursor so clicks do not attack while the panel is up.
                 set_grab(&mut opts, false);
+                let is_guide = enemies.iter().find(|e| e.id == *npc).map_or_else(
+                    || !text.starts_with("Old Man:"),
+                    |e| e.kind == terravibe_sim::enemy::EnemyKind::Guide,
+                );
                 *panel = TownPanel {
                     npc: Some(*npc),
                     text: text.clone(),
                     tab: TownTab::Talk,
+                    is_guide,
                     ..default()
                 };
             }
@@ -535,21 +641,55 @@ pub fn handle_input(
     _settings: Option<Res<crate::settings::Settings>>,
     player: Option<Res<LocalPlayer>>,
     stream: Option<Res<ChunkStream>>,
+    mut inv: Option<ResMut<InventoryOpen>>,
+    mut opts: Option<Single<&mut CursorOptions, With<PrimaryWindow>>>,
+    mut wheel: Option<MessageReader<bevy::input::mouse::MouseWheel>>,
+    guide_slot: Option<Res<crate::net::LocalGuideSlot>>,
+    held: Option<Res<crate::net::LocalHeld>>,
 ) {
     let Some(net) = net else {
         return;
     };
     if !panel.is_open() && panel.tab != TownTab::Housing {
+        if let Some(ref mut w) = wheel {
+            w.clear();
+        }
         return;
     }
+    let switch_to_crafting =
+        |panel: &mut TownPanel,
+         inv: &mut Option<ResMut<InventoryOpen>>,
+         opts: &mut Option<Single<&mut CursorOptions, With<PrimaryWindow>>>| {
+            panel.tab = TownTab::Crafting;
+            panel.note.clear();
+            if let Some(inv) = inv.as_deref_mut() {
+                inv.0 = true;
+            }
+            if let Some(opts) = opts.as_deref_mut() {
+                set_grab(opts, false);
+            }
+        };
     if keys.just_pressed(KeyCode::Tab) && panel.npc.is_some() {
         match panel.tab {
             TownTab::Talk => {
-                panel.tab = TownTab::Housing;
-                if panel.housing_query_pos.is_none() {
-                    if let Some(player) = player.as_ref() {
+                if panel.is_guide {
+                    switch_to_crafting(&mut panel, &mut inv, &mut opts);
+                } else {
+                    panel.tab = TownTab::Housing;
+                    if panel.housing_query_pos.is_none()
+                        && let Some(player) = player.as_ref()
+                    {
                         query_housing_at_player(player, stream.as_deref(), &mut panel, &net);
                     }
+                }
+            }
+            TownTab::Crafting => {
+                let _ = net.send(ClientMsg::CloseGuideCrafting);
+                panel.tab = TownTab::Housing;
+                if panel.housing_query_pos.is_none()
+                    && let Some(player) = player.as_ref()
+                {
+                    query_housing_at_player(player, stream.as_deref(), &mut panel, &net);
                 }
             }
             TownTab::Housing => {
@@ -570,19 +710,112 @@ pub fn handle_input(
         let rel_x = (c.x - pos[0]) / k;
         let rel_y = (c.y - pos[1]) / k;
         if panel.npc.is_some() && (4.0..=36.0).contains(&rel_y) {
-            if (130.0..=210.0).contains(&rel_x) {
+            let housing_range = if panel.is_guide {
+                296.0..=384.0
+            } else {
+                200.0..=296.0
+            };
+            if (120.0..=188.0).contains(&rel_x) {
+                if panel.tab == TownTab::Crafting {
+                    let _ = net.send(ClientMsg::CloseGuideCrafting);
+                }
                 panel.tab = TownTab::Talk;
                 return;
-            } else if (215.0..=320.0).contains(&rel_x) {
+            } else if panel.is_guide && (196.0..=288.0).contains(&rel_x) {
+                switch_to_crafting(&mut panel, &mut inv, &mut opts);
+                return;
+            } else if housing_range.contains(&rel_x) {
+                if panel.tab == TownTab::Crafting {
+                    let _ = net.send(ClientMsg::CloseGuideCrafting);
+                }
                 panel.tab = TownTab::Housing;
-                if panel.housing_query_pos.is_none() {
-                    if let Some(player) = player.as_ref() {
-                        query_housing_at_player(player, stream.as_deref(), &mut panel, &net);
-                    }
+                if panel.housing_query_pos.is_none()
+                    && let Some(player) = player.as_ref()
+                {
+                    query_housing_at_player(player, stream.as_deref(), &mut panel, &net);
                 }
                 return;
             }
         }
+    }
+
+    if panel.tab == TownTab::Crafting {
+        let recipes = guide_slot
+            .as_ref()
+            .and_then(|g| g.0)
+            .map(|st| terravibe_sim::crafting::recipes_using_material(st.id))
+            .unwrap_or_default();
+        let count = recipes.len();
+        if count > 0 {
+            panel.guide_sel = panel.guide_sel.min(count - 1);
+            panel.guide_scroll = panel.guide_scroll.min(count.saturating_sub(MAX_GUIDE_ROWS));
+            if keys.just_pressed(KeyCode::ArrowDown) && panel.guide_sel + 1 < count {
+                panel.guide_sel += 1;
+                if panel.guide_sel >= panel.guide_scroll + MAX_GUIDE_ROWS {
+                    panel.guide_scroll = panel.guide_sel + 1 - MAX_GUIDE_ROWS;
+                }
+            }
+            if keys.just_pressed(KeyCode::ArrowUp) && panel.guide_sel > 0 {
+                panel.guide_sel -= 1;
+                if panel.guide_sel < panel.guide_scroll {
+                    panel.guide_scroll = panel.guide_sel;
+                }
+            }
+            if let Some(ref mut w) = wheel {
+                let mut delta: isize = 0;
+                for e in w.read() {
+                    delta -= e.y.signum() as isize;
+                }
+                if delta != 0 {
+                    let max_scroll = count.saturating_sub(MAX_GUIDE_ROWS) as isize;
+                    panel.guide_scroll =
+                        (panel.guide_scroll as isize + delta).clamp(0, max_scroll) as usize;
+                }
+            }
+        } else {
+            if let Some(ref mut w) = wheel {
+                w.clear();
+            }
+            panel.guide_sel = 0;
+            panel.guide_scroll = 0;
+        }
+        if mouse
+            .as_ref()
+            .is_some_and(|m| m.just_pressed(MouseButton::Left))
+            && let Some(win) = window.as_deref()
+            && let Some(c) = win.cursor_position()
+        {
+            let win_size = [win.width(), win.height()];
+            if guide_slot_hit([c.x, c.y], win_size) {
+                let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+                if !shift
+                    && let Some(h) = held.as_ref().and_then(|h| h.0)
+                    && !terravibe_sim::crafting::is_material(h.id)
+                {
+                    panel.note = "That item is not a crafting material.".to_string();
+                } else {
+                    panel.note.clear();
+                    let kind = if shift {
+                        terravibe_sim::slots::ClickKind::Shift
+                    } else {
+                        terravibe_sim::slots::ClickKind::Left
+                    };
+                    let _ = net.send(ClientMsg::ClickSlot {
+                        at: terravibe_sim::slots::SlotRef::Guide,
+                        kind,
+                    });
+                }
+                return;
+            }
+            if let Some(row) = guide_row_at([c.x, c.y], win_size, count, panel.guide_scroll) {
+                panel.guide_sel = panel.guide_scroll + row;
+                return;
+            }
+        }
+        return;
+    }
+    if let Some(ref mut w) = wheel {
+        w.clear();
     }
 
     if panel.tab == TownTab::Housing {
@@ -658,9 +891,36 @@ pub fn handle_input(
         }
         // Selling has no key: Shift-click a bag slot (see `sell_click`), so `S`
         // stays "move backwards".
-    } else if keys.just_pressed(KeyCode::KeyG) {
-        let _ = net.send(ClientMsg::GuideAdvice);
+    } else {
+        if keys.just_pressed(KeyCode::KeyG) {
+            let _ = net.send(ClientMsg::GuideAdvice);
+        }
+        if panel.is_guide && keys.just_pressed(KeyCode::KeyC) {
+            switch_to_crafting(&mut panel, &mut inv, &mut opts);
+        }
     }
+}
+
+/// Maps window cursor to visible Guide recipe row `0..MAX_GUIDE_ROWS`.
+pub fn guide_row_at(
+    cursor: [f32; 2],
+    win: [f32; 2],
+    recipe_count: usize,
+    scroll: usize,
+) -> Option<usize> {
+    if recipe_count == 0 {
+        return None;
+    }
+    let pos = panel_pos(win);
+    let k = crate::hud::inventory::scale(win);
+    let rel_x = (cursor[0] - pos[0]) / k;
+    let rel_y = (cursor[1] - pos[1]) / k;
+    if !(16.0..=444.0).contains(&rel_x) || rel_y < 100.0 {
+        return None;
+    }
+    let row = ((rel_y - 100.0) / 22.0).floor() as usize;
+    let visible = recipe_count.saturating_sub(scroll).min(MAX_GUIDE_ROWS);
+    (row < visible).then_some(row)
 }
 
 pub fn shop_row_at(
@@ -760,6 +1020,77 @@ fn wrap_text(font: &terravibe_assets::SpriteFont, text: &str, max_width: f32) ->
     out.join("\n")
 }
 
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct GuideViewParams<'w, 's> {
+    guide_slot: Option<Res<'w, crate::net::LocalGuideSlot>>,
+    guide_box: Option<
+        Single<
+            'w,
+            's,
+            (&'static mut Node, &'static mut Visibility),
+            (
+                With<GuideMaterialSlotBox>,
+                Without<TownRoot>,
+                Without<TownTabButton>,
+                Without<ShopRowIcon>,
+                Without<TownLabel>,
+                Without<GuideMaterialIcon>,
+                Without<GuideRecipeIcon>,
+            ),
+        >,
+    >,
+    guide_mat_icon: Option<
+        Single<
+            'w,
+            's,
+            (
+                &'static mut ImageNode,
+                &'static mut Node,
+                &'static mut Visibility,
+            ),
+            (
+                With<GuideMaterialIcon>,
+                Without<TownRoot>,
+                Without<TownTabButton>,
+                Without<ShopRowIcon>,
+                Without<TownLabel>,
+                Without<GuideMaterialSlotBox>,
+                Without<GuideRecipeIcon>,
+            ),
+        >,
+    >,
+    guide_mat_count: Option<
+        Single<
+            'w,
+            's,
+            &'static mut HudText,
+            (
+                With<GuideMaterialCount>,
+                Without<TownLabel>,
+                Without<TownSpeaker>,
+            ),
+        >,
+    >,
+    guide_recipe_icons: Query<
+        'w,
+        's,
+        (
+            &'static GuideRecipeIcon,
+            &'static mut Node,
+            &'static mut ImageNode,
+            &'static mut Visibility,
+        ),
+        (
+            Without<TownRoot>,
+            Without<TownTabButton>,
+            Without<ShopRowIcon>,
+            Without<TownLabel>,
+            Without<GuideMaterialSlotBox>,
+            Without<GuideMaterialIcon>,
+        ),
+    >,
+}
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn update_view(
     window: Single<&Window, With<PrimaryWindow>>,
@@ -771,7 +1102,20 @@ pub fn update_view(
     mut tooltip: Option<ResMut<super::tooltip::TooltipOverlay>>,
     mut root: Single<&mut Visibility, With<TownRoot>>,
     mut node: Single<&mut Node, With<TownRoot>>,
-    mut label: Single<&mut HudText, (With<TownLabel>, Without<TownSpeaker>)>,
+    mut label: Single<
+        (&mut HudText, &mut Node),
+        (
+            With<TownLabel>,
+            Without<TownSpeaker>,
+            Without<TownRoot>,
+            Without<TownTabButton>,
+            Without<ShopRowIcon>,
+            Without<GuideMaterialSlotBox>,
+            Without<GuideMaterialIcon>,
+            Without<GuideMaterialCount>,
+            Without<GuideRecipeIcon>,
+        ),
+    >,
     mut speaker: Single<&mut HudText, (With<TownSpeaker>, Without<TownLabel>)>,
     mut tabs: Query<
         (
@@ -781,20 +1125,47 @@ pub fn update_view(
             &mut BorderColor,
             &mut Visibility,
         ),
-        (Without<TownRoot>, Without<ShopRowIcon>),
+        (
+            Without<TownRoot>,
+            Without<ShopRowIcon>,
+            Without<TownLabel>,
+            Without<GuideMaterialSlotBox>,
+            Without<GuideMaterialIcon>,
+            Without<GuideRecipeIcon>,
+        ),
     >,
     mut shop_icons: Query<
         (&ShopRowIcon, &mut Node, &mut ImageNode, &mut Visibility),
-        (Without<TownRoot>, Without<TownTabButton>),
+        (
+            Without<TownRoot>,
+            Without<TownTabButton>,
+            Without<TownLabel>,
+            Without<GuideMaterialSlotBox>,
+            Without<GuideMaterialIcon>,
+            Without<GuideRecipeIcon>,
+        ),
     >,
+    guide: GuideViewParams,
 ) {
+    let GuideViewParams {
+        guide_slot,
+        mut guide_box,
+        mut guide_mat_icon,
+        mut guide_mat_count,
+        mut guide_recipe_icons,
+    } = guide;
     let win = [window.width(), window.height()];
     let k = crate::hud::inventory::scale(win);
     let pos = panel_pos(win);
+    let panel_h = if panel.guide_crafting_open() {
+        340.0
+    } else {
+        260.0
+    };
     node.left = Val::Px(pos[0]);
     node.top = Val::Px(pos[1]);
     node.width = Val::Px(460.0 * k);
-    node.height = Val::Px(260.0 * k);
+    node.height = Val::Px(panel_h * k);
 
     let line_h = fonts
         .as_ref()
@@ -802,7 +1173,7 @@ pub fn update_view(
         .unwrap_or(20.0);
 
     for (tab_btn, mut tnode, mut bg, mut border, mut vis) in &mut tabs {
-        let show = panel.npc.is_some();
+        let show = panel.npc.is_some() && (tab_btn.0 != 1 || panel.is_guide);
         let want_vis = if show {
             Visibility::Inherited
         } else {
@@ -814,17 +1185,19 @@ pub fn update_view(
         if !show {
             continue;
         }
-        let (left_px, w_px) = if tab_btn.0 == 0 {
-            (130.0, 76.0)
-        } else {
-            (215.0, 96.0)
+        let (left_px, w_px) = match tab_btn.0 {
+            0 => (120.0, 68.0),
+            1 => (196.0, 92.0),
+            _ if panel.is_guide => (296.0, 88.0),
+            _ => (200.0, 96.0),
         };
         tnode.left = Val::Px(left_px * k);
         tnode.top = Val::Px(8.0 * k);
         tnode.width = Val::Px(w_px * k);
         tnode.height = Val::Px(24.0 * k);
         let active = (tab_btn.0 == 0 && panel.tab == TownTab::Talk)
-            || (tab_btn.0 == 1 && panel.tab == TownTab::Housing);
+            || (tab_btn.0 == 1 && panel.tab == TownTab::Crafting)
+            || (tab_btn.0 == 2 && panel.tab == TownTab::Housing);
         let want_bg = if active {
             super::style::BTN_BG_ACTIVE
         } else {
@@ -855,35 +1228,149 @@ pub fn update_view(
     } = icon_assets;
     let show_shop_icons = panel.tab == TownTab::Talk && !panel.shop.is_empty();
     let header_lines = wrapped_header.split('\n').count() + 1;
-    if show_shop_icons && let Some(mut assets) = assets {
-        for (row_icon, mut inode, mut img, mut vis) in &mut shop_icons {
-            if let Some(&(item, _)) = panel.shop.get(row_icon.0) {
+    let guide_stack = guide_slot.as_ref().and_then(|g| g.0);
+    let guide_recipes = guide_stack
+        .map(|st| terravibe_sim::crafting::recipes_using_material(st.id))
+        .unwrap_or_default();
+    let show_guide = panel.guide_crafting_open();
+
+    if let Some(ref mut gb) = guide_box {
+        gb.0.left = Val::Px(16.0 * k);
+        gb.0.top = Val::Px(44.0 * k);
+        gb.0.width = Val::Px(44.0 * k);
+        gb.0.height = Val::Px(44.0 * k);
+        let want_vis = if show_guide {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *gb.1 != want_vis {
+            *gb.1 = want_vis;
+        }
+    }
+    if let Some(ref mut mc) = guide_mat_count {
+        let want_count = if show_guide
+            && let Some(st) = guide_stack
+            && st.count > 1
+        {
+            st.count.to_string()
+        } else {
+            String::new()
+        };
+        if mc.text != want_count {
+            mc.text = want_count;
+        }
+    }
+
+    if let Some(mut assets) = assets {
+        if let Some(ref mut gmi) = guide_mat_icon {
+            if show_guide && let Some(st) = guide_stack {
                 let (handle, size) = super::hotbar::icon_of(
                     &mut assets,
                     &mut image_assets,
                     icon_source.as_deref(),
-                    item,
+                    st.id,
                 );
-                let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
+                let max_dim = 32.0 * k;
                 let scale_factor = max_dim / size.max_element().max(1.0);
-                let w = (size.x * scale_factor).round().max(1.0);
-                let h = (size.y * scale_factor).round().max(1.0);
-                let row_y = 38.0 + (header_lines + row_icon.0) as f32 * line_h;
-                inode.left = Val::Px(16.0);
-                inode.top = Val::Px(row_y + (line_h - h) * 0.5);
-                inode.width = Val::Px(w);
-                inode.height = Val::Px(h);
-                if img.image != handle {
-                    img.image = handle;
+                gmi.1.width = Val::Px((size.x * scale_factor).round().max(1.0));
+                gmi.1.height = Val::Px((size.y * scale_factor).round().max(1.0));
+                if gmi.0.image != handle {
+                    gmi.0.image = handle;
                 }
-                if *vis != Visibility::Inherited {
-                    *vis = Visibility::Inherited;
+                if *gmi.2 != Visibility::Inherited {
+                    *gmi.2 = Visibility::Inherited;
                 }
-            } else if *vis != Visibility::Hidden {
-                *vis = Visibility::Hidden;
+            } else if *gmi.2 != Visibility::Hidden {
+                *gmi.2 = Visibility::Hidden;
+            }
+        }
+
+        if show_guide && !guide_recipes.is_empty() {
+            let start = panel
+                .guide_scroll
+                .min(guide_recipes.len().saturating_sub(MAX_GUIDE_ROWS));
+            for (row_icon, mut inode, mut img, mut vis) in &mut guide_recipe_icons {
+                if let Some(r) = guide_recipes.get(start + row_icon.0) {
+                    let (handle, size) = super::hotbar::icon_of(
+                        &mut assets,
+                        &mut image_assets,
+                        icon_source.as_deref(),
+                        r.output.item,
+                    );
+                    let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
+                    let scale_factor = max_dim / size.max_element().max(1.0);
+                    let w = (size.x * scale_factor).round().max(1.0);
+                    let h = (size.y * scale_factor).round().max(1.0);
+                    let row_y = 100.0 * k + row_icon.0 as f32 * 22.0 * k;
+                    inode.left = Val::Px(16.0 * k);
+                    inode.top = Val::Px(row_y + (line_h - h) * 0.5);
+                    inode.width = Val::Px(w);
+                    inode.height = Val::Px(h);
+                    if img.image != handle {
+                        img.image = handle;
+                    }
+                    if *vis != Visibility::Inherited {
+                        *vis = Visibility::Inherited;
+                    }
+                } else if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        } else {
+            for (_, _, _, mut vis) in &mut guide_recipe_icons {
+                if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        }
+
+        if show_shop_icons {
+            for (row_icon, mut inode, mut img, mut vis) in &mut shop_icons {
+                if let Some(&(item, _)) = panel.shop.get(row_icon.0) {
+                    let (handle, size) = super::hotbar::icon_of(
+                        &mut assets,
+                        &mut image_assets,
+                        icon_source.as_deref(),
+                        item,
+                    );
+                    let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
+                    let scale_factor = max_dim / size.max_element().max(1.0);
+                    let w = (size.x * scale_factor).round().max(1.0);
+                    let h = (size.y * scale_factor).round().max(1.0);
+                    let row_y = 38.0 + (header_lines + row_icon.0) as f32 * line_h;
+                    inode.left = Val::Px(16.0);
+                    inode.top = Val::Px(row_y + (line_h - h) * 0.5);
+                    inode.width = Val::Px(w);
+                    inode.height = Val::Px(h);
+                    if img.image != handle {
+                        img.image = handle;
+                    }
+                    if *vis != Visibility::Inherited {
+                        *vis = Visibility::Inherited;
+                    }
+                } else if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        } else {
+            for (_, _, _, mut vis) in &mut shop_icons {
+                if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
             }
         }
     } else {
+        if let Some(ref mut gmi) = guide_mat_icon
+            && *gmi.2 != Visibility::Hidden
+        {
+            *gmi.2 = Visibility::Hidden;
+        }
+        for (_, _, _, mut vis) in &mut guide_recipe_icons {
+            if *vis != Visibility::Hidden {
+                *vis = Visibility::Hidden;
+            }
+        }
         for (_, _, _, mut vis) in &mut shop_icons {
             if *vis != Visibility::Hidden {
                 *vis = Visibility::Hidden;
@@ -915,8 +1402,50 @@ pub fn update_view(
                 price_override: Some(("Buy", price)),
             });
         }
+    } else if show_guide
+        && let Some(overlay) = tooltip.as_deref_mut()
+        && let Some(c) = window.cursor_position()
+    {
+        if guide_slot_hit([c.x, c.y], win)
+            && let Some(st) = guide_stack
+        {
+            overlay.candidate = Some(super::tooltip::TooltipCandidate {
+                target_id: 4_500,
+                stack: st,
+                equipped: None,
+                price_override: None,
+            });
+        } else if let Some(row) =
+            guide_row_at([c.x, c.y], win, guide_recipes.len(), panel.guide_scroll)
+            && let Some(r) = guide_recipes.get(panel.guide_scroll + row)
+        {
+            let eq = equipped_for_comparison(
+                r.output.item,
+                armor.as_ref().map(|a| &a.0),
+                inv.as_ref().map(|i| &i.0),
+            );
+            overlay.candidate = Some(super::tooltip::TooltipCandidate {
+                target_id: 4_600 + (panel.guide_scroll + row) as u64,
+                stack: ItemStack {
+                    id: r.output.item,
+                    count: r.output.count,
+                    prefix: Prefix(0),
+                },
+                equipped: eq,
+                price_override: None,
+            });
+        }
     }
-    if !panel.is_changed() {
+
+    let (ref mut label_text, ref mut label_node) = *label;
+    if show_guide {
+        label_node.left = Val::Px(16.0 * k);
+        label_node.top = Val::Px(42.0 * k);
+    } else {
+        label_node.left = Val::Px(16.0);
+        label_node.top = Val::Px(38.0);
+    }
+    if !panel.is_changed() && !guide_slot.is_some_and(|g| g.is_changed()) {
         return;
     }
     let max_text_w = (460.0 * k - 32.0).max(200.0);
@@ -926,6 +1455,15 @@ pub fn update_view(
             .as_ref()
             .map(|f| wrap_text(&f.mouse.0, &raw, max_text_w))
             .unwrap_or(raw)
+    } else if show_guide {
+        guide_crafting_body(
+            &panel,
+            guide_stack,
+            &guide_recipes,
+            inv.as_ref().map(|i| &i.0),
+            fonts.as_deref(),
+            max_text_w,
+        )
     } else {
         let mut s = wrapped_header;
         if !panel.shop.is_empty() {
@@ -947,7 +1485,11 @@ pub fn update_view(
             s += &format!("\n\n{wrapped_footer}");
         }
         if panel.npc.is_some() && panel.shop.is_empty() {
-            s += "\n\n[H] Advice: What should I do next?   Esc: close";
+            if panel.is_guide {
+                s += "\n\n[G] Advice: What should I do next?   [C] Crafting   Esc: close";
+            } else {
+                s += "\n\n[G] Advice: What should I do next?   Esc: close";
+            }
         }
         if !panel.note.is_empty() {
             let wrapped_note = fonts
@@ -963,12 +1505,14 @@ pub fn update_view(
     } else {
         Visibility::Hidden
     };
-    if label.text != s {
-        label.text = s;
+    if label_text.text != s {
+        label_text.text = s;
     }
 
     let speaker_name = if panel.tab == TownTab::Housing {
         "Housing"
+    } else if show_guide {
+        "Guide — Crafting"
     } else if !panel.shop.is_empty() {
         if panel.text.starts_with("Arms Dealer:")
             || panel
@@ -981,13 +1525,98 @@ pub fn update_view(
             "Merchant"
         }
     } else if panel.npc.is_some() {
-        "Guide"
+        if panel.is_guide { "Guide" } else { "Town NPC" }
     } else {
         "Housing Query"
     };
     if speaker.text != speaker_name {
         speaker.text = speaker_name.to_string();
     }
+}
+
+/// Formats the Guide's material-recipe lookup body text.
+pub fn guide_crafting_body(
+    panel: &TownPanel,
+    guide_stack: Option<ItemStack>,
+    recipes: &[&'static terravibe_sim::crafting::Recipe],
+    inv: Option<&terravibe_sim::inventory::Inventory>,
+    fonts: Option<&super::HudFonts>,
+    max_text_w: f32,
+) -> String {
+    let mut out = String::new();
+    let Some(st) = guide_stack else {
+        out.push_str(
+            "        Material: (empty)\n        Click slot with an item or Shift-click bag",
+        );
+        if !panel.note.is_empty() {
+            out.push_str(&format!("\n\n{}", panel.note));
+        } else {
+            out.push_str("\n\nPlace any crafting material in the slot on the left to see every recipe that uses it.");
+        }
+        return fonts
+            .map(|f| wrap_text(&f.mouse.0, &out, max_text_w))
+            .unwrap_or(out);
+    };
+
+    let mat_name = item_data(st.id).name;
+    let total = recipes.len();
+    let start = panel.guide_scroll.min(total.saturating_sub(MAX_GUIDE_ROWS));
+    let end = (start + MAX_GUIDE_ROWS).min(total);
+    if total > MAX_GUIDE_ROWS {
+        out.push_str(&format!(
+            "        {mat_name} — {total} recipes ({}-{} / {total})\n        Scroll / Up-Down to browse",
+            start + 1,
+            end
+        ));
+    } else {
+        out.push_str(&format!(
+            "        {mat_name} — {total} recipes\n        Click slot or Shift-click to swap/remove"
+        ));
+    }
+    out.push('\n');
+
+    let sel = panel.guide_sel.min(total.saturating_sub(1));
+    for (idx, r) in recipes.iter().enumerate().skip(start).take(MAX_GUIDE_ROWS) {
+        let mark = if idx == sel { ">" } else { " " };
+        let out_name = item_data(r.output.item).name;
+        let qty = if r.output.count > 1 {
+            format!(" x{}", r.output.count)
+        } else {
+            String::new()
+        };
+        let station = terravibe_sim::crafting::recipe_station_name(r.id).unwrap_or("By Hand");
+        out.push_str(&format!("\n   {mark} {out_name}{qty} — {station}"));
+    }
+
+    if let Some(r) = recipes.get(sel) {
+        let ing_list: Vec<String> = r
+            .ingredients
+            .iter()
+            .map(|ing| {
+                let name = item_data(ing.item).name;
+                if let Some(inv) = inv {
+                    let have = inv.count_of(ing.item);
+                    format!("{} x{} ({have}/{})", name, ing.count, ing.count)
+                } else {
+                    format!("{} x{}", name, ing.count)
+                }
+            })
+            .collect();
+        let station = terravibe_sim::crafting::recipe_station_name(r.id).unwrap_or("By Hand");
+        let detail = format!(
+            "\n\nIngredients: {}\nStation: {}",
+            ing_list.join(", "),
+            station
+        );
+        let wrapped_detail = fonts
+            .map(|f| wrap_text(&f.mouse.0, &detail, max_text_w))
+            .unwrap_or(detail);
+        out.push_str(&wrapped_detail);
+    }
+    if !panel.note.is_empty() {
+        out.push_str(&format!("\n{}", panel.note));
+    }
+    out
 }
 
 /// Draws a 3D wireframe bounding box around the queried room when the Housing tab is open.
@@ -1371,6 +2000,7 @@ mod tests {
             .id();
         app.world_mut().spawn((
             TownLabel,
+            Node::default(),
             HudText {
                 text: String::new(),
                 death: false,
@@ -1415,5 +2045,74 @@ mod tests {
             *app.world().entity(root_id).get::<Visibility>().unwrap(),
             Visibility::Inherited
         );
+    }
+
+    #[test]
+    fn guide_crafting_tab_opens_inventory_lists_recipes_and_rejects_non_material() {
+        use terravibe_sim::item::{IRON_BAR, WOODEN_SWORD};
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<InventoryOpen>()
+            .init_resource::<crate::net::LocalGuideSlot>()
+            .init_resource::<crate::net::LocalHeld>()
+            .init_resource::<TownPanel>();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        app.insert_resource(Net::new(Recorder(sent.clone())));
+        app.world_mut()
+            .spawn((PrimaryWindow, Window::default(), CursorOptions::default()));
+        {
+            let mut panel = app.world_mut().resource_mut::<TownPanel>();
+            panel.npc = Some(EnemyId(1));
+            panel.is_guide = true;
+            panel.tab = TownTab::Talk;
+        }
+        app.add_systems(Update, handle_input);
+
+        // Press C to open Guide Crafting tab & Inventory
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyC);
+        app.update();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .release(KeyCode::KeyC);
+
+        assert!(app.world().resource::<TownPanel>().guide_crafting_open());
+        assert!(app.world().resource::<InventoryOpen>().0);
+
+        // Place IRON_BAR in GuideSlot and format body
+        let stack = ItemStack {
+            id: IRON_BAR,
+            count: 5,
+            prefix: Prefix(0),
+        };
+        let recipes = terravibe_sim::crafting::recipes_using_material(IRON_BAR);
+        let body = guide_crafting_body(
+            app.world().resource::<TownPanel>(),
+            Some(stack),
+            &recipes,
+            None,
+            None,
+            420.0,
+        );
+        assert!(body.contains("Iron Bar"), "body: {body}");
+        assert!(body.contains("Iron Pickaxe"), "body: {body}");
+        assert!(body.contains("Anvil"), "body: {body}");
+
+        // Holding non-material WOODEN_SWORD and clicking Guide Material Slot sets feedback note
+        app.world_mut().resource_mut::<crate::net::LocalHeld>().0 = Some(ItemStack {
+            id: WOODEN_SWORD,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        // Simulate clicking Guide Material Slot via panel_hit + guide_slot_hit
+        let win = [1280.0, 720.0];
+        let pos = panel_pos(win);
+        let k = crate::hud::inventory::scale(win);
+        let slot_cursor = [pos[0] + 30.0 * k, pos[1] + 60.0 * k];
+        assert!(panel_hit(slot_cursor, win, true));
+        assert!(guide_slot_hit(slot_cursor, win));
     }
 }

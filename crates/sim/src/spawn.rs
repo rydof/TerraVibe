@@ -128,9 +128,9 @@ pub fn tick_spawner(
         let Some(sy) = world.surface_y(x, z) else {
             continue;
         };
-        let is_cave = (p[1] as i32) <= sy - 25;
+        let is_cave = (p[1] as i32) <= sy - 30;
         let pos = if is_cave {
-            let base_y = (p[1].floor() as i32).min(sy - 25);
+            let base_y = (p[1].floor() as i32).min(sy - 30);
             let Some(clear_y) = find_clearance_y(world, x, base_y, z) else {
                 continue;
             };
@@ -510,7 +510,7 @@ mod tests {
         struct CorruptCave;
         impl SpawnWorld for CorruptCave {
             fn surface_y(&self, _x: i32, _z: i32) -> Option<i32> {
-                Some(80)
+                Some(300)
             }
             fn corrupt_at(&self, _x: i32, _z: i32) -> bool {
                 true
@@ -523,7 +523,7 @@ mod tests {
         let (kind, _) = tick_spawner(
             &CorruptCave,
             &DAY,
-            &[[0.5, 40.0, 0.5]],
+            &[[0.5, 200.0, 0.5]],
             0,
             0,
             &mut sp,

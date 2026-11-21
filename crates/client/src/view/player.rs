@@ -242,7 +242,7 @@ pub(crate) fn sample_input(
     let ui_open = opts.grab_mode == CursorGrabMode::None
         || inventory.is_some_and(|i| i.0)
         || chest.is_some_and(|c| c.open.is_some())
-        || town.is_some_and(|t| t.shop_open())
+        || town.is_some_and(|t| t.is_open())
         || victory.is_some_and(|v| v.active)
         || creative.is_some_and(|c| c.0);
     if ui_open {
@@ -602,7 +602,7 @@ mod tests {
         );
 
         // A chest open on its own (without the inventory flag) gates too.
-        app.world_mut().resource_mut::<TownPanel>().shop.clear();
+        *app.world_mut().resource_mut::<TownPanel>() = TownPanel::default();
         app.world_mut().resource_mut::<ChestPanel>().open = Some([0, 0, 0]);
         app.update();
         assert!(!app.world().resource::<SampledInput>().input.use_held);

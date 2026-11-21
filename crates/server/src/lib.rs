@@ -92,14 +92,20 @@ impl LoadedQuery for WorldQ<'_> {
 }
 
 impl WorldQ<'_> {
-    /// Top non-air block, only when the whole column of y-chunks is loaded.
+    /// Top non-air block, scanning downward from the top of the world until a solid/non-air block
+    /// is found (returning `None` if the top chunk or an intermediate air chunk is unloaded).
     fn surface_y(&self, x: i32, z: i32) -> Option<i32> {
-        if !LAYERS.clone().all(|y| self.is_loaded(x, y * CHUNK_SIZE, z)) {
-            return None;
+        for cy in LAYERS.clone().rev() {
+            if !self.is_loaded(x, cy * CHUNK_SIZE, z) {
+                return None;
+            }
+            let y_lo = cy * CHUNK_SIZE;
+            let y_hi = y_lo + CHUNK_SIZE - 1;
+            if let Some(y) = (y_lo..=y_hi).rev().find(|&y| self.block(x, y, z) != AIR) {
+                return Some(y);
+            }
         }
-        (0..LAYERS.end * CHUNK_SIZE)
-            .rev()
-            .find(|&y| self.block(x, y, z) != AIR)
+        None
     }
 
     fn has_clearance(&self, x: i32, y: i32, z: i32) -> bool {
@@ -119,7 +125,19 @@ struct SpawnQ<'a> {
 
 impl SpawnWorld for SpawnQ<'_> {
     fn surface_y(&self, x: i32, z: i32) -> Option<i32> {
-        self.world.surface_y(x, z)
+        if let Some(sy) = self.world.surface_y(x, z) {
+            return Some(sy);
+        }
+        if LAYERS
+            .clone()
+            .any(|cy| self.world.is_loaded(x, cy * CHUNK_SIZE, z))
+        {
+            Some(terravibe_sim::worldgen::terrain::surface_height_for_size(
+                self.seed, x, z, self.size,
+            ))
+        } else {
+            None
+        }
     }
 
     fn corrupt_at(&self, x: i32, z: i32) -> bool {
@@ -175,7 +193,7 @@ impl EditQuery for EditQ<'_> {
         let l = |v: i32| v.rem_euclid(CHUNK_SIZE) as usize;
         let ch = Arc::make_mut(c);
         ch.set(l(x), l(y), l(z), b);
-        if b != AIR {
+        if b.is_solid() {
             ch.set_liquid(l(x), l(y), l(z), None);
         }
         if old == CHEST && b != CHEST {
@@ -301,7 +319,7 @@ impl LiquidWorld for ServerLiquidWorld<'_> {
             let ly = (y & 31) as usize;
             let lz = (z & 31) as usize;
             c.set(lx, ly, lz, b);
-            if b != AIR {
+            if b.is_solid() {
                 c.set_liquid(lx, ly, lz, None);
             }
         }
@@ -377,13 +395,21 @@ pub fn spawn_point(seed: u32) -> [f32; 3] {
 
 /// Y of the top non-air block in world column (x, z).
 pub fn surface_y(seed: u32, x: i32, z: i32) -> Option<i32> {
-    let chunks: Vec<Chunk> = LAYERS
-        .map(|y| generate_chunk(seed, ChunkPos::of_block(x, y * CHUNK_SIZE, z)))
-        .collect();
+    let h = terravibe_sim::worldgen::terrain::surface_height(seed, x, z);
+    let cy0 = (h / CHUNK_SIZE).clamp(0, LAYERS.end - 1);
+    let cy1 = (cy0 + 1).min(LAYERS.end - 1);
     let l = |v: i32| v.rem_euclid(CHUNK_SIZE) as usize;
-    (0..LAYERS.end * CHUNK_SIZE)
-        .rev()
-        .find(|&y| chunks[(y / CHUNK_SIZE) as usize].get(l(x), l(y), l(z)) != AIR)
+    for cy in (cy0..=cy1).rev() {
+        let chunk = generate_chunk(seed, ChunkPos::of_block(x, cy * CHUNK_SIZE, z));
+        let y_lo = cy * CHUNK_SIZE;
+        if let Some(ly) = (0..CHUNK_SIZE as usize)
+            .rev()
+            .find(|&ly| chunk.get(l(x), ly, l(z)) != AIR)
+        {
+            return Some(y_lo + ly as i32);
+        }
+    }
+    None
 }
 
 pub struct Conn {
@@ -400,6 +426,8 @@ pub struct Conn {
     pub inv: Inventory,
     /// Cursor stack; never persisted, returned on close, disconnect and save.
     pub held: Held,
+    /// Guide crafting lookup slot; never persisted, returned on close, disconnect and save.
+    pub guide_slot: Option<terravibe_sim::inventory::ItemStack>,
     /// `ClickSlot` / `CloseInventory` requests, handled after chest requests.
     pub slot_reqs: Vec<ClientMsg>,
     pub use_state: UseState,
@@ -811,6 +839,7 @@ impl Server {
             dead: false,
             inv: Inventory::starting(&mut Rng::new(self.seed as u64 ^ id as u64)),
             held: Held::default(),
+            guide_slot: None,
             slot_reqs: Vec::new(),
             use_state: UseState::default(),
             rng: Rng::new(self.seed as u64 ^ id as u64),
@@ -852,7 +881,7 @@ impl Server {
             let l = |v: i32| v.rem_euclid(CHUNK_SIZE) as usize;
             let ch = Arc::make_mut(c);
             ch.set(l(p[0]), l(p[1]), l(p[2]), b);
-            if b != AIR {
+            if b.is_solid() {
                 ch.set_liquid(l(p[0]), l(p[1]), l(p[2]), None);
             }
             self.edited.insert(cp);
@@ -1115,12 +1144,20 @@ impl Server {
                     Ok(Some(
                         m @ (ClientMsg::ClickSlot { .. }
                         | ClientMsg::CloseInventory
+                        | ClientMsg::CloseGuideCrafting
+                        | ClientMsg::GuideSlotShift { .. }
                         | ClientMsg::SortInventory { .. }
                         | ClientMsg::DropItem { .. }
                         | ClientMsg::QuickHeal
                         | ClientMsg::QuickMana
                         | ClientMsg::QuickBuff),
                     )) => c.slot_reqs.push(m),
+                    Ok(Some(ClientMsg::DismissOnboarding)) => {
+                        c.character_facts.onboarding_dismissed = true;
+                        if let Some(ch) = c.character.as_mut() {
+                            ch.facts.onboarding_dismissed = true;
+                        }
+                    }
                     Ok(Some(
                         m @ (ClientMsg::TalkNpc { .. }
                         | ClientMsg::ShopBuy { .. }
@@ -2146,7 +2183,8 @@ impl Server {
                         });
                         let chest = chest_pos.map(|pos| self.chests.entry(pos).or_default());
                         let before = chest.as_ref().map(|ch| ch.slots.to_vec());
-                        let changed = slots::click_with_vanity(
+                        let before_guide = c.guide_slot;
+                        let changed = slots::click_with_guide(
                             &mut c.inv,
                             &mut p.armor,
                             &mut p.accessories,
@@ -2155,6 +2193,7 @@ impl Server {
                             &mut p.vanity_accessories,
                             &mut p.vanity_accessory_prefixes,
                             chest,
+                            Some(&mut c.guide_slot),
                             &mut c.held,
                             at,
                             kind,
@@ -2170,12 +2209,36 @@ impl Server {
                                     c.io.send(ServerMsg::ChestContents { pos, slots }).is_err();
                             }
                         }
+                        if c.guide_slot != before_guide {
+                            c.dead |= c.io.send(ServerMsg::GuideSlot(c.guide_slot)).is_err();
+                        }
                         c.dead |= c.io.send(ServerMsg::Held(c.held.0)).is_err();
                     }
                     ClientMsg::CloseInventory => {
                         if c.held.0.is_some() {
                             leftovers.extend(return_held(c));
                             c.dead |= c.io.send(ServerMsg::Held(None)).is_err();
+                        }
+                        if c.guide_slot.is_some() {
+                            leftovers.extend(return_guide_slot(c));
+                            c.dead |= c.io.send(ServerMsg::GuideSlot(None)).is_err();
+                        }
+                    }
+                    ClientMsg::CloseGuideCrafting => {
+                        if c.guide_slot.is_some() {
+                            leftovers.extend(return_guide_slot(c));
+                            c.dead |= c.io.send(ServerMsg::GuideSlot(None)).is_err();
+                        }
+                    }
+                    ClientMsg::GuideSlotShift { slot } => {
+                        let idx = slot as usize;
+                        if idx < terravibe_sim::inventory::BAG
+                            && let Some(stack) = c.inv.slots[idx]
+                            && terravibe_sim::crafting::is_material(stack.id)
+                        {
+                            let prev = c.guide_slot.replace(stack);
+                            c.inv.slots[idx] = prev;
+                            c.dead |= c.io.send(ServerMsg::GuideSlot(c.guide_slot)).is_err();
                         }
                     }
                     ClientMsg::SortInventory { mode } => {
@@ -2271,14 +2334,18 @@ impl Server {
         }
     }
 
-    /// Puts every cursor stack back (before saves and disconnects); what does
-    /// not fit becomes a world drop at the player.
+    /// Puts every cursor stack and Guide lookup stack back (before saves and disconnects);
+    /// what does not fit becomes a world drop at the player.
     fn return_all_held(&mut self, dead_only: bool) {
         let mut leftovers = Vec::new();
         for c in self.conns.iter_mut().filter(|c| c.dead || !dead_only) {
             if c.held.0.is_some() {
                 leftovers.extend(return_held(c));
                 c.dead |= c.io.send(ServerMsg::Held(None)).is_err();
+            }
+            if c.guide_slot.is_some() {
+                leftovers.extend(return_guide_slot(c));
+                c.dead |= c.io.send(ServerMsg::GuideSlot(None)).is_err();
             }
         }
         for (stack, pos) in leftovers {
@@ -2305,6 +2372,7 @@ impl Server {
                 char_data.mana = pl.vitals.mana;
                 char_data.potion_delay = pl.vitals.potion_delay_ticks as i32;
                 char_data.obsidian_skin_ticks = pl.vitals.obsidian_skin_ticks;
+                char_data.facts = c.character_facts;
                 let bytes = char_data.to_bytes();
                 let _ = c.io.send(ServerMsg::CharacterState(bytes));
             }
@@ -2386,6 +2454,7 @@ impl Server {
                 char_data.mana = pl.vitals.mana;
                 char_data.potion_delay = pl.vitals.potion_delay_ticks as i32;
                 char_data.obsidian_skin_ticks = pl.vitals.obsidian_skin_ticks;
+                char_data.facts = c.character_facts;
                 let bytes = char_data.to_bytes();
                 let _ = c.io.send(ServerMsg::CharacterState(bytes));
             }
@@ -3596,17 +3665,17 @@ impl Server {
                 let p_y = nearest_p.map(|p| p[1] as i32).unwrap_or(pos[1] as i32);
                 if p_y > terravibe_sim::worldgen::underworld::UNDERWORLD_TOP_Y {
                     let wq = WorldQ(&self.world);
+                    let sq = SpawnQ {
+                        world: wq,
+                        seed: self.seed,
+                        size: self.bounds.size(),
+                    };
                     let (px, pz) = (pos[0].floor() as i32, pos[2].floor() as i32);
-                    if let Some(sy) = wq.surface_y(px, pz) {
-                        let is_cave = p_y <= sy - 25;
-                        let is_corrupt = SpawnQ {
-                            world: wq,
-                            seed: self.seed,
-                            size: self.bounds.size(),
-                        }
-                        .corrupt_at(px, pz);
+                    if let Some(sy) = sq.surface_y(px, pz) {
+                        let is_cave = p_y <= sy - 30;
+                        let is_corrupt = sq.corrupt_at(px, pz);
                         if is_cave {
-                            let base_y = p_y.min(sy - 25);
+                            let base_y = p_y.min(sy - 30);
                             if let Some(cy) = (-8..=8)
                                 .map(|dy| base_y + dy)
                                 .find(|&y| y >= 2 && wq.has_clearance(px, y, pz))
@@ -3924,66 +3993,75 @@ impl Server {
             let mut summon_skeletron = false;
             let mut despawn_old_man: Option<EnemyId> = None;
             let mut assign_reqs: Vec<(TownKind, [i32; 3])> = Vec::new();
+            let mut guide_leftovers: Vec<(terravibe_sim::inventory::ItemStack, [f32; 3])> =
+                Vec::new();
             for m in reqs {
                 let c = &mut self.conns[i];
                 let msgs: Vec<ServerMsg> = match m {
-                    ClientMsg::TalkNpc { id } => match near(c, id) {
-                        Some(EnemyKind::OldMan) => {
-                            c.shop_npc = None;
-                            if self.clock.is_day() {
-                                vec![ServerMsg::Dialogue {
+                    ClientMsg::TalkNpc { id } => {
+                        let talked_kind = near(c, id);
+                        if talked_kind != Some(EnemyKind::Guide) && c.guide_slot.is_some() {
+                            guide_leftovers.extend(return_guide_slot(c));
+                            c.dead |= c.io.send(ServerMsg::GuideSlot(None)).is_err();
+                        }
+                        match talked_kind {
+                            Some(EnemyKind::OldMan) => {
+                                c.shop_npc = None;
+                                if self.clock.is_day() {
+                                    vec![ServerMsg::Dialogue {
                                     npc: id,
                                     text: "Old Man: My master cannot be summoned by the light of day... Return at night if you wish to enter without a curse.".to_string(),
                                 }]
-                            } else {
-                                despawn_old_man = Some(id);
-                                summon_skeletron = true;
-                                Vec::new()
-                            }
-                        }
-                        Some(k) => match TownKind::from_enemy(k) {
-                            Some(tk) => {
-                                let npc_pos = npcs
-                                    .iter()
-                                    .find(|n| n.0 == id)
-                                    .map(|n| n.2)
-                                    .unwrap_or(self.spawn);
-                                let biome = terravibe_sim::worldgen::biome::dominant(
-                                    &terravibe_sim::worldgen::biome::biome_weights_for_size(
-                                        self.seed,
-                                        npc_pos[0].floor() as i32,
-                                        npc_pos[2].floor() as i32,
-                                        self.bounds.size(),
-                                    ),
-                                );
-                                let dctx = terravibe_sim::shop::DialogueContext {
-                                    weather: self.weather.kind,
-                                    is_day: self.clock.is_day(),
-                                    biome,
-                                    facts: self.facts,
-                                };
-                                let text = format!(
-                                    "{}: {}",
-                                    tk.name(),
-                                    terravibe_sim::shop::town_dialogue(tk, &dctx, &mut c.rng)
-                                );
-                                let mut v = vec![ServerMsg::Dialogue { npc: id, text }];
-                                c.shop_npc = None;
-                                if !terravibe_sim::shop::shop_stock(tk).is_empty() {
-                                    c.shop_npc = Some(id);
-                                    v.push(ServerMsg::ShopContents {
-                                        items: terravibe_sim::shop::shop_stock(tk)
-                                            .iter()
-                                            .map(|s| (s.item, s.price_copper))
-                                            .collect(),
-                                    });
+                                } else {
+                                    despawn_old_man = Some(id);
+                                    summon_skeletron = true;
+                                    Vec::new()
                                 }
-                                v
                             }
+                            Some(k) => match TownKind::from_enemy(k) {
+                                Some(tk) => {
+                                    let npc_pos = npcs
+                                        .iter()
+                                        .find(|n| n.0 == id)
+                                        .map(|n| n.2)
+                                        .unwrap_or(self.spawn);
+                                    let biome = terravibe_sim::worldgen::biome::dominant(
+                                        &terravibe_sim::worldgen::biome::biome_weights_for_size(
+                                            self.seed,
+                                            npc_pos[0].floor() as i32,
+                                            npc_pos[2].floor() as i32,
+                                            self.bounds.size(),
+                                        ),
+                                    );
+                                    let dctx = terravibe_sim::shop::DialogueContext {
+                                        weather: self.weather.kind,
+                                        is_day: self.clock.is_day(),
+                                        biome,
+                                        facts: self.facts,
+                                    };
+                                    let text = format!(
+                                        "{}: {}",
+                                        tk.name(),
+                                        terravibe_sim::shop::town_dialogue(tk, &dctx, &mut c.rng)
+                                    );
+                                    let mut v = vec![ServerMsg::Dialogue { npc: id, text }];
+                                    c.shop_npc = None;
+                                    if !terravibe_sim::shop::shop_stock(tk).is_empty() {
+                                        c.shop_npc = Some(id);
+                                        v.push(ServerMsg::ShopContents {
+                                            items: terravibe_sim::shop::shop_stock(tk)
+                                                .iter()
+                                                .map(|s| (s.item, s.price_copper))
+                                                .collect(),
+                                        });
+                                    }
+                                    v
+                                }
+                                None => Vec::new(),
+                            },
                             None => Vec::new(),
-                        },
-                        None => Vec::new(),
-                    },
+                        }
+                    }
                     ClientMsg::ShopBuy { npc, index, count } => {
                         let (ok, cannot_afford) = match near(c, npc).and_then(TownKind::from_enemy)
                         {
@@ -4046,6 +4124,9 @@ impl Server {
             }
             for (npc, pos) in assign_reqs {
                 self.assign_housing_at(i, npc, pos);
+            }
+            for (stack, pos) in guide_leftovers {
+                self.add_drop(stack, pos);
             }
             if let Some(id) = despawn_old_man {
                 self.enemies.retain(|e| e.id != id);
@@ -4627,9 +4708,92 @@ impl Server {
             }
         }
         self.world.insert(pos, chunk);
-        // Generated liquid is settled by construction, so a fresh chunk does not
-        // wake its cells. Only cells parked waiting for this chunk resume.
         self.liquid_sim.resume_chunk(pos);
+        self.wake_unsettled_liquid_around(pos);
+    }
+
+    /// Wakes only unsettled liquid cells in `pos` (those able to fall or spread into
+    /// adjacent loaded non-solid space) and border liquid cells of loaded neighbours
+    /// facing open non-solid cells in `pos`.
+    fn wake_unsettled_liquid_around(&mut self, pos: ChunkPos) {
+        let mut to_wake: Vec<[i32; 3]> = Vec::new();
+        {
+            let adapter = ServerLiquidWorld::new(&mut self.world);
+            adapter.for_each_liquid_in_chunk(pos, |[x, y, z]| {
+                let Some(cur) = adapter.liquid(x, y, z) else {
+                    return;
+                };
+                let (b_loaded, b_block, b_liq) = adapter.cell_info(x, y - 1, z);
+                let can_fall = b_loaded
+                    && !b_block.is_solid()
+                    && b_liq.is_none_or(|bl| {
+                        bl.kind != cur.kind || bl.amount < terravibe_sim::liquid::AMOUNT_FULL
+                    });
+                if can_fall {
+                    to_wake.push([x, y, z]);
+                    return;
+                }
+                for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let (n_loaded, n_block, n_liq) = adapter.cell_info(x + dx, y, z + dz);
+                    if n_loaded && !n_block.is_solid() && n_liq.is_none_or(|nl| nl.kind != cur.kind)
+                    {
+                        to_wake.push([x, y, z]);
+                        return;
+                    }
+                }
+            });
+
+            // Also check border faces of the 6 loaded neighbours touching `pos`.
+            let bx = pos.x * CHUNK_SIZE;
+            let by = pos.y * CHUNK_SIZE;
+            let bz = pos.z * CHUNK_SIZE;
+            // Neighbour at -Y/+Y
+            for lz in 0..CHUNK_SIZE {
+                for lx in 0..CHUNK_SIZE {
+                    let wx = bx + lx;
+                    let wz = bz + lz;
+                    // Cell in pos+Y just above pos top face
+                    let ty = by + CHUNK_SIZE;
+                    if let (true, _, Some(_)) = adapter.cell_info(wx, ty, wz) {
+                        let (_, b_block, b_liq) = adapter.cell_info(wx, ty - 1, wz);
+                        if !b_block.is_solid()
+                            && b_liq.is_none_or(|bl| bl.amount < terravibe_sim::liquid::AMOUNT_FULL)
+                        {
+                            to_wake.push([wx, ty, wz]);
+                        }
+                    }
+                }
+            }
+            // Neighbours at -X, +X, -Z, +Z
+            for ly in 0..CHUNK_SIZE {
+                let wy = by + ly;
+                for i in 0..CHUNK_SIZE {
+                    let candidates = [
+                        ([bx - 1, wy, bz + i], [bx, wy, bz + i]),
+                        (
+                            [bx + CHUNK_SIZE, wy, bz + i],
+                            [bx + CHUNK_SIZE - 1, wy, bz + i],
+                        ),
+                        ([bx + i, wy, bz - 1], [bx + i, wy, bz]),
+                        (
+                            [bx + i, wy, bz + CHUNK_SIZE],
+                            [bx + i, wy, bz + CHUNK_SIZE - 1],
+                        ),
+                    ];
+                    for (nb, inner) in candidates {
+                        if let (true, _, Some(nl)) = adapter.cell_info(nb[0], nb[1], nb[2]) {
+                            let (_, ib, il) = adapter.cell_info(inner[0], inner[1], inner[2]);
+                            if !ib.is_solid() && il.is_none_or(|l| l.kind != nl.kind) {
+                                to_wake.push(nb);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for p in to_wake {
+            self.liquid_sim.wake(p);
+        }
     }
 
     fn stream_chunks(&mut self) {
@@ -4682,6 +4846,14 @@ impl Server {
 /// player's position, to be dropped in the world.
 fn return_held(c: &mut Conn) -> Option<(terravibe_sim::inventory::ItemStack, [f32; 3])> {
     let left = slots::return_held(&mut c.inv, &mut c.held)?;
+    Some((left, c.player.as_ref()?.body.pos))
+}
+
+/// Puts the Guide crafting lookup stack back in the bag; the leftover (bag full) with the
+/// player's position, to be dropped in the world.
+fn return_guide_slot(c: &mut Conn) -> Option<(terravibe_sim::inventory::ItemStack, [f32; 3])> {
+    let stack = c.guide_slot.take()?;
+    let left = c.inv.add(stack)?;
     Some((left, c.player.as_ref()?.body.pos))
 }
 
@@ -8121,11 +8293,16 @@ mod tests {
         // Move player next to the chest so it is in reach
         if let Some(conn) = s.conns.first_mut() {
             if let Some(player) = conn.player.as_mut() {
-                player.body.pos = [
+                let p = [
                     chest_pos[0] as f32 + 0.5,
                     chest_pos[1] as f32,
                     chest_pos[2] as f32 + 0.5,
                 ];
+                player.body.pos = p;
+                player.body.vel = [0.0; 3];
+                player.body.fall_peak_y = p[1];
+                player.body.on_ground = true;
+                conn.interest.centre = Some(p);
             }
         }
 
@@ -8783,6 +8960,14 @@ mod tests {
         let sp = spawn_point(7);
         let want = ChunkPos::of_block(0, sp[1] as i32 - 1, 0);
         assert!(pump(&mut s, &client, &mut got, |g| has_chunk(g, want)));
+        // Stream a chunk column outside the 48-block spawn liquid guard so ponds/pools are present.
+        let away = ChunkPos::of_block(96, sp[1] as i32 - 32, 96);
+        let away_chunk = terravibe_sim::worldgen::generate_chunk_sized(7, away, s.bounds.size());
+        s.install_chunk(away, Arc::new(away_chunk));
+        // Also ensure an Underworld chunk with lava sea is present so liquid settlement covers it.
+        let uw = ChunkPos { x: 0, y: 0, z: 0 };
+        let uw_chunk = terravibe_sim::worldgen::generate_chunk_sized(7, uw, s.bounds.size());
+        s.install_chunk(uw, Arc::new(uw_chunk));
 
         let mut peak_pending = 0usize;
         for _ in 0..600 {
@@ -8983,12 +9168,14 @@ mod tests {
         while let Ok(Some(_)) = c2.try_recv() {}
         assert!(!s.conns[1].interest.sent.contains(&cp));
 
-        // Create liquid delta in cp
+        // Create liquid delta in cp (clear neighbours so water flows horizontally)
         let bx = cp.x * 32 + 10;
         let by = cp.y * 32 + 10;
         let bz = cp.z * 32 + 10;
         s.set_block([bx, by, bz], terravibe_sim::STONE);
+        s.set_block([bx + 1, by, bz], terravibe_sim::STONE);
         s.set_block([bx, by + 1, bz], AIR);
+        s.set_block([bx + 1, by + 1, bz], AIR);
         {
             let mut adapter = ServerLiquidWorld::new(&mut s.world);
             adapter.set_liquid(bx, by + 1, bz, Some(Liquid::water(255)));
@@ -10114,7 +10301,11 @@ mod tests {
             for _ in 0..30 {
                 s.spawner.ticks = terravibe_sim::spawn::SPAWN_RATE - 1;
                 s.tick();
-                for e in s.enemies.iter().filter(|e| !e.kind.is_critter()) {
+                for e in s
+                    .enemies
+                    .iter()
+                    .filter(|e| !e.kind.is_friendly() && !e.kind.is_critter())
+                {
                     assert!(
                         !matches!(
                             e.kind,
@@ -10147,7 +10338,7 @@ mod tests {
                 }
             }
             assert!(ring_min_sy < i32::MAX, "spawn ring columns never loaded");
-            let deep_y = ring_min_sy - 25;
+            let deep_y = ring_min_sy - 35;
             assert!(
                 deep_y > terravibe_sim::worldgen::underworld::UNDERWORLD_TOP_Y,
                 "test probe must stay above the Underworld band (surface {surface_y}, ring min {ring_min_sy}, deep {deep_y})"
@@ -10163,7 +10354,11 @@ mod tests {
             for _ in 0..30 {
                 s.spawner.ticks = terravibe_sim::spawn::SPAWN_RATE - 1;
                 s.tick();
-                for e in s.enemies.iter().filter(|e| !e.kind.is_critter()) {
+                for e in s
+                    .enemies
+                    .iter()
+                    .filter(|e| !e.kind.is_friendly() && !e.kind.is_critter())
+                {
                     assert!(
                         matches!(
                             e.kind,
@@ -10173,10 +10368,10 @@ mod tests {
                         e.kind
                     );
                     assert!(
-                        e.pos[1] <= (surface_y - 25) as f32,
+                        e.pos[1] <= (surface_y - 30) as f32,
                         "cave enemy spawned at pos {:?} which is above underground boundary {}",
                         e.pos,
-                        surface_y - 25
+                        surface_y - 30
                     );
                     spawned_cave_enemy = true;
                 }
@@ -10237,9 +10432,9 @@ mod tests {
             );
 
             // 3. Teleports / moves down to cavern depth
-            let cavern_y = surface_y - 75;
+            let cavern_y = surface_y - 120;
             assert_eq!(
-                depth_band(100, 30),
+                depth_band(surface_y, cavern_y),
                 DepthBand::Cavern,
                 "cavern_y must be Cavern depth band"
             );
@@ -11703,8 +11898,9 @@ mod tests {
             hello_and_load(&mut s, &client, &mut got);
             s.cfg.natural_spawns = false;
 
-            s.conns[0].player.as_mut().unwrap().body.pos = [10.0, 10.0, 10.0];
-            s.add_enemy(EnemyKind::FireImp, [15.0, 10.0, 10.0]);
+            let sp = s.spawn;
+            s.conns[0].player.as_mut().unwrap().body.pos = sp;
+            s.add_enemy(EnemyKind::FireImp, [sp[0] + 5.0, sp[1], sp[2]]);
 
             // Fill the projectile cap, then arm the imp's cast flag by hand.
             for _ in 0..MAX_PROJECTILES {
@@ -11712,7 +11908,7 @@ mod tests {
                 s.next_proj_id += 1;
                 s.projectiles.push(Projectile {
                     id,
-                    pos: [5.0, 80.0, 5.0],
+                    pos: [sp[0], sp[1] + 20.0, sp[2]],
                     vel: [0.0; 3],
                     kind: ProjKind::Fireball,
                     owner: u32::MAX,
@@ -11722,7 +11918,7 @@ mod tests {
                     crit: 0,
                     ai0: 0,
                     pierced: 0,
-                    origin: [5.0, 80.0, 5.0],
+                    origin: [sp[0], sp[1] + 20.0, sp[2]],
                 });
             }
             s.enemies
@@ -11853,7 +12049,7 @@ mod tests {
                 }
             }
 
-            let underworld_player_pos = [16.0, 10.0, 16.0];
+            let underworld_player_pos = [16.0, 20.0, 16.0];
             {
                 let pl = s.conns[0].player.as_mut().unwrap();
                 pl.body.pos = underworld_player_pos;
@@ -12113,6 +12309,7 @@ mod tests {
 
             // 7. Shadow Key opens an Underworld chest without being consumed
             let chest_pos = [20, 10, 20];
+            s.install_chunk(ChunkPos { x: 0, y: 0, z: 0 }, Arc::new(Chunk::filled(AIR)));
             s.set_block(chest_pos, terravibe_sim::block::CHEST);
             s.shadow_chests.insert(chest_pos);
             s.chests.insert(
@@ -12126,11 +12323,17 @@ mod tests {
                 ]),
             );
 
-            s.conns[0].player.as_mut().unwrap().body.pos = [
-                chest_pos[0] as f32 + 0.5,
-                chest_pos[1] as f32 + 1.0,
-                chest_pos[2] as f32 + 0.5,
-            ];
+            {
+                let pl = s.conns[0].player.as_mut().unwrap();
+                pl.body.pos = [
+                    chest_pos[0] as f32 + 0.5,
+                    chest_pos[1] as f32 + 1.0,
+                    chest_pos[2] as f32 + 0.5,
+                ];
+                pl.body.vel = [0.0; 3];
+                pl.body.fall_peak_y = pl.body.pos[1];
+                pl.body.on_ground = true;
+            }
 
             give(&mut s, SHADOW_KEY, 1);
             assert_eq!(s.conns[0].inv.count_of(SHADOW_KEY), 1);
@@ -13301,7 +13504,7 @@ mod tests {
         s.tick();
 
         // Player 1 is on the Surface (respawned at spawn), Player 2 is in the Underworld fighting WoF.
-        let surface_pos = [0.0, 68.0, 0.0];
+        let surface_pos = [0.0, 300.0, 0.0];
         let underworld_pos = [-100.0, 12.0, 0.0];
         s.conns[0].player.as_mut().unwrap().body.pos = surface_pos;
         s.conns[1].player.as_mut().unwrap().body.pos = underworld_pos;
@@ -14017,5 +14220,147 @@ mod tests {
         s.tick();
         assert!(!s.clock.is_day());
         assert!(!s.eye_pending);
+    }
+
+    #[test]
+    fn dismiss_onboarding_persists_across_sync_facts_and_character_state() {
+        let (c, conn) = in_process_pair();
+        let mut s = Server::new(1);
+        s.connect(Box::new(conn));
+        let ch =
+            terravibe_sim::Character::new("OnboardingTester", terravibe_sim::Appearance::default());
+        c.send(ClientMsg::Hello {
+            seed: 1,
+            name: None,
+            character: Some(ch.to_bytes()),
+        })
+        .unwrap();
+        s.tick();
+        let mut got = Vec::new();
+        drain(&c, &mut got);
+
+        c.send(ClientMsg::DismissOnboarding).unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert!(
+            got.iter().any(|m| matches!(
+                m,
+                ServerMsg::SyncFacts { character, .. } if character.onboarding_dismissed
+            )),
+            "DismissOnboarding must sync onboarding_dismissed=true"
+        );
+
+        // Trigger another SyncFacts update (e.g. picking up ore) and verify it stays dismissed.
+        s.conns[0].inv.slots[0] = Some(ItemStack {
+            id: terravibe_sim::item::COPPER_ORE,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        s.tick();
+        drain(&c, &mut got);
+        assert!(
+            got.iter().any(|m| matches!(
+                m,
+                ServerMsg::SyncFacts { character, .. } if character.onboarding_dismissed && character.has_ore
+            )),
+            "Subsequent SyncFacts must keep onboarding_dismissed=true"
+        );
+
+        // Disconnect and verify CharacterState persists onboarding_dismissed=true.
+        c.send(ClientMsg::Bye).unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        let bytes = got
+            .iter()
+            .rev()
+            .find_map(|m| match m {
+                ServerMsg::CharacterState(b) => Some(b.clone()),
+                _ => None,
+            })
+            .expect("must send CharacterState on disconnect");
+        let saved = terravibe_sim::Character::from_bytes(&bytes).unwrap();
+        assert!(saved.facts.onboarding_dismissed);
+        assert!(saved.facts.has_ore);
+    }
+
+    #[test]
+    fn guide_slot_click_shift_and_return_lifecycle() {
+        use terravibe_sim::item::{IRON_BAR, WOOD, WOODEN_SWORD};
+        use terravibe_sim::slots::{ClickKind, SlotRef};
+
+        let (c, conn) = in_process_pair();
+        let mut s = Server::new(1);
+        s.connect(Box::new(conn));
+        let mut got = Vec::new();
+        hello_and_load(&mut s, &c, &mut got);
+
+        // Seed inventory with WOOD (material) and WOODEN_SWORD (non-material) and IRON_BAR (material).
+        s.conns[0].inv.slots[0] = Some(ItemStack {
+            id: WOOD,
+            count: 5,
+            prefix: Prefix(0),
+        });
+        s.conns[0].inv.slots[1] = Some(ItemStack {
+            id: WOODEN_SWORD,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        s.conns[0].inv.slots[2] = Some(ItemStack {
+            id: IRON_BAR,
+            count: 3,
+            prefix: Prefix(0),
+        });
+
+        // Pick up WOOD and click SlotRef::Guide.
+        c.send(ClientMsg::ClickSlot {
+            at: SlotRef::Inv(0),
+            kind: ClickKind::Left,
+        })
+        .unwrap();
+        c.send(ClientMsg::ClickSlot {
+            at: SlotRef::Guide,
+            kind: ClickKind::Left,
+        })
+        .unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert_eq!(
+            s.conns[0].guide_slot.map(|st| (st.id, st.count)),
+            Some((WOOD, 5))
+        );
+        assert!(got.iter().any(|m| matches!(
+            m,
+            ServerMsg::GuideSlot(Some(st)) if st.id == WOOD && st.count == 5
+        )));
+
+        // Shift-place IRON_BAR swaps WOOD back into slot 2.
+        c.send(ClientMsg::GuideSlotShift { slot: 2 }).unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert_eq!(
+            s.conns[0].guide_slot.map(|st| (st.id, st.count)),
+            Some((IRON_BAR, 3))
+        );
+        assert_eq!(
+            s.conns[0].inv.slots[2].map(|st| (st.id, st.count)),
+            Some((WOOD, 5))
+        );
+
+        // Shift-place non-material WOODEN_SWORD is ignored.
+        c.send(ClientMsg::GuideSlotShift { slot: 1 }).unwrap();
+        s.tick();
+        assert_eq!(
+            s.conns[0].guide_slot.map(|st| (st.id, st.count)),
+            Some((IRON_BAR, 3))
+        );
+
+        // CloseGuideCrafting returns IRON_BAR to inventory and syncs GuideSlot(None).
+        got.clear();
+        c.send(ClientMsg::CloseGuideCrafting).unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert_eq!(s.conns[0].guide_slot, None);
+        assert_eq!(s.conns[0].inv.count_of(IRON_BAR), 3);
+        assert!(got.iter().any(|m| matches!(m, ServerMsg::GuideSlot(None))));
     }
 }
