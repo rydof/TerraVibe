@@ -17,7 +17,7 @@ use crate::world_bounds::WorldSize;
 const SALT_CRYSTAL: u32 = 0x1F3C_A5E9;
 const CELL: i32 = 32;
 /// Chance (per 1000) that a cell rolls a placement attempt.
-const ATTEMPT_PERMILLE: u32 = 105;
+const ATTEMPT_PERMILLE: u32 = 11;
 /// How far below the rolled y the floor search goes (`AddLifeCrystal` scans to the world bottom).
 const SEARCH: i32 = 12;
 /// Minimum blocks below the column's surface (stand-in for the vanilla underground band).
@@ -37,7 +37,7 @@ fn crystal_in_cell_for_size(seed: u32, cell: [i32; 3], size: WorldSize) -> Optio
     let surface = surface_height_for_size(seed, x, z, size);
     // Scan down to the first stone floor with air above it, like AddLifeCrystal.
     for y in (y0 - SEARCH..=y0).rev() {
-        if y < 1 || surface - y < MIN_DEPTH {
+        if y <= super::underworld::UNDERWORLD_TOP_Y || surface - y < MIN_DEPTH {
             continue;
         }
         if natural_block_for_size(seed, x, y - 1, z, size) == STONE
@@ -102,7 +102,7 @@ mod tests {
         let mut v = Vec::new();
         for x in 0..chunks {
             for z in 0..chunks {
-                for y in 0..4 {
+                for y in 0..crate::worldgen::terrain::WORLD_CHUNK_LAYERS {
                     v.extend(crystals_in(seed, cp(x, y, z)));
                 }
             }

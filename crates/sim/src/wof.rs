@@ -8,7 +8,7 @@ use crate::worldgen::underworld::UNDERWORLD_TOP_Y;
 
 pub const WOF_MAX_HP: i32 = 8000;
 pub const WOF_SPAWN_OFFSET: f32 = 48.0;
-pub const WOF_MOUTH_Y: f32 = 12.0;
+pub const WOF_MOUTH_Y: f32 = 18.0;
 pub const WOF_EYE_OFFSET_Y: f32 = 5.5;
 pub const WOF_HUNGRY_COUNT: usize = 6;
 pub const WOF_HUNGRY_DETACH_HP: i32 = 80;
@@ -434,10 +434,14 @@ mod tests {
         assert!(should_tongue_pull([-150.0, 10.0, 0.0], -140.0, 1));
         assert!(!should_tongue_pull([-120.0, 10.0, 0.0], -140.0, 1));
         // Escaped just above Underworld ceiling -> pulled back down
-        assert!(should_tongue_pull([-120.0, 50.0, 0.0], -140.0, 1));
+        assert!(should_tongue_pull(
+            [-120.0, UNDERWORLD_TOP_Y as f32 + 16.0, 0.0],
+            -140.0,
+            1
+        ));
         // Player respawned on the Surface (y > WOF_TONGUE_MAX_Y) -> NOT dragged into Hell
-        assert!(!should_tongue_pull([0.0, 65.0, 0.0], -140.0, 1));
-        assert!(!should_tongue_pull([-160.0, 65.0, 0.0], -140.0, 1));
+        assert!(!should_tongue_pull([0.0, 290.0, 0.0], -140.0, 1));
+        assert!(!should_tongue_pull([-160.0, 290.0, 0.0], -140.0, 1));
 
         let mut ppos = [-160.0, 10.0, 0.0];
         let mut pvel = [-0.2, 0.1, 0.0];

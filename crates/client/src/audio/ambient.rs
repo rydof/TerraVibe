@@ -35,7 +35,7 @@ const ALL_BEDS: [AmbientBed; 7] = [
 ];
 
 /// Depth threshold (blocks below surface) where deep/lava rumble replaces cave drips.
-const LAVA_RUMBLE_DEPTH: i32 = 120;
+const LAVA_RUMBLE_DEPTH: i32 = 190;
 /// Crossfade duration in seconds between ambient beds.
 const CROSSFADE_SECS: f32 = 2.0;
 /// Debounce duration in seconds before switching to a new ambient bed.
@@ -204,6 +204,7 @@ pub fn update_ambient_audio(
     time: Res<Time>,
     mut manager: ResMut<AmbientManager>,
     settings: Option<Res<Settings>>,
+    selected_world: Option<Res<crate::session::SelectedWorld>>,
     focus: Option<Res<crate::audio::AudioFocusState>>,
     app_state: Option<Res<State<crate::session::AppState>>>,
     clock: Option<Res<crate::net::ClientClock>>,
@@ -240,24 +241,34 @@ pub fn update_ambient_audio(
         .is_day()
     });
 
-    let (biome, depth, near_ocean) = if let Some(lp) = &local_player {
+    let (biome, depth, near_ocean, underground_sheltered) = if let Some(lp) = &local_player {
         let p = lp.0.body.pos;
         let wx = p[0].floor() as i32;
         let wy = p[1].floor() as i32;
         let wz = p[2].floor() as i32;
-        let surface = terravibe_sim::worldgen::terrain::surface_height(1, wx, wz);
+        let seed = selected_world
+            .as_ref()
+            .map_or(crate::view::SEED, |w| w.seed);
+        let size = selected_world
+            .as_ref()
+            .map_or(terravibe_sim::WorldSize::Small, |w| w.size);
+        let surface = terravibe_sim::worldgen::terrain::surface_height_for_size(seed, wx, wz, size);
         let depth = (surface - wy) - 15;
-        let w = terravibe_sim::worldgen::biome::biome_weights(1, wx, wz);
+        let w = terravibe_sim::worldgen::biome::biome_weights_for_size(seed, wx, wz, size);
         let b = terravibe_sim::worldgen::biome::dominant(&w);
-        let bounds = WorldBounds::default();
+        let bounds = WorldBounds::new(size);
         let near_ocean = bounds.contains_column(wx, wz)
             && bounds.edge_distance(wx, wz) < OCEAN_WIDTH + BEACH_WIDTH;
-        (b, depth, near_ocean)
+        (b, depth, near_ocean, wy < surface - 6)
     } else {
-        (Biome::Forest, 0, false)
+        (Biome::Forest, 0, false, false)
     };
 
-    let weather_kind = weather.as_deref().map_or(WeatherKind::Clear, |w| w.kind);
+    let weather_kind = if underground_sheltered {
+        WeatherKind::Clear
+    } else {
+        weather.as_deref().map_or(WeatherKind::Clear, |w| w.kind)
+    };
     let desired = select_ambient_bed_with_ocean(biome, depth, is_night, weather_kind, near_ocean);
     let focused = focus.as_ref().is_none_or(|f| f.focused);
     let base_gain = settings
@@ -451,11 +462,11 @@ mod tests {
     fn ambient_bed_selects_by_biome_depth_time_and_weather() {
         // Deep underground / underworld -> LavaRumble
         assert_eq!(
-            select_ambient_bed(Biome::Forest, 150, false, WeatherKind::Clear),
+            select_ambient_bed(Biome::Forest, 210, false, WeatherKind::Clear),
             AmbientBed::LavaRumble
         );
         assert_eq!(
-            select_ambient_bed(Biome::Snow, 130, true, WeatherKind::Rain),
+            select_ambient_bed(Biome::Snow, 195, true, WeatherKind::Rain),
             AmbientBed::LavaRumble
         );
 

@@ -42,8 +42,8 @@ pub const LAVA_LIGHT: [f32; 3] = [1.0, 0.45, 0.15];
 #[allow(dead_code)] // named reference value used by tests and docs
 pub const WATER_DECAY: f32 = 0.85;
 
-/// World height in blocks (`y` is 0..128).
-pub const WORLD_HEIGHT: i32 = 128;
+/// World height in blocks (`y` is 0..384).
+pub const WORLD_HEIGHT: i32 = terravibe_sim::WORLD_HEIGHT as i32;
 /// Padded box side: the chunk plus `PAD` blocks on every horizontal side.
 const W: usize = (CHUNK_SIZE as usize) + 2 * (PAD as usize);
 /// Padded box height: `PAD` blocks above and below the chunk too. The volume
@@ -265,15 +265,19 @@ impl LightInput {
     /// Packs the 62³ cell flags and 62x62 `sky_open` column mask directly from
     /// `generated` without cloning any `Chunk`s.
     pub fn from_chunk_map(pos: ChunkPos, generated: &HashMap<ChunkPos, Arc<Chunk>>) -> Self {
-        Self::build(pos, |cp| generated.get(&cp).map(|c| c.as_ref()))
+        Self::build(pos, true, |cp| generated.get(&cp).map(|c| c.as_ref()))
     }
 
     /// Packs from a `World` (used by `light_chunk` for diorama / tests).
     pub fn from_world(pos: ChunkPos, world: &World) -> Self {
-        Self::build(pos, |cp| world.chunk(cp))
+        Self::build(pos, false, |cp| world.chunk(cp))
     }
 
-    fn build<'a>(pos: ChunkPos, get_chunk: impl Fn(ChunkPos) -> Option<&'a Chunk>) -> Self {
+    fn build<'a>(
+        pos: ChunkPos,
+        underground_missing_is_solid: bool,
+        get_chunk: impl Fn(ChunkPos) -> Option<&'a Chunk>,
+    ) -> Self {
         let base_x = pos.x * CHUNK_SIZE - PAD;
         let base_y = pos.y * CHUNK_SIZE - PAD;
         let base_z = pos.z * CHUNK_SIZE - PAD;
@@ -344,6 +348,17 @@ impl LightInput {
                             y: cy,
                             z: cz,
                         }) else {
+                            if underground_missing_is_solid
+                                && cy < (terravibe_sim::SEA_LEVEL_Y - 32) / CHUNK_SIZE
+                            {
+                                for wz in bz0..=bz1 {
+                                    let pz = (wz - base_z) as usize;
+                                    for wx in bx0..=bx1 {
+                                        let px = (wx - base_x) as usize;
+                                        sky_open[px + pz * W] = 0;
+                                    }
+                                }
+                            }
                             continue;
                         };
                         let cy0 = cy * CHUNK_SIZE;
@@ -844,11 +859,11 @@ mod tests {
 
     #[test]
     fn padded_border_above_world_is_sky_lit() {
-        // A chunk ending at y=127 has one border texel at y=128, outside the
-        // world. That is open sky, not black, or blocks at y=127 lose their
-        // top-face light.
-        let w = world([(cp(0, 3, 0), Chunk::filled(AIR))]);
-        let v = light_chunk(cp(0, 3, 0), &w);
+        // A chunk ending at y=WORLD_HEIGHT-1 has one border texel at y=WORLD_HEIGHT, outside the
+        // world. That is open sky, not black, or blocks at the top lose their top-face light.
+        let top_cy = WORLD_CHUNKS_Y - 1;
+        let w = world([(cp(0, top_cy, 0), Chunk::filled(AIR))]);
+        let v = light_chunk(cp(0, top_cy, 0), &w);
         assert_eq!(v.padded(16, 32, 16), [255, 255, 255]);
     }
 

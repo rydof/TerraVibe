@@ -13,6 +13,7 @@ pub enum SlotRef {
     VanityArmor(ArmorSlot),
     VanityAccessory(u8),
     Chest(u8),
+    Guide,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +50,7 @@ fn accepts(at: SlotRef, s: &ItemStack) -> bool {
             idx < 5 && item_data(s.id).class == crate::item::ItemClass::Accessory
         }
         SlotRef::Chest(_) => true,
+        SlotRef::Guide => crate::crafting::is_material(s.id),
     }
 }
 
@@ -229,7 +231,50 @@ pub fn click_with_vanity(
     at: SlotRef,
     kind: ClickKind,
 ) -> bool {
+    click_with_guide(
+        inv,
+        armor,
+        accessories,
+        accessory_prefixes,
+        vanity_armor,
+        vanity_accessories,
+        vanity_accessory_prefixes,
+        chest,
+        None,
+        held,
+        at,
+        kind,
+    )
+}
+
+/// Applies one click across inventory, equipment, vanity, chest, and Guide material slots.
+#[allow(clippy::too_many_arguments)]
+pub fn click_with_guide(
+    inv: &mut Inventory,
+    armor: &mut Armor,
+    accessories: &mut Accessories,
+    accessory_prefixes: &mut [Prefix; 5],
+    vanity_armor: &mut Armor,
+    vanity_accessories: &mut Accessories,
+    vanity_accessory_prefixes: &mut [Prefix; 5],
+    chest: Option<&mut ChestInv>,
+    guide: Option<&mut Option<ItemStack>>,
+    held: &mut Held,
+    at: SlotRef,
+    kind: ClickKind,
+) -> bool {
     if kind == ClickKind::Shift {
+        if matches!(at, SlotRef::Guide) {
+            let Some(guide) = guide else { return false };
+            let Some(stack) = guide.take() else {
+                return false;
+            };
+            if let Some(rem) = inv.add(stack) {
+                *guide = Some(rem);
+                return rem.count != stack.count;
+            }
+            return true;
+        }
         let Some(chest) = chest else { return false };
         return match at {
             SlotRef::Inv(i) if (i as usize) < SLOTS => chest.move_in(inv, i as usize),
@@ -246,6 +291,10 @@ pub fn click_with_vanity(
             None => false,
         },
         SlotRef::Chest(i) => match chest.and_then(|c| c.slots.get_mut(i as usize)) {
+            Some(slot) => click_slot(slot, held, ok, kind),
+            None => false,
+        },
+        SlotRef::Guide => match guide {
             Some(slot) => click_slot(slot, held, ok, kind),
             None => false,
         },
@@ -721,5 +770,105 @@ mod tests {
         ));
         assert_eq!(acc[1], None);
         assert_eq!(vanity_acc[1], Some(COBALT_SHIELD));
+    }
+
+    #[test]
+    fn guide_slot_accepts_materials_rejects_non_materials_and_shifts_back() {
+        use crate::item::{IRON_BAR, WOOD, WOODEN_SWORD};
+
+        let mut inv = Inventory::empty();
+        let mut armor = [None; 3];
+        let mut acc = [None; 5];
+        let mut acc_prefixes = [Prefix(0); 5];
+        let mut vanity_armor = [None; 3];
+        let mut vanity_acc = [None; 5];
+        let mut vanity_prefixes = [Prefix(0); 5];
+        let mut guide = None;
+        let mut held = Held(Some(ItemStack {
+            id: WOODEN_SWORD,
+            count: 1,
+            prefix: Prefix(0),
+        }));
+
+        // Non-material rejected
+        assert!(!click_with_guide(
+            &mut inv,
+            &mut armor,
+            &mut acc,
+            &mut acc_prefixes,
+            &mut vanity_armor,
+            &mut vanity_acc,
+            &mut vanity_prefixes,
+            None,
+            Some(&mut guide),
+            &mut held,
+            SlotRef::Guide,
+            ClickKind::Left,
+        ));
+        assert_eq!(guide, None);
+
+        // Material accepted
+        held.0 = Some(ItemStack {
+            id: WOOD,
+            count: 5,
+            prefix: Prefix(0),
+        });
+        assert!(click_with_guide(
+            &mut inv,
+            &mut armor,
+            &mut acc,
+            &mut acc_prefixes,
+            &mut vanity_armor,
+            &mut vanity_acc,
+            &mut vanity_prefixes,
+            None,
+            Some(&mut guide),
+            &mut held,
+            SlotRef::Guide,
+            ClickKind::Left,
+        ));
+        assert_eq!(held.0, None);
+        assert_eq!(guide.map(|s| (s.id, s.count)), Some((WOOD, 5)));
+
+        // Swapping with another material works
+        held.0 = Some(ItemStack {
+            id: IRON_BAR,
+            count: 3,
+            prefix: Prefix(0),
+        });
+        assert!(click_with_guide(
+            &mut inv,
+            &mut armor,
+            &mut acc,
+            &mut acc_prefixes,
+            &mut vanity_armor,
+            &mut vanity_acc,
+            &mut vanity_prefixes,
+            None,
+            Some(&mut guide),
+            &mut held,
+            SlotRef::Guide,
+            ClickKind::Left,
+        ));
+        assert_eq!(held.0.map(|s| (s.id, s.count)), Some((WOOD, 5)));
+        assert_eq!(guide.map(|s| (s.id, s.count)), Some((IRON_BAR, 3)));
+
+        // Shift-click returns Guide slot item to inventory
+        assert!(click_with_guide(
+            &mut inv,
+            &mut armor,
+            &mut acc,
+            &mut acc_prefixes,
+            &mut vanity_armor,
+            &mut vanity_acc,
+            &mut vanity_prefixes,
+            None,
+            Some(&mut guide),
+            &mut held,
+            SlotRef::Guide,
+            ClickKind::Shift,
+        ));
+        assert_eq!(guide, None);
+        assert_eq!(inv.count_of(IRON_BAR), 3);
     }
 }

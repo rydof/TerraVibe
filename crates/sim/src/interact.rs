@@ -882,15 +882,18 @@ pub fn tick_use_with_mana(
                         h.block[1] + h.normal[1],
                         h.block[2] + h.normal[2],
                     ];
+                    let kind = if s.id == WATER_BUCKET {
+                        LiquidKind::Water
+                    } else {
+                        LiquidKind::Lava
+                    };
                     let free = w.is_loaded(c[0], c[1], c[2])
-                        && w.block(c[0], c[1], c[2]) == AIR
-                        && w.liquid(c[0], c[1], c[2]).is_none();
-                    if free && in_reach(body, c) {
-                        let kind = if s.id == WATER_BUCKET {
-                            LiquidKind::Water
-                        } else {
-                            LiquidKind::Lava
+                        && !w.block(c[0], c[1], c[2]).is_solid()
+                        && match w.liquid(c[0], c[1], c[2]) {
+                            None => true,
+                            Some(existing) => existing.kind == kind && existing.amount < 255,
                         };
+                    if free && in_reach(body, c) {
                         if w.set_liquid(c[0], c[1], c[2], Some(Liquid::new(kind, 255))) {
                             w.wake_liquid(c);
                             inv.take_one_selected();

@@ -60,8 +60,8 @@ impl WorldSize {
 pub const OCEAN_WIDTH: i32 = 170;
 /// Sandy beach ramp width in blocks inward from the ocean.
 pub const BEACH_WIDTH: i32 = 40;
-/// Sea level datum in world Y coordinates (just below normal inland minimum surface).
-pub const SEA_LEVEL_Y: i32 = 40;
+/// Sea level datum in world Y coordinates (24 blocks below Forest base 300).
+pub const SEA_LEVEL_Y: i32 = 276;
 
 /// Square world bounds centred on the origin: `x, z` in `[-half, half)`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

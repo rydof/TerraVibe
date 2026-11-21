@@ -374,8 +374,8 @@ impl LiquidSim {
                 continue;
             }
 
-            // If a non-air block occupies the cell, ensure any residual liquid is cleared.
-            if block != AIR {
+            // If a solid block occupies the cell, ensure any residual liquid is cleared.
+            if block.is_solid() {
                 if cur_opt.is_some() {
                     w.set_liquid(x, y, z, None);
                     if self.changed_set.insert_tracked(p) {
@@ -421,7 +421,7 @@ impl LiquidSim {
             let (b_loaded, b_block, b_liq_opt) = w.cell_info(below[0], below[1], below[2]);
             if !b_loaded {
                 self.park(ChunkPos::of_block(below[0], below[1], below[2]), p);
-            } else if b_block == AIR {
+            } else if !b_block.is_solid() {
                 match b_liq_opt {
                     None => {
                         let flow = cur.amount;
@@ -490,7 +490,7 @@ impl LiquidSim {
                         self.park(ChunkPos::of_block(np[0], np[1], np[2]), p);
                         continue;
                     }
-                    if n_block != AIR {
+                    if n_block.is_solid() {
                         continue;
                     }
                     match n_liq {
@@ -673,7 +673,7 @@ impl LiquidSim {
                 self.park(ChunkPos::of_block(above[0], above[1], above[2]), p);
                 return None;
             }
-            if a_block != AIR {
+            if a_block.is_solid() {
                 return None;
             }
             let above_amt = match a_liq {
@@ -694,7 +694,7 @@ impl LiquidSim {
             if !c_loaded {
                 return None;
             }
-            if c_block != AIR {
+            if c_block.is_solid() {
                 break;
             }
             match c_liq {
@@ -715,17 +715,17 @@ impl LiquidSim {
         // block above, at least one horizontal neighbour of `bottom_y` must be a full cell (`>= 250`)
         // that is either capped by a solid block (a pipe/tunnel) or part of a deeper/confined channel.
         let bottom_y = cy + 1;
-        if !a_loaded || a_block == AIR {
+        if !a_loaded || !a_block.is_solid() {
             let has_pipe = HORIZ_4.iter().any(|d| {
                 let nx = x + d[0];
                 let nz = z + d[2];
                 let (nl_loaded, nl_block, nl_liq) = w.cell_info(nx, bottom_y, nz);
                 nl_loaded
-                    && nl_block == AIR
+                    && !nl_block.is_solid()
                     && nl_liq.is_some_and(|l| l.kind == kind && l.amount >= 250)
                     && {
                         let (na_loaded, na_block, _) = w.cell_info(nx, bottom_y + 1, nz);
-                        na_loaded && na_block != AIR
+                        na_loaded && na_block.is_solid()
                     }
             });
             if !has_pipe {
@@ -742,7 +742,7 @@ impl LiquidSim {
         let mut q_head = 0usize;
         let mut q_tail = 1usize;
         q[0] = p;
-        q_capped[0] = a_loaded && a_block != AIR;
+        q_capped[0] = a_loaded && a_block.is_solid();
 
         let mut best: Option<([i32; 3], i32, u8, bool)> = None;
         while q_head < q_tail {
@@ -755,7 +755,7 @@ impl LiquidSim {
                     continue;
                 }
                 let (n_loaded, n_block, n_liq) = w.cell_info(np[0], np[1], np[2]);
-                if !n_loaded || n_block != AIR {
+                if !n_loaded || n_block.is_solid() {
                     continue;
                 }
                 let Some(nl) = n_liq else {
@@ -765,7 +765,7 @@ impl LiquidSim {
                     continue;
                 }
                 let (na_loaded, na_block, na_liq) = w.cell_info(np[0], np[1] + 1, np[2]);
-                let np_solid_above = na_loaded && na_block != AIR;
+                let np_solid_above = na_loaded && na_block.is_solid();
                 let np_has_liquid_above = na_liq.is_some_and(|l| l.kind == kind && l.amount > 0);
                 let path_capped = curr_capped || np_solid_above;
                 if path_capped
@@ -810,7 +810,7 @@ impl LiquidSim {
                 self.park(ChunkPos::of_block(np[0], np[1], np[2]), p);
                 continue;
             }
-            if n_block != AIR {
+            if n_block.is_solid() {
                 continue;
             }
             let Some(nl) = n_liq else {
@@ -1609,5 +1609,37 @@ mod tests {
             mean <= 1.0,
             "wake_chunk time {mean:.3} ms exceeded 1.0 ms gate"
         );
+    }
+
+    #[test]
+    fn liquid_flows_through_non_solid_blocks() {
+        use crate::block::{MOSS, PLATFORM, SMALL_ROCK, TORCH};
+        let mut w = TestWorld::new();
+        let mut sim = LiquidSim::new();
+        for x in 0..8 {
+            w.set_block_load(x, 0, 0, STONE);
+        }
+        w.set_block_load(2, 1, 0, MOSS);
+        w.set_block_load(3, 1, 0, SMALL_ROCK);
+        w.set_block_load(4, 1, 0, TORCH);
+        w.set_block_load(5, 1, 0, PLATFORM);
+        w.set_liquid_load(1, 2, 0, Some(Liquid::water(255)));
+        w.set_block_load(1, 1, 0, PLATFORM);
+        sim.wake([1, 2, 0]);
+
+        for tick in 0..40 {
+            sim.step(&mut w, tick, MAX_CELL_UPDATES_PER_TICK);
+        }
+
+        // Water should have fallen through the platform at (1,1,0) and spread past moss/rocks/torches.
+        assert!(
+            w.liquid(1, 1, 0).is_some(),
+            "water should fall through one-way platform"
+        );
+        assert!(
+            w.liquid(2, 1, 0).is_some() && w.liquid(3, 1, 0).is_some(),
+            "water should flow horizontally through non-solid cave dressing"
+        );
+        assert_eq!(w.total_liquid(LiquidKind::Water), 255);
     }
 }

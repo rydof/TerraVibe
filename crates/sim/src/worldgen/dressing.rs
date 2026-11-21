@@ -53,7 +53,7 @@ pub fn surface_structure_in_chunk(
         return None;
     }
     let wy = terrain::surface_height_for_size(seed, wx, wz, size);
-    if !(8..118).contains(&wy) {
+    if !(8..(terrain::WORLD_HEIGHT as i32 - 10)).contains(&wy) {
         return None;
     }
     let kind = match (h >> 24) % 4 {
@@ -191,7 +191,9 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, size: WorldSize, chunk: &mut Chu
             let surf = terrain::surface_height_for_size(seed, wx, wz, size);
             for ly in 1..(cs as usize - 1) {
                 let wy = by + ly as i32;
-                if wy <= super::underworld::UNDERWORLD_TOP_Y || wy >= 126 {
+                if wy <= super::underworld::UNDERWORLD_TOP_Y
+                    || wy >= terrain::WORLD_HEIGHT as i32 - 2
+                {
                     continue;
                 }
                 if chunk.get(lx, ly, lz) != AIR || chunk.liquid(lx, ly, lz).is_some() {

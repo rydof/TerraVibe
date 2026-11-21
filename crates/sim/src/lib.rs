@@ -45,4 +45,7 @@ pub use player::{
     tick_player_bounded,
 };
 pub use world_bounds::{BEACH_WIDTH, OCEAN_WIDTH, SEA_LEVEL_Y, WorldBounds, WorldSize};
-pub use worldgen::{dungeon_entrance_pos, generate_chunk, generate_chunk_sized, is_dungeon_point};
+pub use worldgen::{
+    WORLD_CHUNK_LAYERS, WORLD_HEIGHT, dungeon_entrance_pos, generate_chunk, generate_chunk_sized,
+    is_dungeon_point,
+};

@@ -449,6 +449,9 @@ fn session_teardown(world: &mut World) {
     if let Some(mut lh) = world.get_resource_mut::<crate::net::LocalHeld>() {
         *lh = Default::default();
     }
+    if let Some(mut lgs) = world.get_resource_mut::<crate::net::LocalGuideSlot>() {
+        *lgs = Default::default();
+    }
     if let Some(mut lcf) = world.get_resource_mut::<crate::net::LocalCharacterFacts>() {
         *lcf = Default::default();
     }

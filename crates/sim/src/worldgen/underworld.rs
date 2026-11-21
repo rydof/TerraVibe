@@ -4,9 +4,9 @@ use crate::block::*;
 use crate::chunk::{CHUNK_SIZE, Chunk, ChunkPos};
 use crate::liquid_cell::Liquid;
 use crate::world_bounds::WorldSize;
-use crate::worldgen::noise::{fbm3, hash};
+use crate::worldgen::noise::{fbm2, fbm3, hash};
 
-pub const UNDERWORLD_TOP_Y: i32 = 24;
+pub const UNDERWORLD_TOP_Y: i32 = 48;
 
 const SALT_HELLSTONE: u32 = 0x8E11_5701;
 const SALT_HOUSE: u32 = 0x484F_5553;
@@ -14,6 +14,9 @@ const SALT_HOUSE_POS: u32 = 0x504F_5348;
 const SALT_LAKE: u32 = 0x4C41_4B45;
 const SALT_LAKE_POS: u32 = 0x504F_534C;
 const SALT_LAKE_PARAM: u32 = 0x5041_524C;
+const SALT_CAVERN_FLOOR: u32 = 0x5557_464C;
+const SALT_CAVERN_CEIL: u32 = 0x5557_4345;
+const SALT_CAVERN_PILLAR: u32 = 0x5557_5049;
 
 const CELL_SIZE: i32 = 96;
 
@@ -37,7 +40,7 @@ pub fn house_in_cell(seed: u32, cell_x: i32, cell_z: i32) -> Option<RuinedHouse>
     let hz = oz
         + 10
         + (hash(seed ^ SALT_HOUSE_POS, cell_x, cell_z, 2) % ((CELL_SIZE - 7 - 20) as u32)) as i32;
-    let hy = 4 + (hash(seed ^ SALT_HOUSE_POS, cell_x, cell_z, 3) % 15) as i32;
+    let hy = 8 + (hash(seed ^ SALT_HOUSE_POS, cell_x, cell_z, 3) % 15) as i32;
 
     Some(RuinedHouse {
         min: [hx, hy, hz],
@@ -67,7 +70,7 @@ fn lake_in_cell(seed: u32, cell_x: i32, cell_z: i32) -> Option<LavaLake> {
         + 20
         + (hash(seed ^ SALT_LAKE_POS, cell_x, cell_z, 2) % ((CELL_SIZE - 40) as u32)) as i32;
     let r = 5 + (hash(seed ^ SALT_LAKE_PARAM, cell_x, cell_z, 3) % 5) as i32;
-    let level = 7 + (hash(seed ^ SALT_LAKE_PARAM, cell_x, cell_z, 4) % 12) as i32;
+    let level = 10 + (hash(seed ^ SALT_LAKE_PARAM, cell_x, cell_z, 4) % 10) as i32;
 
     Some(LavaLake { cx, cz, r, level })
 }
@@ -162,13 +165,43 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, _size: WorldSize, chunk: &mut Ch
         })
     };
 
-    // 1. Replace STONE with ASH for 0 < y <= UNDERWORLD_TOP_Y
+    // 1. Shape open Underworld cavern: undulating Ash floor (6..15) and hanging Ash ceiling (38..48),
+    //    with occasional Ash pillars, replacing remaining STONE with ASH.
     for lx in 0..cs as usize {
+        let wx = chunk_lo_x + lx as i32;
         for lz in 0..cs as usize {
+            let wz = chunk_lo_z + lz as i32;
+            let floor_n = fbm2(
+                seed ^ SALT_CAVERN_FLOOR,
+                wx as f64,
+                wz as f64,
+                1.0 / 32.0,
+                3,
+            );
+            let ceil_n = fbm2(seed ^ SALT_CAVERN_CEIL, wx as f64, wz as f64, 1.0 / 28.0, 3);
+            // Map noise [-1, 1] -> floor_y in [5, 16] and ceil_y in [36, 48].
+            let floor_y = (10.5 + floor_n * 5.5).round().clamp(5.0, 16.0) as i32;
+            let ceil_y = (42.0 + ceil_n * 6.0).round().clamp(36.0, 48.0) as i32;
+
             for ly in 0..cs as usize {
                 let wy = chunk_lo_y + ly as i32;
                 if wy > 0 && wy <= UNDERWORLD_TOP_Y {
-                    if chunk.get(lx, ly, lz) == STONE {
+                    if wy > floor_y && wy < ceil_y && !in_any_house(wx, wy, wz) {
+                        let pillar_n = fbm3(
+                            seed ^ SALT_CAVERN_PILLAR,
+                            wx as f64,
+                            wy as f64 * 0.45,
+                            wz as f64,
+                            1.0 / 18.0,
+                            2,
+                        );
+                        if pillar_n > 0.48 {
+                            chunk.set(lx, ly, lz, ASH);
+                        } else {
+                            chunk.set(lx, ly, lz, AIR);
+                            chunk.set_liquid(lx, ly, lz, None);
+                        }
+                    } else if chunk.get(lx, ly, lz) == STONE {
                         chunk.set(lx, ly, lz, ASH);
                     }
                 }
@@ -202,7 +235,7 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, _size: WorldSize, chunk: &mut Ch
         }
     }
 
-    // 3. Lava sea: y == 0 becomes ASH; y in 1..=3 becomes AIR then Liquid::lava(255); skip house bounds
+    // 3. Lava sea: y == 0 becomes ASH; y in 1..=6 (where open or below sea level) becomes AIR + Liquid::lava(255); skip house bounds
     for lx in 0..cs as usize {
         let wx = chunk_lo_x + lx as i32;
         for lz in 0..cs as usize {
@@ -211,7 +244,10 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, _size: WorldSize, chunk: &mut Ch
                 let wy = chunk_lo_y + ly as i32;
                 if wy == 0 && !in_any_house(wx, wy, wz) {
                     chunk.set(lx, ly, lz, ASH);
-                } else if (1..=3).contains(&wy) && !in_any_house(wx, wy, wz) {
+                } else if (1..=6).contains(&wy)
+                    && !in_any_house(wx, wy, wz)
+                    && (wy <= 3 || chunk.get(lx, ly, lz) == AIR)
+                {
                     chunk.set(lx, ly, lz, AIR);
                     chunk.set_liquid(lx, ly, lz, Some(Liquid::lava(255)));
                 }
@@ -219,22 +255,74 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, _size: WorldSize, chunk: &mut Ch
         }
     }
 
-    // 4. Lava lakes: radius 5-9, level 7-18; carve level-2..=level to AIR, fill level-2..=level-1 with lava, skip house bounds
+    // 4. Lava lakes: radius 5-9, level 7-18; build a solid ASH volcanic basin
+    //    (floor at level-3, rim at level-2..=level-1) and fill interior level-2..=level-1 with lava,
+    //    skipping any lake whose footprint overlaps a ruined house.
     for lake in &lakes {
-        let min_x = (lake.cx - lake.r).max(chunk_lo_x);
-        let max_x = (lake.cx + lake.r).min(chunk_hi_x - 1);
-        let min_z = (lake.cz - lake.r).max(chunk_lo_z);
-        let max_z = (lake.cz + lake.r).min(chunk_hi_z - 1);
+        let outer_r = lake.r + 2;
+        let overlaps_house = houses.iter().any(|h| {
+            lake.cx + outer_r >= h.min[0]
+                && lake.cx - outer_r <= h.max[0]
+                && lake.cz + outer_r >= h.min[2]
+                && lake.cz - outer_r <= h.max[2]
+                && lake.level >= h.min[1]
+                && lake.level - 3 <= h.max[1]
+        });
+        if overlaps_house {
+            continue;
+        }
+        let min_x = (lake.cx - outer_r).max(chunk_lo_x);
+        let max_x = (lake.cx + outer_r).min(chunk_hi_x - 1);
+        let min_z = (lake.cz - outer_r).max(chunk_lo_z);
+        let max_z = (lake.cz + outer_r).min(chunk_hi_z - 1);
+        let r_sq = lake.r * lake.r;
+        let floor_r_sq = (lake.r + 1) * (lake.r + 1);
+        let outer_r_sq = outer_r * outer_r;
 
         for wx in min_x..=max_x {
             let dx = wx - lake.cx;
             let lx = (wx - chunk_lo_x) as usize;
             for wz in min_z..=max_z {
                 let dz = wz - lake.cz;
-                if dx * dx + dz * dz <= lake.r * lake.r {
-                    let lz = (wz - chunk_lo_z) as usize;
+                let dist_sq = dx * dx + dz * dz;
+                let lz = (wz - chunk_lo_z) as usize;
+
+                // Basin floor at level - 3
+                let floor_y = lake.level - 3;
+                if floor_y >= chunk_lo_y
+                    && floor_y < chunk_hi_y
+                    && floor_y >= 0
+                    && dist_sq <= floor_r_sq
+                    && !in_any_house(wx, floor_y, wz)
+                {
+                    let ly = (floor_y - chunk_lo_y) as usize;
+                    chunk.set(lx, ly, lz, ASH);
+                    chunk.set_liquid(lx, ly, lz, None);
+                }
+
+                // Containing ASH rim around the lava pool
+                if dist_sq > r_sq && dist_sq <= outer_r_sq {
+                    for wy in (lake.level - 2)..=(lake.level - 1) {
+                        if wy >= chunk_lo_y
+                            && wy < chunk_hi_y
+                            && wy >= 0
+                            && !in_any_house(wx, wy, wz)
+                        {
+                            let ly = (wy - chunk_lo_y) as usize;
+                            chunk.set(lx, ly, lz, ASH);
+                            chunk.set_liquid(lx, ly, lz, None);
+                        }
+                    }
+                }
+
+                // Carve interior and fill lava
+                if dist_sq <= r_sq {
                     for wy in (lake.level - 2)..=lake.level {
-                        if wy >= chunk_lo_y && wy < chunk_hi_y && !in_any_house(wx, wy, wz) {
+                        if wy >= chunk_lo_y
+                            && wy < chunk_hi_y
+                            && wy >= 0
+                            && !in_any_house(wx, wy, wz)
+                        {
                             let ly = (wy - chunk_lo_y) as usize;
                             chunk.set(lx, ly, lz, AIR);
                             if wy <= lake.level - 1 {
@@ -379,5 +467,75 @@ mod tests {
             house.is_some(),
             "expected at least one house whose chest is AIR/CHEST and whose hellforge is within house bounds"
         );
+    }
+
+    #[test]
+    fn underworld_lava_is_supported_and_not_floating() {
+        let seed = 42;
+        let size = WorldSize::Small;
+        let mut chunk_map = std::collections::HashMap::new();
+        for x in 0..8 {
+            for y in 0..=1 {
+                for z in 0..8 {
+                    let pos = ChunkPos { x, y, z };
+                    chunk_map.insert(pos, generate_chunk_sized(seed, pos, size));
+                }
+            }
+        }
+        let get_block = |wx: i32, wy: i32, wz: i32| {
+            let cp = ChunkPos::of_block(wx, wy, wz);
+            chunk_map.get(&cp).map(|c| {
+                c.get(
+                    wx.rem_euclid(CHUNK_SIZE) as usize,
+                    wy.rem_euclid(CHUNK_SIZE) as usize,
+                    wz.rem_euclid(CHUNK_SIZE) as usize,
+                )
+            })
+        };
+        let get_liq = |wx: i32, wy: i32, wz: i32| {
+            let cp = ChunkPos::of_block(wx, wy, wz);
+            chunk_map.get(&cp).and_then(|c| {
+                c.liquid(
+                    wx.rem_euclid(CHUNK_SIZE) as usize,
+                    wy.rem_euclid(CHUNK_SIZE) as usize,
+                    wz.rem_euclid(CHUNK_SIZE) as usize,
+                )
+            })
+        };
+
+        for cx in 1..7 {
+            for cz in 1..7 {
+                for cy in 0..=1 {
+                    let cp = ChunkPos {
+                        x: cx,
+                        y: cy,
+                        z: cz,
+                    };
+                    let chunk = &chunk_map[&cp];
+                    for lz in 0..CHUNK_SIZE {
+                        for ly in 0..CHUNK_SIZE {
+                            for lx in 0..CHUNK_SIZE {
+                                let wx = cx * CHUNK_SIZE + lx;
+                                let wy = cy * CHUNK_SIZE + ly;
+                                let wz = cz * CHUNK_SIZE + lz;
+                                if let Some(liq) =
+                                    chunk.liquid(lx as usize, ly as usize, lz as usize)
+                                {
+                                    if liq.kind == crate::liquid_cell::LiquidKind::Lava {
+                                        let below_b = get_block(wx, wy - 1, wz);
+                                        let below_l = get_liq(wx, wy - 1, wz);
+                                        assert!(
+                                            below_b.is_some_and(|b| b.is_solid())
+                                                || below_l.is_some(),
+                                            "floating lava at ({wx},{wy},{wz})"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -1642,7 +1642,7 @@ pub fn update_minimap_rendering(
             .as_ref()
             .map_or(crate::view::SEED, |w| w.seed);
         let size = selected_world.as_ref().map_or(WorldSize::Small, |w| w.size);
-        let biome_str = if wy <= terravibe_sim::worldgen::liquid::LAVA_DEPTH_Y {
+        let biome_str = if wy <= terravibe_sim::worldgen::underworld::UNDERWORLD_TOP_Y {
             "Underworld"
         } else if corruption_at_for_size(seed, wx, wz, size) > 0.0 {
             "Corruption"

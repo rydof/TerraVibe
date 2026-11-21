@@ -35,7 +35,7 @@ use crate::light::{
 };
 use crate::session::AppState;
 /// Only chunk layers `0..CHUNK_LAYERS` have blocks.
-const CHUNK_LAYERS: i32 = 4;
+const CHUNK_LAYERS: i32 = terravibe_sim::WORLD_CHUNK_LAYERS;
 /// Max meshing tasks spawned per frame.
 const SPAWN_BUDGET: usize = 24;
 /// Max light tasks spawned per frame. Lighting is cheap enough to run on the
@@ -72,7 +72,12 @@ impl Plugin for ChunksPlugin {
             .add_systems(Startup, (setup_material, setup_block_models))
             .add_systems(
                 Update,
-                (stream_chunks, update_torch_flicker).run_if(in_state(AppState::InGame)),
+                (
+                    stream_chunks,
+                    update_torch_flicker,
+                    animate_liquid_materials,
+                )
+                    .run_if(in_state(AppState::InGame)),
             );
         if std::env::var_os("TERRAVIBE_SPIKE_LOG").is_some_and(|v| v == "1") {
             app.add_systems(
@@ -174,6 +179,8 @@ pub(crate) struct ChunkMat {
 struct Meshed {
     /// One entity per mesh part; empty for an empty chunk.
     entities: Vec<Entity>,
+    /// Separate liquid mesh entity so liquid updates avoid re-meshing terrain.
+    liquid_entity: Option<Entity>,
     /// This chunk's material (`LightExt::light` is swapped when it relights).
     material: Handle<ChunkMaterial>,
     /// Liquid mesh material (`LightExt::light` is swapped when it relights).
@@ -209,6 +216,8 @@ pub struct ChunkStream {
     stale: HashSet<ChunkPos>,
     /// Edited chunks (and border neighbours) to re-mesh at once, this frame.
     urgent: Vec<ChunkPos>,
+    /// Chunks whose liquid changed, re-meshing only their liquid mesh on the main thread.
+    urgent_liquid: Vec<ChunkPos>,
     /// Light tasks running on the compute pool.
     light_tasks: HashMap<ChunkPos, Task<LightVolume>>,
     /// Chunks waiting for a light task, in queue order.
@@ -241,6 +250,10 @@ impl ChunkStream {
     /// Received chunks, for block queries (physics).
     pub fn generated(&self) -> &HashMap<ChunkPos, Arc<Chunk>> {
         &self.generated
+    }
+
+    pub fn light_epoch(&self) -> u64 {
+        self.light_epoch
     }
 
     pub fn set_bounds(&mut self, bounds: WorldBounds) {
@@ -341,19 +354,26 @@ impl ChunkStream {
     }
 
     /// Applies a liquid delta from the server to one chunk and marks it
-    /// (plus any neighbours touched on chunk borders) for re-meshing and relighting.
+    /// (plus any neighbours touched on chunk borders) for liquid-only re-meshing
+    /// and, when liquid presence or kind changed, relighting.
     pub fn apply_liquid_delta(&mut self, pos: ChunkPos, cells: &[(u16, u16)]) {
         let Some(chunk) = self.generated.get_mut(&pos) else {
             return;
         };
         let ch = Arc::make_mut(chunk);
         let mut touched = vec![[0, 0, 0]];
+        let mut light_changed = false;
         for &(idx, raw) in cells {
             let idx = idx as usize;
             let lx = idx % (CHUNK_SIZE as usize);
             let ly = (idx / (CHUNK_SIZE as usize)) % (CHUNK_SIZE as usize);
             let lz = idx / ((CHUNK_SIZE * CHUNK_SIZE) as usize);
-            ch.set_liquid(lx, ly, lz, Liquid::unpack(raw));
+            let old_kind = ch.liquid(lx, ly, lz).map(|l| l.kind);
+            let new_liq = Liquid::unpack(raw);
+            if old_kind != new_liq.map(|l| l.kind) {
+                light_changed = true;
+            }
+            ch.set_liquid(lx, ly, lz, new_liq);
             if lx == 0 {
                 touched.push([-1, 0, 0]);
             } else if lx == (CHUNK_SIZE as usize) - 1 {
@@ -374,13 +394,15 @@ impl ChunkStream {
             let n = offset(pos, d);
             if self.meshed.contains_key(&n) || self.mesh_tasks.contains_key(&n) {
                 self.stale.insert(n);
-                if !self.urgent.contains(&n) {
-                    self.urgent.push(n);
+                if !self.urgent_liquid.contains(&n) {
+                    self.urgent_liquid.push(n);
                 }
             }
         }
-        self.light_epoch += 1;
-        self.queue_light_around(pos);
+        if light_changed {
+            self.light_epoch += 1;
+            self.queue_light_around(pos);
+        }
     }
 
     #[allow(dead_code)]
@@ -410,8 +432,11 @@ impl ChunkStream {
             self.dead_light_images.push(h);
         }
         if let Some(m) = self.remove_meshed(pos) {
-            self.frame.despawned += m.entities.len() as u32;
+            self.frame.despawned += m.entities.len() as u32 + u32::from(m.liquid_entity.is_some());
             self.dead_entities.extend(m.entities);
+            if let Some(le) = m.liquid_entity {
+                self.dead_entities.push(le);
+            }
         }
         // Neighbours' padded volumes no longer see this chunk.
         self.queue_light_around(pos);
@@ -473,7 +498,7 @@ impl ChunkStream {
     pub fn mesh_count(&self) -> usize {
         self.meshed
             .values()
-            .filter(|m| !m.entities.is_empty())
+            .filter(|m| !m.entities.is_empty() || m.liquid_entity.is_some())
             .count()
     }
 
@@ -533,6 +558,7 @@ pub(crate) fn chunk_material(
                 1.0, // sky brightness; update_sky corrects it
             ),
             tiles: mat.tiles.clone(),
+            liquid_params: Vec4::ZERO,
         },
     })
 }
@@ -559,6 +585,7 @@ fn terrain_chunk_material(
                 1.0,
             ),
             tiles: mat.tiles.clone(),
+            liquid_params: Vec4::ZERO,
         },
     })
 }
@@ -580,6 +607,7 @@ pub(crate) fn liquid_chunk_material(
                 1.0,
             ),
             tiles: mat.tiles.clone(),
+            liquid_params: Vec4::new(1.0, 0.0, 0.0, 0.0),
         },
     })
 }
@@ -645,8 +673,8 @@ fn setup_material(mut commands: Commands, art: Res<ArtRes>, mut images: ResMut<A
         liquid_base: StandardMaterial {
             base_color: Color::WHITE,
             base_color_texture: None,
-            perceptual_roughness: 0.1,
-            reflectance: 0.2,
+            perceptual_roughness: 0.15,
+            reflectance: 0.35,
             alpha_mode: AlphaMode::Blend,
             ..default()
         },
@@ -670,7 +698,10 @@ fn horizontal_dist(p: ChunkPos, cam: Vec3) -> f32 {
 }
 
 fn in_view(p: ChunkPos, cam: Vec3) -> bool {
-    (0..CHUNK_LAYERS).contains(&p.y) && horizontal_dist(p, cam) <= VIEW_RADIUS_BLOCKS
+    let cy = (cam.y / CHUNK_SIZE as f32).floor() as i32;
+    (0..CHUNK_LAYERS).contains(&p.y)
+        && (p.y - cy).abs() <= terravibe_sim::net::VERTICAL_CHUNK_RADIUS
+        && horizontal_dist(p, cam) <= VIEW_RADIUS_BLOCKS
 }
 
 fn offset(p: ChunkPos, d: [i32; 3]) -> ChunkPos {
@@ -688,7 +719,7 @@ fn chunks_in_view(cam: Vec3) -> Vec<ChunkPos> {
     let mut out = Vec::new();
     for x in c.x - r..=c.x + r {
         for z in c.z - r..=c.z + r {
-            for y in 0..CHUNK_LAYERS {
+            for y in terravibe_sim::net::vertical_layers_for_y(cam.y) {
                 let p = ChunkPos { x, y, z };
                 if in_view(p, cam) {
                     out.push(p);
@@ -712,10 +743,12 @@ fn view_candidates(c: ChunkPos) -> Vec<ChunkPos> {
     // Half the horizontal diagonal of a chunk: the furthest the camera can be from `cc`.
     let slack = CHUNK_SIZE as f32 * std::f32::consts::FRAC_1_SQRT_2;
     let r = ((VIEW_RADIUS_BLOCKS + slack) / CHUNK_SIZE as f32).ceil() as i32 + 1;
+    let y_lo = (c.y - terravibe_sim::net::VERTICAL_CHUNK_RADIUS - 1).max(0);
+    let y_hi = (c.y + terravibe_sim::net::VERTICAL_CHUNK_RADIUS + 1).min(CHUNK_LAYERS - 1);
     let mut out = Vec::new();
     for x in c.x - r..=c.x + r {
         for z in c.z - r..=c.z + r {
-            for y in 0..CHUNK_LAYERS {
+            for y in y_lo..=y_hi {
                 let p = ChunkPos { x, y, z };
                 if horizontal_dist(p, cc) <= VIEW_RADIUS_BLOCKS + slack {
                     out.push(p);
@@ -807,6 +840,9 @@ pub(crate) fn stream_chunks(
             for e in old.entities {
                 commands.entity(e).despawn();
             }
+            if let Some(le) = old.liquid_entity {
+                commands.entity(le).despawn();
+            }
         }
         let light = s
             .light_images
@@ -829,19 +865,17 @@ pub(crate) fn stream_chunks(
                     .id()
             })
             .collect();
-        if let Some(lh) = liquid_handle {
-            entities.push(
-                commands
-                    .spawn((
-                        Mesh3d(lh),
-                        MeshMaterial3d(liquid_cm.clone()),
-                        Transform::IDENTITY,
-                        LiquidMeshEntity,
-                        DespawnOnExit(AppState::InGame),
-                    ))
-                    .id(),
-            );
-        }
+        let liquid_entity = liquid_handle.map(|lh| {
+            commands
+                .spawn((
+                    Mesh3d(lh),
+                    MeshMaterial3d(liquid_cm.clone()),
+                    Transform::IDENTITY,
+                    LiquidMeshEntity,
+                    DespawnOnExit(AppState::InGame),
+                ))
+                .id()
+        });
         if let Some(chunk) = s.generated.get(&p) {
             spawn_chunk_models(
                 &mut commands,
@@ -859,12 +893,58 @@ pub(crate) fn stream_chunks(
             p,
             Meshed {
                 entities,
+                liquid_entity,
                 material: cm,
                 liquid_material: liquid_cm,
                 quads,
             },
         );
         s.ensure_light(p);
+    }
+
+    // 1c. Liquid-only edits: re-mesh only `liquid_entity` for already-meshed chunks.
+    for p in std::mem::take(&mut s.urgent_liquid) {
+        let Some(center) = s.generated.get(&p) else {
+            continue;
+        };
+        if !s.stale.contains(&p) || s.mesh_tasks.contains_key(&p) {
+            continue;
+        }
+        if !s.meshed.contains_key(&p) {
+            continue;
+        }
+        s.stale.remove(&p);
+        let liquid_mesh = if center.has_liquid() {
+            mesh_liquid(center, p, |wx, wy, wz| {
+                let cp = ChunkPos::of_block(wx, wy, wz);
+                s.generated.get(&cp).and_then(|c| {
+                    c.liquid(
+                        wx.rem_euclid(CHUNK_SIZE) as usize,
+                        wy.rem_euclid(CHUNK_SIZE) as usize,
+                        wz.rem_euclid(CHUNK_SIZE) as usize,
+                    )
+                })
+            })
+        } else {
+            None
+        };
+        let liquid_handle = liquid_mesh.map(|m| meshes.add(m));
+        if let Some(m) = s.meshed.get_mut(&p) {
+            if let Some(old_le) = m.liquid_entity.take() {
+                commands.entity(old_le).despawn();
+            }
+            m.liquid_entity = liquid_handle.map(|lh| {
+                commands
+                    .spawn((
+                        Mesh3d(lh),
+                        MeshMaterial3d(m.liquid_material.clone()),
+                        Transform::IDENTITY,
+                        LiquidMeshEntity,
+                        DespawnOnExit(AppState::InGame),
+                    ))
+                    .id()
+            });
+        }
     }
 
     // 2. Collect finished meshing tasks, then upload a budget of their parts.
@@ -942,9 +1022,12 @@ pub(crate) fn stream_chunks(
         };
         let liquid_handle = liquid.map(|m| meshes.add(m));
         if let Some(old) = s.remove_meshed(p) {
-            s.frame.despawned += old.entities.len() as u32;
+            s.frame.despawned += old.entities.len() as u32 + u32::from(old.liquid_entity.is_some());
             for e in old.entities {
                 commands.entity(e).despawn();
+            }
+            if let Some(le) = old.liquid_entity {
+                commands.entity(le).despawn();
             }
         }
         let light = s
@@ -968,19 +1051,17 @@ pub(crate) fn stream_chunks(
                     .id()
             })
             .collect();
-        if let Some(lh) = liquid_handle {
-            entities.push(
-                commands
-                    .spawn((
-                        Mesh3d(lh),
-                        MeshMaterial3d(liquid_cm.clone()),
-                        Transform::IDENTITY,
-                        LiquidMeshEntity,
-                        DespawnOnExit(AppState::InGame),
-                    ))
-                    .id(),
-            );
-        }
+        let liquid_entity = liquid_handle.map(|lh| {
+            commands
+                .spawn((
+                    Mesh3d(lh),
+                    MeshMaterial3d(liquid_cm.clone()),
+                    Transform::IDENTITY,
+                    LiquidMeshEntity,
+                    DespawnOnExit(AppState::InGame),
+                ))
+                .id()
+        });
         spawn_chunk_models_output(
             &mut commands,
             &models,
@@ -994,6 +1075,7 @@ pub(crate) fn stream_chunks(
             p,
             Meshed {
                 entities,
+                liquid_entity,
                 material: cm,
                 liquid_material: liquid_cm,
                 quads,
@@ -1145,6 +1227,21 @@ pub(crate) fn stream_chunks(
     s.frame.stream_us = started.elapsed().as_micros() as u32;
 }
 
+fn animate_liquid_materials(
+    time: Res<Time<Real>>,
+    stream: Res<ChunkStream>,
+    mut chunk_materials: ResMut<Assets<ChunkMaterial>>,
+) {
+    let t = time.elapsed_secs();
+    for m in stream.meshed.values() {
+        if m.liquid_entity.is_some()
+            && let Some(mut mat) = chunk_materials.get_mut(&m.liquid_material)
+        {
+            mat.extension.liquid_params.y = t;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1160,6 +1257,7 @@ mod tests {
                 q,
                 Meshed {
                     entities: vec![],
+                    liquid_entity: None,
                     material: Handle::default(),
                     liquid_material: Handle::default(),
                     quads: 0,
@@ -1186,6 +1284,7 @@ mod tests {
                 q,
                 Meshed {
                     entities: vec![],
+                    liquid_entity: None,
                     material: Handle::default(),
                     liquid_material: Handle::default(),
                     quads: 0,
@@ -1383,5 +1482,41 @@ mod tests {
             false,
             UPLOAD_VERTS_PER_FRAME + 10_000
         ));
+    }
+
+    #[test]
+    fn apply_liquid_delta_skips_relight_on_amount_only_change() {
+        let mut s = ChunkStream::default();
+        let p = ChunkPos { x: 0, y: 0, z: 0 };
+        s.insert_chunk(p, Arc::new(Chunk::filled(terravibe_sim::AIR)));
+        s.meshed.insert(
+            p,
+            Meshed {
+                entities: vec![],
+                liquid_entity: None,
+                material: Handle::default(),
+                liquid_material: Handle::default(),
+                quads: 0,
+            },
+        );
+        let idx = (5 + 5 * 32 + 5 * 1024) as u16;
+        let epoch_before = s.light_epoch();
+        s.apply_liquid_delta(p, &[(idx, Liquid::pack(Some(Liquid::water(200))))]);
+        assert!(
+            s.light_epoch() > epoch_before,
+            "empty -> water must relight"
+        );
+        assert!(s.urgent_liquid.contains(&p));
+        assert!(!s.urgent.contains(&p));
+
+        let epoch_mid = s.light_epoch();
+        s.urgent_liquid.clear();
+        s.apply_liquid_delta(p, &[(idx, Liquid::pack(Some(Liquid::water(120))))]);
+        assert_eq!(
+            s.light_epoch(),
+            epoch_mid,
+            "water -> water amount change must not bump light epoch"
+        );
+        assert!(s.urgent_liquid.contains(&p));
     }
 }

@@ -1,12 +1,20 @@
 //! Weather presentation: rain/snowfall particles, lightning flash, thunder SFX, and wet ground darkening.
 
+use bevy::asset::RenderAssetUsages;
+use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
+use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use terravibe_sim::weather::WeatherKind;
+use terravibe_sim::world_bounds::WorldSize;
 use terravibe_sim::worldgen::biome::{Biome, biome_weights, dominant};
+use terravibe_sim::worldgen::terrain::surface_height_for_size;
+use terravibe_sim::{CHUNK_SIZE, ChunkPos, WORLD_CHUNK_LAYERS};
 
 use crate::audio::{SfxEvent, SfxKind};
-use crate::session::AppState;
+use crate::session::{AppState, SelectedWorld};
 use crate::settings::Settings;
+use crate::view::chunks::ChunkStream;
 use crate::view::player::LocalPlayer;
 
 /// Maximum concurrent weather particles in [`WeatherFxState`].
@@ -21,6 +29,8 @@ pub fn max_weather_particles_for(settings: &Settings) -> usize {
 
 const WEATHER_SPAWN_RADIUS_XZ: f32 = 16.0;
 const WEATHER_SPAWN_HEIGHT: f32 = 14.0;
+const ROOF_RADIUS: i32 = 17;
+const ROOF_GRID_SIDE: usize = (ROOF_RADIUS * 2 + 1) as usize;
 
 /// A single raindrop or snowflake particle.
 #[derive(Clone, Debug)]
@@ -71,6 +81,20 @@ impl WeatherFxState {
     /// Advances weather particles, lightning, thunder timer, and wet-ground factor by `dt` seconds.
     /// Returns `true` when thunder SFX should be triggered this step.
     pub fn step(&mut self, dt: f32, center: Vec3, biome: Biome, settings: &Settings) -> bool {
+        self.step_with_roof(dt, center, biome, settings, false, |_, _| f32::NEG_INFINITY)
+    }
+
+    /// Advances weather particles with a per-column sky-roof height query `roof_y(x, z)`.
+    /// Particles do not spawn under solid ceilings/caves and despawn upon hitting `roof_y`.
+    pub fn step_with_roof(
+        &mut self,
+        dt: f32,
+        center: Vec3,
+        biome: Biome,
+        settings: &Settings,
+        sheltered: bool,
+        roof_y: impl Fn(f32, f32) -> f32,
+    ) -> bool {
         if dt <= 0.0 {
             return false;
         }
@@ -83,7 +107,8 @@ impl WeatherFxState {
             return false;
         }
 
-        let target_wet = if matches!(self.kind, WeatherKind::Rain | WeatherKind::Storm)
+        let target_wet = if !sheltered
+            && matches!(self.kind, WeatherKind::Rain | WeatherKind::Storm)
             && biome != Biome::Snow
         {
             if self.kind == WeatherKind::Storm {
@@ -104,7 +129,8 @@ impl WeatherFxState {
             p.age += dt;
             p.pos += p.vel * dt;
         }
-        self.particles.retain(|p| p.age < p.lifetime);
+        self.particles
+            .retain(|p| p.age < p.lifetime && p.pos.y > roof_y(p.pos.x, p.pos.z));
         let cap = max_weather_particles_for(settings);
         if self.particles.len() > cap {
             self.particles.truncate(cap);
@@ -124,11 +150,16 @@ impl WeatherFxState {
                 if self.particles.len() >= cap {
                     break;
                 }
-                let offset = Vec3::new(
-                    self.next_signed() * WEATHER_SPAWN_RADIUS_XZ,
-                    WEATHER_SPAWN_HEIGHT * (0.65 + 0.35 * self.next_unit()),
-                    self.next_signed() * WEATHER_SPAWN_RADIUS_XZ,
-                );
+                let off_x = self.next_signed() * WEATHER_SPAWN_RADIUS_XZ;
+                let off_y = WEATHER_SPAWN_HEIGHT * (0.65 + 0.35 * self.next_unit());
+                let off_z = self.next_signed() * WEATHER_SPAWN_RADIUS_XZ;
+                let px = center.x + off_x;
+                let py = center.y + off_y;
+                let pz = center.z + off_z;
+                let floor_y = roof_y(px, pz);
+                if floor_y > center.y + 4.0 || py <= floor_y + 0.5 {
+                    continue;
+                }
                 let (vel, lifetime, size) = if is_snow {
                     (
                         Vec3::new(
@@ -151,7 +182,7 @@ impl WeatherFxState {
                     )
                 };
                 self.particles.push(WeatherParticle {
-                    pos: center + offset,
+                    pos: Vec3::new(px, py, pz),
                     vel,
                     is_snow,
                     age: 0.0,
@@ -185,6 +216,126 @@ impl WeatherFxState {
     }
 }
 
+/// Cached 35×35 local sky-roof heightmap around the player so per-particle
+/// roof/cave collision is O(1) with zero per-frame chunk lookups when stationary.
+#[derive(Resource)]
+struct SkyRoofCache {
+    origin_x: i32,
+    origin_z: i32,
+    light_epoch: u64,
+    seed: u32,
+    initialized: bool,
+    floors: Vec<i32>,
+}
+
+impl Default for SkyRoofCache {
+    fn default() -> Self {
+        Self {
+            origin_x: 0,
+            origin_z: 0,
+            light_epoch: u64::MAX,
+            seed: 0,
+            initialized: false,
+            floors: vec![0; ROOF_GRID_SIDE * ROOF_GRID_SIDE],
+        }
+    }
+}
+
+impl SkyRoofCache {
+    fn refresh(&mut self, wx: i32, wz: i32, stream: &ChunkStream, seed: u32, size: WorldSize) {
+        let epoch = stream.light_epoch();
+        if self.initialized
+            && self.origin_x == wx
+            && self.origin_z == wz
+            && self.light_epoch == epoch
+            && self.seed == seed
+        {
+            return;
+        }
+        self.origin_x = wx;
+        self.origin_z = wz;
+        self.light_epoch = epoch;
+        self.seed = seed;
+        self.initialized = true;
+        let chunks = stream.generated();
+        for dz in -ROOF_RADIUS..=ROOF_RADIUS {
+            let gz = (dz + ROOF_RADIUS) as usize;
+            let cz_w = wz + dz;
+            for dx in -ROOF_RADIUS..=ROOF_RADIUS {
+                let gx = (dx + ROOF_RADIUS) as usize;
+                let cx_w = wx + dx;
+                self.floors[gz * ROOF_GRID_SIDE + gx] =
+                    column_rain_floor(cx_w, cz_w, chunks, seed, size);
+            }
+        }
+    }
+
+    #[inline]
+    fn sample(&self, x: f32, z: f32) -> f32 {
+        if !self.initialized {
+            return f32::NEG_INFINITY;
+        }
+        let ix = x.floor() as i32 - self.origin_x + ROOF_RADIUS;
+        let iz = z.floor() as i32 - self.origin_z + ROOF_RADIUS;
+        if (0..ROOF_GRID_SIDE as i32).contains(&ix) && (0..ROOF_GRID_SIDE as i32).contains(&iz) {
+            self.floors[(iz as usize) * ROOF_GRID_SIDE + (ix as usize)] as f32
+        } else {
+            f32::NEG_INFINITY
+        }
+    }
+}
+
+fn column_rain_floor(
+    wx: i32,
+    wz: i32,
+    chunks: &std::collections::HashMap<ChunkPos, std::sync::Arc<terravibe_sim::Chunk>>,
+    seed: u32,
+    size: WorldSize,
+) -> i32 {
+    let cx = wx.div_euclid(CHUNK_SIZE);
+    let cz = wz.div_euclid(CHUNK_SIZE);
+    let lx = wx.rem_euclid(CHUNK_SIZE) as usize;
+    let lz = wz.rem_euclid(CHUNK_SIZE) as usize;
+
+    let mut max_loaded_cy: Option<i32> = None;
+    let mut loaded_top: Option<i32> = None;
+    for cy in (0..WORLD_CHUNK_LAYERS).rev() {
+        let Some(chunk) = chunks.get(&ChunkPos {
+            x: cx,
+            y: cy,
+            z: cz,
+        }) else {
+            continue;
+        };
+        if max_loaded_cy.is_none() {
+            max_loaded_cy = Some(cy);
+        }
+        if loaded_top.is_none() {
+            for ly in (0..CHUNK_SIZE as usize).rev() {
+                if chunk.get(lx, ly, lz).is_solid() {
+                    loaded_top = Some(cy * CHUNK_SIZE + ly as i32 + 1);
+                    break;
+                }
+            }
+        }
+        if loaded_top.is_some() {
+            break;
+        }
+    }
+
+    let surf = surface_height_for_size(seed, wx, wz, size) + 1;
+    let Some(max_cy) = max_loaded_cy else {
+        return surf;
+    };
+    let max_loaded_y = (max_cy + 1) * CHUNK_SIZE - 1;
+    if max_loaded_y < surf {
+        // Player is deep underground and surface chunks are outside vertical window.
+        loaded_top.unwrap_or(surf).max(surf)
+    } else {
+        loaded_top.unwrap_or(0)
+    }
+}
+
 #[derive(Resource)]
 struct WeatherRenderAssets {
     rain_mesh: Option<Handle<Mesh>>,
@@ -197,10 +348,10 @@ struct WeatherRenderAssets {
 struct WeatherEntities {
     rain: Option<Entity>,
     snow: Option<Entity>,
-    positions: Vec<[f32; 3]>,
-    normals: Vec<[f32; 3]>,
-    uvs: Vec<[f32; 2]>,
-    indices: Vec<u32>,
+    prev_rain_count: usize,
+    prev_snow_count: usize,
+    last_biome_xz: Option<[i32; 2]>,
+    cached_biome: Option<Biome>,
 }
 
 /// Plugin registering [`WeatherFxState`] and weather particle/lightning presentation systems.
@@ -210,15 +361,23 @@ impl Plugin for WeatherPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WeatherFxState>()
             .init_resource::<WeatherEntities>()
+            .init_resource::<SkyRoofCache>()
             .add_systems(Startup, setup_weather_assets)
             .add_systems(
                 OnExit(AppState::InGame),
-                |mut state: ResMut<WeatherFxState>, mut ents: ResMut<WeatherEntities>| {
+                |mut state: ResMut<WeatherFxState>,
+                 mut ents: ResMut<WeatherEntities>,
+                 mut roof: ResMut<SkyRoofCache>| {
                     state.particles.clear();
                     state.lightning_flash = 0.0;
                     state.thunder_delay = None;
                     ents.rain = None;
                     ents.snow = None;
+                    ents.prev_rain_count = 0;
+                    ents.prev_snow_count = 0;
+                    ents.last_biome_xz = None;
+                    ents.cached_biome = None;
+                    roof.initialized = false;
                 },
             )
             .add_systems(
@@ -230,19 +389,64 @@ impl Plugin for WeatherPlugin {
     }
 }
 
-fn build_weather_mesh(ents: &WeatherEntities) -> Mesh {
-    use bevy::asset::RenderAssetUsages;
-    use bevy::mesh::{Indices, PrimitiveTopology};
-
+/// Allocates a fixed-capacity mesh once for `MAX_WEATHER_PARTICLES` quads so
+/// per-frame updates only mutate `ATTRIBUTE_POSITION` in place without GPU buffer churn.
+fn allocate_weather_mesh() -> Mesh {
+    let vert_count = MAX_WEATHER_PARTICLES * 4;
+    let index_count = MAX_WEATHER_PARTICLES * 6;
+    let positions = vec![[0.0f32; 3]; vert_count];
+    let normals = vec![[0.0f32, 0.0f32, 1.0f32]; vert_count];
+    let mut uvs = Vec::with_capacity(vert_count);
+    let mut indices = Vec::with_capacity(index_count);
+    for i in 0..MAX_WEATHER_PARTICLES as u32 {
+        uvs.extend_from_slice(&[[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]);
+        let base = i * 4;
+        indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, ents.positions.clone());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, ents.normals.clone());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, ents.uvs.clone());
-    mesh.insert_indices(Indices::U32(ents.indices.clone()));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
     mesh
+}
+
+fn update_weather_mesh_in_place(
+    mesh: &mut Mesh,
+    particles: impl Iterator<Item = (Vec3, f32, f32)>,
+    cam_right: Vec3,
+    prev_count: &mut usize,
+) -> usize {
+    let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return 0;
+    };
+    let mut count = 0usize;
+    for (center, half_w, half_h) in particles {
+        if count >= MAX_WEATHER_PARTICLES {
+            break;
+        }
+        let rx = cam_right.x * half_w;
+        let rz = cam_right.z * half_w;
+        let base = count * 4;
+        pos[base] = [center.x - rx, center.y - half_h, center.z - rz];
+        pos[base + 1] = [center.x + rx, center.y - half_h, center.z + rz];
+        pos[base + 2] = [center.x + rx, center.y + half_h, center.z + rz];
+        pos[base + 3] = [center.x - rx, center.y + half_h, center.z - rz];
+        count += 1;
+    }
+    for i in count..*prev_count {
+        let base = i * 4;
+        pos[base] = [0.0, 0.0, 0.0];
+        pos[base + 1] = [0.0, 0.0, 0.0];
+        pos[base + 2] = [0.0, 0.0, 0.0];
+        pos[base + 3] = [0.0, 0.0, 0.0];
+    }
+    *prev_count = count;
+    count
 }
 
 fn setup_weather_assets(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
@@ -250,83 +454,21 @@ fn setup_weather_assets(mut commands: Commands, mut materials: ResMut<Assets<Sta
         rain_mesh: None,
         snow_mesh: None,
         rain_mat: materials.add(StandardMaterial {
-            base_color: Color::srgba(0.62, 0.76, 0.94, 0.65),
+            base_color: Color::srgba(0.62, 0.76, 0.94, 0.60),
             alpha_mode: AlphaMode::Blend,
             unlit: true,
+            fog_enabled: false,
             cull_mode: None,
             ..default()
         }),
         snow_mat: materials.add(StandardMaterial {
             base_color: Color::srgb(0.95, 0.97, 1.0),
             unlit: true,
+            fog_enabled: false,
             cull_mode: None,
             ..default()
         }),
     });
-}
-
-fn push_crossed_quads(ents: &mut WeatherEntities, center: Vec3, half_w: f32, half_h: f32) {
-    let base = ents.positions.len() as u32;
-    // Quad 1 in XY plane
-    ents.positions.extend_from_slice(&[
-        [center.x - half_w, center.y - half_h, center.z],
-        [center.x + half_w, center.y - half_h, center.z],
-        [center.x + half_w, center.y + half_h, center.z],
-        [center.x - half_w, center.y + half_h, center.z],
-        // Quad 2 in ZY plane
-        [center.x, center.y - half_h, center.z - half_w],
-        [center.x, center.y - half_h, center.z + half_w],
-        [center.x, center.y + half_h, center.z + half_w],
-        [center.x, center.y + half_h, center.z - half_w],
-    ]);
-    ents.normals.extend_from_slice(&[
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, 1.0],
-        [1.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-    ]);
-    ents.uvs.extend_from_slice(&[
-        [0.0, 1.0],
-        [1.0, 1.0],
-        [1.0, 0.0],
-        [0.0, 0.0],
-        [0.0, 1.0],
-        [1.0, 1.0],
-        [1.0, 0.0],
-        [0.0, 0.0],
-    ]);
-    ents.indices.extend_from_slice(&[
-        base,
-        base + 1,
-        base + 2,
-        base,
-        base + 2,
-        base + 3,
-        base + 4,
-        base + 5,
-        base + 6,
-        base + 4,
-        base + 6,
-        base + 7,
-    ]);
-}
-
-fn upload_weather_batch(
-    mesh_handle: &Handle<Mesh>,
-    meshes: &mut Assets<Mesh>,
-    ents: &WeatherEntities,
-) {
-    use bevy::mesh::Indices;
-    if let Some(mut mesh) = meshes.get_mut(mesh_handle) {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, ents.positions.clone());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, ents.normals.clone());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, ents.uvs.clone());
-        mesh.insert_indices(Indices::U32(ents.indices.clone()));
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -334,8 +476,11 @@ fn update_weather_fx(
     mut commands: Commands,
     time: Res<Time<Real>>,
     settings: Res<Settings>,
+    selected_world: Option<Res<SelectedWorld>>,
+    stream: Option<Res<ChunkStream>>,
     mut state: ResMut<WeatherFxState>,
     mut ents: ResMut<WeatherEntities>,
+    mut roof_cache: ResMut<SkyRoofCache>,
     assets: Option<ResMut<WeatherRenderAssets>>,
     mut meshes: ResMut<Assets<Mesh>>,
     local_player: Option<Res<LocalPlayer>>,
@@ -345,31 +490,68 @@ fn update_weather_fx(
     mut sfx: MessageWriter<SfxEvent>,
     mut vis_q: Query<&mut Visibility, (Without<Camera3d>, Without<DirectionalLight>)>,
 ) {
+    let cam_tf = camera_q.iter().next().copied();
     let center = local_player
         .as_ref()
         .map(|lp| Vec3::from_array(lp.0.body.pos))
-        .or_else(|| camera_q.iter().next().map(|t| t.translation))
+        .or_else(|| cam_tf.map(|t| t.translation))
         .unwrap_or(Vec3::ZERO);
 
-    let weights = biome_weights(
-        crate::view::SEED,
-        center.x.floor() as i32,
-        center.z.floor() as i32,
-    );
-    let biome = dominant(&weights);
+    let cam_right = cam_tf.map_or(Vec3::X, |t| {
+        let fwd = t.forward().as_vec3();
+        Vec3::new(-fwd.z, 0.0, fwd.x).normalize_or(Vec3::X)
+    });
 
-    if state.step(time.delta_secs(), center, biome, &settings) {
+    let seed = selected_world
+        .as_ref()
+        .map_or(crate::view::SEED, |w| w.seed);
+    let world_size = selected_world.as_ref().map_or(WorldSize::Small, |w| w.size);
+    let wx = center.x.floor() as i32;
+    let wz = center.z.floor() as i32;
+
+    let biome = match (ents.last_biome_xz, ents.cached_biome) {
+        (Some([lx, lz]), Some(b)) if (wx - lx).abs() < 4 && (wz - lz).abs() < 4 => b,
+        _ => {
+            let weights = biome_weights(seed, wx, wz);
+            let b = dominant(&weights);
+            ents.last_biome_xz = Some([wx, wz]);
+            ents.cached_biome = Some(b);
+            b
+        }
+    };
+
+    if let Some(stream) = stream.as_deref() {
+        roof_cache.refresh(wx, wz, stream, seed, world_size);
+    }
+
+    let player_roof = roof_cache.sample(center.x, center.z);
+    let sheltered = player_roof > center.y + 2.2;
+    let deep_underground = player_roof > center.y + 6.0;
+
+    if state.step_with_roof(
+        time.delta_secs(),
+        center,
+        biome,
+        &settings,
+        sheltered,
+        |x, z| roof_cache.sample(x, z),
+    ) {
         sfx.write(SfxEvent(SfxKind::Thunder));
     }
 
     if settings.weather_effects {
         let wet_mult = state.ground_darkening_multiplier();
+        let flash = if deep_underground {
+            0.0
+        } else {
+            state.lightning_flash
+        };
         if let Some(amb) = ambient.as_mut() {
-            amb.brightness = amb.brightness * wet_mult + state.lightning_flash * 900.0;
+            amb.brightness = amb.brightness * wet_mult + flash * 900.0;
         }
-        if state.lightning_flash > 0.0 {
+        if flash > 0.0 {
             for mut light in &mut sun_q {
-                light.illuminance += state.lightning_flash * 14_000.0;
+                light.illuminance += flash * 14_000.0;
             }
         }
     }
@@ -378,21 +560,28 @@ fn update_weather_fx(
         return;
     };
 
-    // Build batched rain mesh (at most 1 draw call; never create or upload an empty mesh).
-    ents.positions.clear();
-    ents.normals.clear();
-    ents.uvs.clear();
-    ents.indices.clear();
-    for p in state.particles.iter().filter(|p| !p.is_snow) {
-        push_crossed_quads(&mut ents, p.pos, p.size * 0.5, p.size * 5.5);
-    }
-    let has_rain = !ents.positions.is_empty();
-    if has_rain {
+    // Update rain mesh in-place (0 allocations, fixed GPU buffer).
+    let has_rain_particles = state.particles.iter().any(|p| !p.is_snow);
+    let has_rain = if has_rain_particles {
         let handle = assets
             .rain_mesh
-            .get_or_insert_with(|| meshes.add(build_weather_mesh(&ents)))
+            .get_or_insert_with(|| meshes.add(allocate_weather_mesh()))
             .clone();
-        if ents.rain.is_none() {
+        let count = if let Some(mut mesh) = meshes.get_mut(&handle) {
+            update_weather_mesh_in_place(
+                &mut mesh,
+                state
+                    .particles
+                    .iter()
+                    .filter(|p| !p.is_snow)
+                    .map(|p| (p.pos, p.size * 0.5, p.size * 5.5)),
+                cam_right,
+                &mut ents.prev_rain_count,
+            )
+        } else {
+            0
+        };
+        if ents.rain.is_none() && count > 0 {
             ents.rain = Some(
                 commands
                     .spawn((
@@ -400,14 +589,18 @@ fn update_weather_fx(
                         MeshMaterial3d(assets.rain_mat.clone()),
                         Transform::default(),
                         Visibility::Visible,
+                        NotShadowCaster,
+                        NotShadowReceiver,
+                        NoFrustumCulling,
                         DespawnOnExit(AppState::InGame),
                     ))
                     .id(),
             );
-        } else {
-            upload_weather_batch(&handle, &mut meshes, &ents);
         }
-    }
+        count > 0
+    } else {
+        false
+    };
     if let Some(rain_e) = ents.rain
         && let Ok(mut vis) = vis_q.get_mut(rain_e)
     {
@@ -421,22 +614,28 @@ fn update_weather_fx(
         }
     }
 
-    // Build batched snow mesh (at most 1 draw call; never create or upload an empty mesh).
-    ents.positions.clear();
-    ents.normals.clear();
-    ents.uvs.clear();
-    ents.indices.clear();
-    for p in state.particles.iter().filter(|p| p.is_snow) {
-        let half = p.size * 0.5;
-        push_crossed_quads(&mut ents, p.pos, half, half);
-    }
-    let has_snow = !ents.positions.is_empty();
-    if has_snow {
+    // Update snow mesh in-place (0 allocations, fixed GPU buffer).
+    let has_snow_particles = state.particles.iter().any(|p| p.is_snow);
+    let has_snow = if has_snow_particles {
         let handle = assets
             .snow_mesh
-            .get_or_insert_with(|| meshes.add(build_weather_mesh(&ents)))
+            .get_or_insert_with(|| meshes.add(allocate_weather_mesh()))
             .clone();
-        if ents.snow.is_none() {
+        let count = if let Some(mut mesh) = meshes.get_mut(&handle) {
+            update_weather_mesh_in_place(
+                &mut mesh,
+                state
+                    .particles
+                    .iter()
+                    .filter(|p| p.is_snow)
+                    .map(|p| (p.pos, p.size * 0.5, p.size * 0.5)),
+                cam_right,
+                &mut ents.prev_snow_count,
+            )
+        } else {
+            0
+        };
+        if ents.snow.is_none() && count > 0 {
             ents.snow = Some(
                 commands
                     .spawn((
@@ -444,14 +643,18 @@ fn update_weather_fx(
                         MeshMaterial3d(assets.snow_mat.clone()),
                         Transform::default(),
                         Visibility::Visible,
+                        NotShadowCaster,
+                        NotShadowReceiver,
+                        NoFrustumCulling,
                         DespawnOnExit(AppState::InGame),
                     ))
                     .id(),
             );
-        } else {
-            upload_weather_batch(&handle, &mut meshes, &ents);
         }
-    }
+        count > 0
+    } else {
+        false
+    };
     if let Some(snow_e) = ents.snow
         && let Ok(mut vis) = vis_q.get_mut(snow_e)
     {
@@ -541,5 +744,46 @@ mod tests {
         }
         assert!(state.particles.len() <= cap_low);
         assert!(!state.particles.is_empty());
+    }
+
+    #[test]
+    fn rain_does_not_spawn_or_fall_inside_caves() {
+        let settings = Settings::default();
+        let mut state = WeatherFxState {
+            kind: WeatherKind::Storm,
+            ..Default::default()
+        };
+        let player_pos = Vec3::new(10.0, 100.0, 10.0);
+        // Simulate a solid cave ceiling at y = 270 everywhere around the player.
+        for _ in 0..20 {
+            state.step_with_roof(0.05, player_pos, Biome::Forest, &settings, true, |_, _| {
+                270.0
+            });
+        }
+        assert!(
+            state.particles.is_empty(),
+            "no rain particles should spawn inside a cave"
+        );
+        assert_eq!(
+            state.wet_ground_factor, 0.0,
+            "sheltered cave should not apply wet ground darkening"
+        );
+
+        // Existing particle falling onto a roof at y = 105 should despawn on impact.
+        state.particles.push(WeatherParticle {
+            pos: Vec3::new(10.0, 105.2, 10.0),
+            vel: Vec3::new(0.0, -20.0, 0.0),
+            is_snow: false,
+            age: 0.0,
+            lifetime: 1.0,
+            size: 0.05,
+        });
+        state.step_with_roof(0.05, player_pos, Biome::Forest, &settings, true, |_, _| {
+            105.0
+        });
+        assert!(
+            state.particles.is_empty(),
+            "particle hitting roof should be removed"
+        );
     }
 }

@@ -246,7 +246,7 @@ pub fn update_situational_music(
         let corruption =
             terravibe_sim::worldgen::corruption::corruption_at_for_size(seed, wx, wz, world_size)
                 > 0.0;
-        let underworld = p[1] <= terravibe_sim::worldgen::liquid::LAVA_DEPTH_Y as f32;
+        let underworld = p[1] <= terravibe_sim::worldgen::underworld::UNDERWORLD_TOP_Y as f32;
         (b, depth, corruption, underworld)
     } else {
         (Biome::Forest, 0, false, false)

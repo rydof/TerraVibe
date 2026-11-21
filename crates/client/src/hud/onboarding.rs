@@ -117,6 +117,7 @@ pub fn sync_onboarding_ui(
     mut char_facts: Option<ResMut<CharacterFacts>>,
     mut local_facts: Option<ResMut<crate::net::LocalCharacterFacts>>,
     mut selected_char: Option<ResMut<crate::session::SelectedCharacter>>,
+    net: Option<Res<crate::net::Net>>,
     inv_open: Option<Res<crate::hud::inventory::InventoryOpen>>,
     town_panel: Option<Res<crate::hud::town::TownPanel>>,
     chest_panel: Option<Res<crate::hud::chest::ChestPanel>>,
@@ -188,6 +189,9 @@ pub fn sync_onboarding_ui(
     }
 
     if key_dismiss || click_dismiss || has_dismiss_request {
+        if let Some(net) = net.as_ref() {
+            let _ = net.send(terravibe_sim::net::ClientMsg::DismissOnboarding);
+        }
         if let Some(ref mut cf) = char_facts {
             cf.onboarding_dismissed = true;
         }

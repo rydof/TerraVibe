@@ -78,7 +78,28 @@ pub fn mesh_liquid(
                     out.push_quad_colored(corners, [0.0, 1.0, 0.0], UV_QUAD, [color; 4]);
                 }
 
-                // Side faces: generated only against non-liquid, non-opaque neighbours
+                // Bottom face: generated only when cell below has no liquid and is not opaque
+                let (below_liq, below_opaque) = if ly > 0 {
+                    (
+                        chunk.liquid(lx, ly - 1, lz),
+                        chunk.get(lx, ly - 1, lz).is_opaque(),
+                    )
+                } else {
+                    (neighbours(wx, wy - 1, wz), false)
+                };
+                if below_liq.is_none() && !below_opaque {
+                    let corners = [
+                        [x, y, z],
+                        [x + 1.0, y, z],
+                        [x + 1.0, y, z + 1.0],
+                        [x, y, z + 1.0],
+                    ];
+                    out.push_quad_colored(corners, [0.0, -1.0, 0.0], UV_QUAD, [color; 4]);
+                }
+
+                // Side faces: generated against non-liquid, non-opaque neighbours,
+                // against opposite liquid kind, or as step faces when adjacent
+                // same-kind liquid has a lower surface height.
                 const SIDES: [(i32, i32, [f32; 3]); 4] = [
                     (1, 0, [1.0, 0.0, 0.0]),   // +X
                     (-1, 0, [-1.0, 0.0, 0.0]), // -X
@@ -100,32 +121,52 @@ pub fn mesh_liquid(
                             (neighbours(wx + dx, wy, wz + dz), false)
                         };
 
-                    if n_liq.is_none() && !n_opaque {
+                    let bottom_y = if n_opaque {
+                        None
+                    } else {
+                        match n_liq {
+                            None => Some(y),
+                            Some(nl) if nl.kind != liq.kind => Some(y),
+                            Some(nl) => {
+                                let (na_liq, _) = if ly + 1 < CHUNK_SIZE as usize
+                                    && (0..CHUNK_SIZE).contains(&nx)
+                                    && (0..CHUNK_SIZE).contains(&nz)
+                                {
+                                    (chunk.liquid(nx as usize, ly + 1, nz as usize), false)
+                                } else {
+                                    (neighbours(wx + dx, wy + 1, wz + dz), false)
+                                };
+                                let n_top = if na_liq.as_ref().map(|a| a.kind) == Some(nl.kind) {
+                                    1.0
+                                } else {
+                                    (nl.amount as f32 / 255.0).max(0.1)
+                                };
+                                if n_top + 0.005 < top {
+                                    Some(y + n_top)
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    };
+
+                    if let Some(by) = bottom_y {
+                        let ty = y + top;
                         let corners = match (dx, dz) {
                             (1, 0) => [
-                                [x + 1.0, y, z],
-                                [x + 1.0, y + top, z],
-                                [x + 1.0, y + top, z + 1.0],
-                                [x + 1.0, y, z + 1.0],
+                                [x + 1.0, by, z],
+                                [x + 1.0, ty, z],
+                                [x + 1.0, ty, z + 1.0],
+                                [x + 1.0, by, z + 1.0],
                             ],
-                            (-1, 0) => [
-                                [x, y, z + 1.0],
-                                [x, y + top, z + 1.0],
-                                [x, y + top, z],
-                                [x, y, z],
-                            ],
+                            (-1, 0) => [[x, by, z + 1.0], [x, ty, z + 1.0], [x, ty, z], [x, by, z]],
                             (0, 1) => [
-                                [x + 1.0, y, z + 1.0],
-                                [x + 1.0, y + top, z + 1.0],
-                                [x, y + top, z + 1.0],
-                                [x, y, z + 1.0],
+                                [x + 1.0, by, z + 1.0],
+                                [x + 1.0, ty, z + 1.0],
+                                [x, ty, z + 1.0],
+                                [x, by, z + 1.0],
                             ],
-                            (0, -1) => [
-                                [x, y, z],
-                                [x, y + top, z],
-                                [x + 1.0, y + top, z],
-                                [x + 1.0, y, z],
-                            ],
+                            (0, -1) => [[x, by, z], [x, ty, z], [x + 1.0, ty, z], [x + 1.0, by, z]],
                             _ => unreachable!(),
                         };
                         out.push_quad_colored(corners, norm, UV_QUAD, [color; 4]);
@@ -291,9 +332,10 @@ mod tests {
 
     #[test]
     fn side_faces_only_against_non_liquid() {
-        // Water surrounded by stone on all 4 sides -> 0 side faces
+        // Water surrounded by stone on all 4 sides and floor -> 0 side/bottom faces
         let mut c_surrounded = make_test_chunk();
         c_surrounded.set_liquid(5, 5, 5, Some(Liquid::water(255)));
+        c_surrounded.set(5, 4, 5, STONE);
         c_surrounded.set(4, 5, 5, STONE);
         c_surrounded.set(6, 5, 5, STONE);
         c_surrounded.set(5, 5, 4, STONE);
@@ -389,5 +431,34 @@ mod tests {
                 assert!((c[i] - expected_l[i]).abs() < 1e-4);
             }
         }
+    }
+
+    #[test]
+    fn step_faces_generated_between_different_liquid_heights() {
+        let mut chunk = make_test_chunk();
+        chunk.set(5, 4, 5, STONE);
+        chunk.set(6, 4, 5, STONE);
+        chunk.set_liquid(5, 5, 5, Some(Liquid::water(255)));
+        chunk.set_liquid(6, 5, 5, Some(Liquid::water(100)));
+        let mesh = mesh_liquid(&chunk, ChunkPos { x: 0, y: 0, z: 0 }, |_, _, _| None)
+            .expect("should produce mesh");
+        let normals = mesh
+            .attribute(Mesh::ATTRIBUTE_NORMAL)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+        let positions = mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .as_float3()
+            .unwrap();
+        let has_step_face = positions
+            .iter()
+            .zip(normals)
+            .any(|(p, n)| (n[0] - 1.0).abs() < 1e-4 && (p[0] - 6.0).abs() < 1e-4 && p[1] > 5.05);
+        assert!(
+            has_step_face,
+            "expected +X step face at x=6 between height 255 and 100"
+        );
     }
 }
