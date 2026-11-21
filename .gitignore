@@ -1,0 +1,16 @@
+node_modules
+dist
+.DS_Store
+target/
+.superpowers/
+.claude/
+.agents/
+/legacy/node_modules
+*.tvpack/
+__pycache__/
+assets/terraria-pack/
+metrics.json
+run.log
+prompt.txt
+bench_effects_*.png
+
