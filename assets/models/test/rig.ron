@@ -1,0 +1,11 @@
+(
+    parts: [
+        (name: "cube", file: "cube.vox", pivot: (2.0, 0.0, 2.0), offset: (0.0, 0.0, 0.0), parent: None),
+    ],
+    anims: {
+        "spin": (len: 1.0, looping: true, keys: [
+            (t: 0.0, part: "cube", rot_deg: (0.0, 0.0, 0.0), offset: (0.0, 0.0, 0.0)),
+            (t: 0.5, part: "cube", rot_deg: (0.0, 180.0, 0.0), offset: (0.0, 1.0, 0.0)),
+        ]),
+    },
+)
