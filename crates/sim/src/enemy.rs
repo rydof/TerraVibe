@@ -19,6 +19,10 @@ pub enum EnemyKind {
     Guide,
     Merchant,
     ArmsDealer,
+    Nurse,
+    Demolitionist,
+    Dryad,
+    GoblinTinkerer,
     Skeleton,
     CaveBat,
     GiantWorm,
@@ -48,6 +52,28 @@ pub enum EnemyKind {
     WallOfFleshEye,
     TheHungry,
     Leech,
+    KingSlime,
+    QueenBee,
+    Bee,
+    // Wave 5: Events & Biome Enemies
+    BloodZombie,
+    Drippler,
+    GoblinPeon,
+    GoblinThief,
+    GoblinWarrior,
+    GoblinSorcerer,
+    GoblinArcher,
+    Antlion,
+    Vulture,
+    IceSlime,
+    SnowFlinx,
+    JungleSlime,
+    Hornet,
+    ManEater,
+    Harpy,
+    Shark,
+    Crab,
+    Piranha,
 }
 
 pub const MAX_CRITTERS: usize = 12;
@@ -80,6 +106,10 @@ impl EnemyKind {
             EnemyKind::Guide => 22,             // NPCID.Guide (gameplay spec)
             EnemyKind::Merchant => 17,          // NPCID.Merchant (gameplay spec)
             EnemyKind::ArmsDealer => 19,        // NPCID.ArmsDealer (gameplay spec)
+            EnemyKind::Nurse => 18,             // NPCID.Nurse
+            EnemyKind::Demolitionist => 38,     // NPCID.Demolitionist
+            EnemyKind::Dryad => 20,             // NPCID.Dryad
+            EnemyKind::GoblinTinkerer => 107,   // NPCID.GoblinTinkerer
             EnemyKind::Skeleton => 21,          // NPCID.Skeleton
             EnemyKind::CaveBat => 49,           // NPCID.CaveBat
             EnemyKind::GiantWorm => 10,         // NPCID.GiantWormHead
@@ -109,6 +139,27 @@ impl EnemyKind {
             EnemyKind::WallOfFleshEye => 114,   // NPCID.WallofFleshEye
             EnemyKind::TheHungry => 115,        // NPCID.TheHungry
             EnemyKind::Leech => 117,            // NPCID.LeechHead
+            EnemyKind::KingSlime => 50,         // NPCID.KingSlime
+            EnemyKind::QueenBee => 222,         // NPCID.QueenBee
+            EnemyKind::Bee => 210,              // NPCID.Bee
+            EnemyKind::BloodZombie => 489,      // NPCID.BloodZombie
+            EnemyKind::Drippler => 490,         // NPCID.Drippler
+            EnemyKind::GoblinPeon => 26,        // NPCID.GoblinPeon
+            EnemyKind::GoblinThief => 27,       // NPCID.GoblinThief
+            EnemyKind::GoblinWarrior => 28,     // NPCID.GoblinWarrior
+            EnemyKind::GoblinSorcerer => 29,    // NPCID.GoblinSorcerer
+            EnemyKind::GoblinArcher => 111,     // NPCID.GoblinArcher
+            EnemyKind::Antlion => 69,           // NPCID.Antlion
+            EnemyKind::Vulture => 61,           // NPCID.Vulture
+            EnemyKind::IceSlime => 147,         // NPCID.IceSlime
+            EnemyKind::SnowFlinx => 185,        // NPCID.SnowFlinx
+            EnemyKind::JungleSlime => 244,      // NPCID.JungleSlime
+            EnemyKind::Hornet => 42,            // NPCID.Hornet
+            EnemyKind::ManEater => 43,          // NPCID.ManEater
+            EnemyKind::Harpy => 48,             // NPCID.Harpy
+            EnemyKind::Shark => 65,             // NPCID.Shark
+            EnemyKind::Crab => 67,              // NPCID.Crab
+            EnemyKind::Piranha => 58,           // NPCID.Piranha
         }
     }
 
@@ -125,7 +176,14 @@ impl EnemyKind {
     pub fn is_friendly(self) -> bool {
         matches!(
             self,
-            EnemyKind::Guide | EnemyKind::Merchant | EnemyKind::ArmsDealer | EnemyKind::OldMan
+            EnemyKind::Guide
+                | EnemyKind::Merchant
+                | EnemyKind::ArmsDealer
+                | EnemyKind::Nurse
+                | EnemyKind::Demolitionist
+                | EnemyKind::Dryad
+                | EnemyKind::GoblinTinkerer
+                | EnemyKind::OldMan
         )
     }
 
@@ -141,6 +199,8 @@ impl EnemyKind {
                 | EnemyKind::SkeletronHand
                 | EnemyKind::WallOfFleshMouth
                 | EnemyKind::WallOfFleshEye
+                | EnemyKind::KingSlime
+                | EnemyKind::QueenBee
         )
     }
 
@@ -213,7 +273,12 @@ impl EnemyKind {
                 half: [9.0 * PX, 20.0 * PX],
             },
             // NPC.item defaults type 17 / 19 (gameplay spec): 18x40, defense 15, lifeMax 250.
-            EnemyKind::Merchant | EnemyKind::ArmsDealer => EnemyStats {
+            EnemyKind::Merchant
+            | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer => EnemyStats {
                 hp: 250,
                 damage: 0,
                 defense: 15,
@@ -458,6 +523,174 @@ impl EnemyKind {
                 value: 0,
                 knockback_resist: 0.2,
                 half: [0.6, 0.6],
+            },
+            EnemyKind::KingSlime => EnemyStats {
+                hp: 2000,
+                damage: 40,
+                defense: 10,
+                value: 10000,
+                knockback_resist: 1.0,
+                half: [34.0 * PX, 30.0 * PX],
+            },
+            EnemyKind::QueenBee => EnemyStats {
+                hp: 3400,
+                damage: 30,
+                defense: 8,
+                value: 50000,
+                knockback_resist: 1.0,
+                half: [24.0 * PX, 24.0 * PX],
+            },
+            EnemyKind::Bee => EnemyStats {
+                hp: 18,
+                damage: 12,
+                defense: 0,
+                value: 0,
+                knockback_resist: 0.2,
+                half: [6.0 * PX, 6.0 * PX],
+            },
+            EnemyKind::BloodZombie => EnemyStats {
+                hp: 75,
+                damage: 18,
+                defense: 6,
+                value: 200,
+                knockback_resist: 0.4,
+                half: [9.0 * PX, 20.0 * PX],
+            },
+            EnemyKind::Drippler => EnemyStats {
+                hp: 80,
+                damage: 20,
+                defense: 6,
+                value: 250,
+                knockback_resist: 0.5,
+                half: [12.0 * PX, 12.0 * PX],
+            },
+            EnemyKind::GoblinPeon => EnemyStats {
+                hp: 60,
+                damage: 12,
+                defense: 4,
+                value: 100,
+                knockback_resist: 0.5,
+                half: [9.0 * PX, 20.0 * PX],
+            },
+            EnemyKind::GoblinThief => EnemyStats {
+                hp: 80,
+                damage: 20,
+                defense: 6,
+                value: 150,
+                knockback_resist: 0.4,
+                half: [9.0 * PX, 20.0 * PX],
+            },
+            EnemyKind::GoblinWarrior => EnemyStats {
+                hp: 110,
+                damage: 25,
+                defense: 12,
+                value: 250,
+                knockback_resist: 0.7,
+                half: [10.0 * PX, 21.0 * PX],
+            },
+            EnemyKind::GoblinSorcerer => EnemyStats {
+                hp: 40,
+                damage: 20,
+                defense: 2,
+                value: 200,
+                knockback_resist: 0.3,
+                half: [9.0 * PX, 20.0 * PX],
+            },
+            EnemyKind::GoblinArcher => EnemyStats {
+                hp: 80,
+                damage: 18,
+                defense: 4,
+                value: 150,
+                knockback_resist: 0.4,
+                half: [9.0 * PX, 20.0 * PX],
+            },
+            EnemyKind::Antlion => EnemyStats {
+                hp: 45,
+                damage: 10,
+                defense: 6,
+                value: 60,
+                knockback_resist: 1.0,
+                half: [12.0 * PX, 12.0 * PX],
+            },
+            EnemyKind::Vulture => EnemyStats {
+                hp: 40,
+                damage: 15,
+                defense: 4,
+                value: 90,
+                knockback_resist: 0.5,
+                half: [12.0 * PX, 12.0 * PX],
+            },
+            EnemyKind::IceSlime => EnemyStats {
+                hp: 30,
+                damage: 8,
+                defense: 4,
+                value: 40,
+                knockback_resist: 0.0,
+                half: [12.0 * PX, 9.0 * PX],
+            },
+            EnemyKind::SnowFlinx => EnemyStats {
+                hp: 55,
+                damage: 14,
+                defense: 6,
+                value: 100,
+                knockback_resist: 0.3,
+                half: [11.0 * PX, 12.0 * PX],
+            },
+            EnemyKind::JungleSlime => EnemyStats {
+                hp: 60,
+                damage: 18,
+                defense: 6,
+                value: 110,
+                knockback_resist: 0.0,
+                half: [13.0 * PX, 10.0 * PX],
+            },
+            EnemyKind::Hornet => EnemyStats {
+                hp: 48,
+                damage: 24,
+                defense: 10,
+                value: 150,
+                knockback_resist: 0.5,
+                half: [11.0 * PX, 11.0 * PX],
+            },
+            EnemyKind::ManEater => EnemyStats {
+                hp: 110,
+                damage: 34,
+                defense: 14,
+                value: 200,
+                knockback_resist: 0.8,
+                half: [12.0 * PX, 14.0 * PX],
+            },
+            EnemyKind::Harpy => EnemyStats {
+                hp: 100,
+                damage: 25,
+                defense: 8,
+                value: 300,
+                knockback_resist: 0.5,
+                half: [12.0 * PX, 16.0 * PX],
+            },
+            EnemyKind::Shark => EnemyStats {
+                hp: 300,
+                damage: 40,
+                defense: 2,
+                value: 500,
+                knockback_resist: 0.7,
+                half: [20.0 * PX, 10.0 * PX],
+            },
+            EnemyKind::Crab => EnemyStats {
+                hp: 40,
+                damage: 20,
+                defense: 10,
+                value: 100,
+                knockback_resist: 0.5,
+                half: [11.0 * PX, 9.0 * PX],
+            },
+            EnemyKind::Piranha => EnemyStats {
+                hp: 30,
+                damage: 22,
+                defense: 2,
+                value: 80,
+                knockback_resist: 0.3,
+                half: [10.0 * PX, 8.0 * PX],
             },
         }
     }
@@ -808,7 +1041,11 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
             EnemyKind::EyeOfCthulhu
             | EnemyKind::Guide
             | EnemyKind::Merchant
-            | EnemyKind::ArmsDealer => {}
+            | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer => {}
             EnemyKind::Skeleton => {
                 let d = dir_xz(e.pos, target);
                 e.vel[0] += ZOMBIE_ACCEL * d[0];
@@ -1068,6 +1305,125 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
                     e.vel = [0.0; 3];
                 }
             }
+            EnemyKind::KingSlime => {
+                if e.on_ground {
+                    e.vel[0] *= SLIME_FRICTION;
+                    e.vel[2] *= SLIME_FRICTION;
+                    e.ai[0] += 1;
+                    if e.ai[0] >= 40 {
+                        e.ai[0] = 0;
+                        e.ai[1] += 1;
+                        let d = dir_xz(e.pos, target);
+                        let big = e.ai[1] % 3 == 0;
+                        let hspd = if big { 4.2 * PX } else { 2.8 * PX };
+                        e.vel[0] = d[0] * hspd;
+                        e.vel[2] = d[1] * hspd;
+                        e.vel[1] = if big { 10.5 * PX } else { 7.5 * PX };
+                        e.on_ground = false;
+                        let dist_sq =
+                            (e.pos[0] - target[0]).powi(2) + (e.pos[2] - target[2]).powi(2);
+                        if dist_sq > 24.0 * 24.0 {
+                            e.pos = [target[0], target[1] + 6.0, target[2]];
+                        }
+                    }
+                }
+            }
+            EnemyKind::QueenBee => {
+                e.ai[0] = (e.ai[0] + 1) % 240;
+                if e.ai[0] < 130 {
+                    // Hover above player and periodically signal minion/stinger attack
+                    let goal = [target[0], target[1] + 8.0, target[2]];
+                    let dx = goal[0] - e.pos[0];
+                    let dy = goal[1] - e.pos[1];
+                    let dz = goal[2] - e.pos[2];
+                    let d = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-4);
+                    let spd = 5.5 * PX;
+                    e.vel = [dx / d * spd, dy / d * spd, dz / d * spd];
+                    if e.ai[0] == 40 || e.ai[0] == 80 || e.ai[0] == 120 {
+                        e.ai[2] = 1;
+                    }
+                } else {
+                    // Dash horizontally at player's Y
+                    if e.ai[0] == 130 {
+                        let d = dir_xz(e.pos, target);
+                        let dash = 9.0 * PX;
+                        e.vel = [
+                            d[0] * dash,
+                            (target[1] + 1.0 - e.pos[1]) * 0.08,
+                            d[1] * dash,
+                        ];
+                    }
+                }
+            }
+            EnemyKind::Bee => {
+                let c = [target[0], target[1] + 1.0, target[2]];
+                let v = [c[0] - e.pos[0], c[1] - e.pos[1], c[2] - e.pos[2]];
+                let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+                let speed = 4.2 * PX;
+                e.vel = [speed * v[0] / l, speed * v[1] / l, speed * v[2] / l];
+            }
+            EnemyKind::IceSlime | EnemyKind::JungleSlime => {
+                if e.on_ground {
+                    e.vel[0] *= SLIME_FRICTION;
+                    e.vel[2] *= SLIME_FRICTION;
+                    e.ai[0] += 1;
+                    if e.ai[0] >= SLIME_HOP_TICKS {
+                        e.ai[0] = 0;
+                        let d = dir_xz(e.pos, target);
+                        e.vel[0] = d[0] * 1.8 * PX;
+                        e.vel[2] = d[1] * 1.8 * PX;
+                        e.vel[1] = 6.5 * PX;
+                        e.on_ground = false;
+                    }
+                }
+            }
+            EnemyKind::BloodZombie
+            | EnemyKind::GoblinPeon
+            | EnemyKind::GoblinThief
+            | EnemyKind::GoblinWarrior
+            | EnemyKind::GoblinArcher
+            | EnemyKind::SnowFlinx
+            | EnemyKind::Crab => {
+                let d = dir_xz(e.pos, target);
+                let max = match e.kind {
+                    EnemyKind::GoblinThief => 2.5 * PX,
+                    EnemyKind::GoblinWarrior => 1.3 * PX,
+                    _ => 1.7 * PX,
+                };
+                e.vel[0] += ZOMBIE_ACCEL * d[0];
+                e.vel[2] += ZOMBIE_ACCEL * d[1];
+                let s = (e.vel[0] * e.vel[0] + e.vel[2] * e.vel[2]).sqrt();
+                if s > max {
+                    e.vel[0] *= max / s;
+                    e.vel[2] *= max / s;
+                }
+                if e.on_ground && (e.pos[1] + 0.5 < target[1] || e.ai[0] % 90 == 0) {
+                    e.vel[1] = JUMP_SPEED;
+                    e.on_ground = false;
+                }
+                e.ai[0] += 1;
+            }
+            EnemyKind::GoblinSorcerer | EnemyKind::Antlion => {
+                e.vel[0] *= SLIME_FRICTION;
+                e.vel[2] *= SLIME_FRICTION;
+            }
+            EnemyKind::Drippler
+            | EnemyKind::Vulture
+            | EnemyKind::Hornet
+            | EnemyKind::ManEater
+            | EnemyKind::Harpy
+            | EnemyKind::Shark
+            | EnemyKind::Piranha => {
+                let c = [target[0], target[1] + 1.2, target[2]];
+                let v = [c[0] - e.pos[0], c[1] - e.pos[1], c[2] - e.pos[2]];
+                let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+                let speed = match e.kind {
+                    EnemyKind::Shark | EnemyKind::Harpy => 3.5 * PX,
+                    EnemyKind::Hornet | EnemyKind::Piranha => 2.8 * PX,
+                    _ => 2.2 * PX,
+                };
+                e.vel = [speed * v[0] / l, speed * v[1] / l, speed * v[2] / l];
+            }
             EnemyKind::Bunny | EnemyKind::Bird | EnemyKind::Squirrel | EnemyKind::CaveCritter => {
                 let dx = e.pos[0] - target[0];
                 let dz = e.pos[2] - target[2];
@@ -1146,6 +1502,15 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
             | EnemyKind::BoneSerpentTail
             | EnemyKind::Bird
             | EnemyKind::Leech
+            | EnemyKind::QueenBee
+            | EnemyKind::Bee
+            | EnemyKind::Drippler
+            | EnemyKind::Vulture
+            | EnemyKind::Hornet
+            | EnemyKind::ManEater
+            | EnemyKind::Harpy
+            | EnemyKind::Shark
+            | EnemyKind::Piranha
     ) {
         e.vel[1] = (e.vel[1] - GRAVITY).max(-MAX_FALL_SPEED);
     }
@@ -1168,6 +1533,15 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
             | EnemyKind::BoneSerpentBody
             | EnemyKind::BoneSerpentTail
             | EnemyKind::Leech
+            | EnemyKind::QueenBee
+            | EnemyKind::Bee
+            | EnemyKind::Drippler
+            | EnemyKind::Vulture
+            | EnemyKind::Hornet
+            | EnemyKind::ManEater
+            | EnemyKind::Harpy
+            | EnemyKind::Shark
+            | EnemyKind::Piranha
     ) {
         for a in 0..3 {
             e.pos[a] += e.vel[a];

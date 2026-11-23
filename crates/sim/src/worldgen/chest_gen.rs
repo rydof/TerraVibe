@@ -37,6 +37,10 @@ pub enum Band {
     Dungeon,
     /// Underworld ruined house chests: shadow chests.
     Underworld,
+    /// Floating Island Skyware chests.
+    Skyware,
+    /// Underground Jungle Shrine chests.
+    Jungle,
 }
 
 pub const CAVERN_BAND_DEPTH: i32 = 115;
@@ -197,8 +201,11 @@ pub fn roll_chest_loot(rng: &mut Rng, band: Band) -> Vec<ItemStack> {
             }
         }
         Band::Cavern => {
-            const MAIN: [u16; 6] = [54, 53, 49, 50, 55, 274];
-            l.add(MAIN[next(r, 6) as usize], 1);
+            const MAIN: [u16; 7] = [54, 53, 49, 50, 55, 274, crate::item::ROCKET_BOOTS.0];
+            l.add(MAIN[next(r, 7) as usize], 1);
+            if next(r, 6) == 0 {
+                l.add(crate::item::SHARK_TOOTH_NECKLACE.0, 1);
+            }
             if next(r, 2) == 0 {
                 let k = next(r, 3);
                 let n = next(r, 10) + 5; // iron / silver / gold bar
@@ -230,8 +237,18 @@ pub fn roll_chest_loot(rng: &mut Rng, band: Band) -> Vec<ItemStack> {
             }
         }
         Band::Dungeon => {
-            const MAIN: [u16; 8] = [155, 156, 157, 164, 163, 113, 3317, 329];
-            l.add(MAIN[next(r, 8) as usize], 1);
+            const MAIN: [u16; 9] = [
+                155,
+                156,
+                157,
+                164,
+                163,
+                113,
+                3317,
+                329,
+                crate::item::WATER_BOLT.0,
+            ];
+            l.add(MAIN[next(r, 9) as usize], 1);
             l.add(154, range(r, 20, 50));
             if next(r, 2) == 0 {
                 let k = next(r, 3);
@@ -267,6 +284,13 @@ pub fn roll_chest_loot(rng: &mut Rng, band: Band) -> Vec<ItemStack> {
             }
         }
         Band::Underworld => {
+            const SHADOW_MAIN: [u16; 4] = [
+                crate::item::SUNFURY.0,
+                crate::item::DARK_LANCE.0,
+                crate::item::FLAMELASH.0,
+                crate::item::FLOWER_OF_FIRE.0,
+            ];
+            l.add(SHADOW_MAIN[next(r, 4) as usize], 1);
             if next(r, 20) == 0 {
                 l.add(crate::item::LAVA_CHARM.0, 1);
             } else {
@@ -282,6 +306,29 @@ pub fn roll_chest_loot(rng: &mut Rng, band: Band) -> Vec<ItemStack> {
                     l.add(72, range(r, 50, 90));
                 }
             }
+        }
+        Band::Skyware => {
+            const PRIMARY: [u16; 3] = [
+                crate::item::STARFURY.0,
+                crate::item::SHINY_RED_BALLOON.0,
+                crate::item::LUCKY_HORSESHOE.0,
+            ];
+            l.add(PRIMARY[next(r, 3) as usize], 1);
+            l.add(crate::item::HEALING_POTION.0, range(r, 2, 5));
+            l.add(crate::item::RECALL_POTION.0, range(r, 2, 5));
+            l.add(73, range(r, 1, 4)); // Gold Coins
+        }
+        Band::Jungle => {
+            const PRIMARY: [u16; 2] = [
+                crate::item::FERAL_CLAWS.0,
+                crate::item::ANKLET_OF_THE_WIND.0,
+            ];
+            l.add(PRIMARY[next(r, 2) as usize], 1);
+            l.add(crate::item::JUNGLE_SPORES.0, range(r, 4, 9));
+            l.add(crate::item::STINGER.0, range(r, 3, 7));
+            l.add(crate::item::VINE.0, range(r, 1, 3));
+            l.add(crate::item::HEALING_POTION.0, range(r, 1, 3));
+            l.add(73, range(r, 1, 4)); // Gold Coins
         }
     }
     for st in &mut l.out {
@@ -397,6 +444,41 @@ pub fn chests_in_for_size(
             );
             out.push((p, roll_chest_loot(&mut rng, Band::Underworld)));
         }
+    }
+    for (idx, p) in super::sky_island::skyware_chests_in_for_size(seed, pos, size) {
+        let mut rng = Rng::new(
+            hash(seed ^ SALT_CHEST ^ 0x534B_5949, p[0], p[1], p[2]) as u64 | ((idx as u64) << 32),
+        );
+        let mut loot = roll_chest_loot(&mut rng, Band::Skyware);
+        // Guarantee cycling primary Skyware loot across the world's islands.
+        let guaranteed = [
+            crate::item::STARFURY,
+            crate::item::SHINY_RED_BALLOON,
+            crate::item::LUCKY_HORSESHOE,
+        ][idx % 3];
+        if !loot.is_empty() {
+            loot[0] = ItemStack {
+                id: guaranteed,
+                count: 1,
+                prefix: crate::item::roll_prefix(guaranteed, &mut || rng.next_u32()),
+            };
+        }
+        out.push((p, loot));
+    }
+    for (idx, p) in super::jungle_shrine::shrine_chests_in_for_size(seed, pos, size) {
+        let mut rng = Rng::new(
+            hash(seed ^ SALT_CHEST ^ 0x4A55_4E47, p[0], p[1], p[2]) as u64 | ((idx as u64) << 32),
+        );
+        let mut loot = roll_chest_loot(&mut rng, Band::Jungle);
+        let guaranteed = [crate::item::FERAL_CLAWS, crate::item::ANKLET_OF_THE_WIND][idx % 2];
+        if !loot.is_empty() {
+            loot[0] = ItemStack {
+                id: guaranteed,
+                count: 1,
+                prefix: crate::item::roll_prefix(guaranteed, &mut || rng.next_u32()),
+            };
+        }
+        out.push((p, loot));
     }
     out
 }
@@ -721,7 +803,7 @@ mod tests {
     fn cavern_chest_rolls_m6_accessories_and_weapons() {
         use crate::item::{
             BAND_OF_REGENERATION, CLOUD_IN_A_BOTTLE, ENCHANTED_BOOMERANG, HERMES_BOOTS,
-            MAGIC_MIRROR, SPEAR,
+            MAGIC_MIRROR, ROCKET_BOOTS, SPEAR,
         };
         let m6_items = [
             HERMES_BOOTS,
@@ -730,6 +812,7 @@ mod tests {
             MAGIC_MIRROR,
             ENCHANTED_BOOMERANG,
             SPEAR,
+            ROCKET_BOOTS,
         ];
         let mut seen = std::collections::HashSet::new();
         for s in 0..2000u64 {
@@ -745,7 +828,7 @@ mod tests {
         }
         assert_eq!(
             seen.len(),
-            6,
+            7,
             "all 6 cavern accessories/weapons must be rollable"
         );
     }

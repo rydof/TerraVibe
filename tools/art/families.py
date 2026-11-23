@@ -75,6 +75,13 @@ ORES_TEXTURES = [
     "blocks/hellstone.png",
     "blocks/obsidian_brick.png",
     "blocks/hellstone_brick.png",
+    "blocks/mushroom_grass_top.png",
+    "blocks/mushroom_grass_side.png",
+    "blocks/mushroom_grass_bottom.png",
+    "blocks/cloud.png",
+    "blocks/sunplate.png",
+    "blocks/meteorite_ore.png",
+    "blocks/hive.png",
 ]
 
 FAMILIES = {
@@ -99,6 +106,9 @@ FAMILIES["foliage"]["models"] = [
     "models/blocks/moss.vox",
     "models/blocks/small_rock.vox",
     "models/blocks/shelf_mushroom.vox",
+    "models/blocks/glowing_mushroom.vox",
+    "models/blocks/campfire.vox",
+    "models/blocks/heart_lantern.vox",
 ]
 
 # The four hostile enemy rigs, authored at 1/16 voxels. The guide and merchant
@@ -226,6 +236,12 @@ ITEM_FILES = [
     "2015.vox",  # bird
     "2018.vox",  # squirrel
     "2007.vox",  # cave critter
+    # Wave 1 Pre-Hardmode items
+    "65.vox",    # starfury
+    "84.vox",    # grappling hook
+    "166.vox",   # bomb
+    "167.vox",   # dynamite
+    "168.vox",   # grenade
 ]
 FAMILIES["items"]["models"] = [f"models/items/{f}" for f in ITEM_FILES]
 
@@ -243,6 +259,7 @@ FURNITURE_FILES = [
     "platform.vox",
     "demon_altar.vox",
     "hellforge.vox",
+    "tinkerers_workshop.vox",
 ]
 FAMILIES["furniture"]["models"] = [f"models/blocks/{f}" for f in FURNITURE_FILES]
 

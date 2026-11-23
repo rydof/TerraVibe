@@ -1,7 +1,42 @@
 # TerraVibe — Start here
 
-Updated 2026-11-21. This is the single source of truth for what is done, what is next, and
+Updated 2026-11-22. This is the single source of truth for what is done, what is next, and
 the rules. Everything older lives in `docs/HANDOFF.md` and is history only.
+
+## Current State & Resume Guide (2026-11-22)
+
+### 1. Branch & Pushed Baseline
+- **Active branch**: `dev` (latest pushed commits: `origin/dev` `b7ead5f`, `origin/master` `9296d03`).
+- **Landed & pushed since `4e4177d`**:
+  - Terraria-accurate vertical depth bands (Surface `y≈280..320`, Underground `y≈180..279`, Cavern `y≈64..179`, Underworld `y≈0..63`, deep lava `y<=90`, Underworld ruins `y=26..56`).
+  - Guide Crafting slot (`SlotRef::Guide`, `GuideSlotShift`, `CloseGuideCrafting`, `ServerMsg::GuideSlot`, live recipe lookup UI) and fixed Welcome toast reappearing.
+  - Animated molten lava & rippling water (`chunk_light.wesl`, step/bottom liquid faces, embers) and liquid physics (`is_solid()` flow, Underworld lava basins, chunk-load wake, buckets, `urgent_liquid` re-mesh & smart relighting).
+  - Pre-allocated weather meshes and cave/roof rain occlusion (`SkyRoofCache` + underground rain/audio suppression).
+  - Verified at `1,438` tests, `116.5 avg_fps`, `8/8` QA scenarios.
+
+### 2. Active Effort: Full Pre-Hardmode Parity Sweep (up to Wall of Flesh) on `dev` — All 5 Waves Complete
+- **Wave 1 (Committed on `dev`)**:
+  - **9 new blocks**, **24 new items (`ITEMS` = `172`)**, **11 new recipes (`RECIPES` = `83`)**, Floating Islands (`sky_island.rs`), Glowing Mushroom Biome (`mushroom_biome.rs`), 8-slot HUD buffs, potions, Campfire/Heart Lantern auras, Grappling Hook, Starfury, explosives.
+- **Wave 2 (Committed on `dev`)**:
+  - **37 new items (`ITEMS` = `209`)**, **24 new recipes (`RECIPES` = `107`)**: `Night's Edge`, `Blade of Grass`, `Thorn Chakram`, `Amazon`, Jungle materials (`Jungle Spores`, `Stinger`, `Vine`) & Underground Jungle Shrines (`jungle_shrine.rs`); Meteorite crash crater + `Meteorite Bar` + `Meteor Armor` (0-mana `Space Gun`) + `Blue Phaseblade` + `Star Cannon`; `Water Bolt`, `Sunfury`, `Dark Lance`, `Flamelash`, `Flower of Fire`; `Necro`/`Jungle`/`Bee` Armor; `Rocket Boots` flight, `Spectre Boots`, `Obsidian Shield`, `Cloud in a Balloon`, `Lightning Boots`, `Aglet`, `Anklet of the Wind`, `Feral Claws`, `Shark Tooth Necklace` (+5 armor pen).
+- **Wave 3 (Committed on `dev`)**:
+  - Town NPCs & Economy (`Nurse` healing/debuff clear + `HealAtNurse`/`NurseHealed`, `Demolitionist`, `Dryad` + live Corruption % report, `Goblin Tinkerer` + Reforge UI tab + `ReforgeItem`/`ReforgeResult`), 7-NPC Housing tab layout.
+- **Wave 4 (Committed on `dev`)**:
+  - **12 new items (`ITEMS` = `221`)**, **2 new recipes (`RECIPES` = `109`)**: `King Slime` + `Slime Crown` + `Ninja Armor`/`Slime Hook`/`Slimy Saddle`; Underground Jungle **Bee Hives** (`bee_hive.rs`) + `LiquidKind::Honey` regen + `BEE_LARVA` + `Abeemination` + `Queen Bee` + `Beenades`/`Bee Gun`/`Bee Keeper`/`Honey Comb`/`Bee Wax` + homing `BeeShot`.
+- **Wave 5 (Implemented & Verified on `dev`)**:
+  - **4 new items (`ITEMS` = `225`)**, **1 new recipe (`RECIPES` = `110`)**, **18 new enemies (`KINDS` = `63`)**: `Blood Moon` + `BloodZombie`/`Drippler`/`MoneyTrough`; `Goblin Army` + `GoblinBattleStandard` + 5 Goblin enemies + `Harpoon`/`SpikyBall`; 11 biome enemies (`Antlion`, `Vulture`, `IceSlime`, `SnowFlinx`, `JungleSlime`, `Hornet`, `ManEater`, `Harpy`, `Shark`, `Crab`, `Piranha`).
+  - Verified at `1,449` workspace tests (`0` failed), `cargo fmt --check`, `cargo check --workspace --all-targets` (0 warnings), `check_art.py` passing.
+
+### 3. Resume Commands & Critical Invariants
+- **Resume**: check `git status` and `git log -n 5 --oneline`, verify Wave 1 commit on `dev`, then execute Waves 2–5 sequentially or via `/swarm` `share` worktrees (always spawning `share` worktrees AFTER the previous wave commits!).
+- **Invariants**:
+  - `ITEMS.len()` tests in `item/mod.rs`, `contact_sheet.rs`, `tooltip.rs`, `avatar.rs`.
+  - Nonzero sell values for non-coin items (`shop.rs`).
+  - 3D `.vox`/block visual for every item; `python3 -I tools/art/check_art.py`.
+  - `Option<Gizmos>` for Bevy systems in unit tests.
+  - Never run concurrent Sway/Vulkan bench or QA runs; never open windows on `DP-1`.
+  - Never commit `tools/token-audit.py`, `prompt.txt`, `metrics.json`, `run.log`, `bench_effects_*.png`, `assets/terraria-pack/`.
+  - Zero copyrighted assets, decompile refs, or local absolute user paths.
 
 ## The project in one paragraph
 

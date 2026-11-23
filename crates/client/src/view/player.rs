@@ -145,6 +145,7 @@ impl Plugin for PlayerPlugin {
                         .run_if(resource_exists::<LocalPlayer>)
                         .run_if(crate::menu::menu_closed),
                     play_sounds,
+                    update_shine_light,
                 )
                     .run_if(player_mode)
                     .run_if(in_state(AppState::InGame)),
@@ -196,6 +197,43 @@ const DIGITS: [KeyCode; 10] = [
 fn scrolled_slot(slot: u8, scroll: f32) -> u8 {
     let step = -(scroll.signum() as i32) * (scroll != 0.0) as i32;
     (slot as i32 + step).rem_euclid(10) as u8
+}
+
+#[derive(Component)]
+struct ShineLight;
+
+fn update_shine_light(
+    mut commands: Commands,
+    player: Option<Res<LocalPlayer>>,
+    mut lights: Query<(Entity, &mut Transform, &mut PointLight), With<ShineLight>>,
+) {
+    let shine_on = player
+        .as_ref()
+        .is_some_and(|lp| lp.0.vitals.shine_ticks > 0);
+    if shine_on {
+        let p = player.as_ref().unwrap().0.body.pos;
+        let target = Vec3::new(p[0], p[1] + 1.2, p[2]);
+        if let Some((_, mut tf, _)) = lights.iter_mut().next() {
+            tf.translation = target;
+        } else {
+            commands.spawn((
+                ShineLight,
+                PointLight {
+                    color: Color::srgb(1.0, 0.95, 0.72),
+                    intensity: 35_000.0,
+                    range: 18.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_translation(target),
+                DespawnOnExit(AppState::InGame),
+            ));
+        }
+    } else {
+        for (e, _, _) in &lights {
+            commands.entity(e).despawn();
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

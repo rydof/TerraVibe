@@ -1,11 +1,11 @@
 //! Item ids and static item data, following classic 1.4-era gameplay specs (`Item.item defaults`).
 
-use crate::block::{ANVIL, FURNACE};
 use crate::block::{
-    ASH, BOTTLE, BlockId, CHAIR, CHEST, COPPER, DEMONITE_ORE, DIRT, DOOR_CLOSED, EBONSTONE,
-    GLASS_BLOCK, GOLD, HARDENED_SAND, HELLFORGE, HELLSTONE, HELLSTONE_BRICK, ICE, IRON, MUD,
-    OBSIDIAN, OBSIDIAN_BRICK, PLATFORM, SAND, SANDSTONE, SILVER, SNOW, STONE, TABLE, WOOD_BLOCK,
-    WORKBENCH,
+    ANVIL, ASH, BOTTLE, BlockId, CAMPFIRE, CHAIR, CHEST, CLOUD_BLOCK, COPPER, DEMONITE_ORE, DIRT,
+    DOOR_CLOSED, EBONSTONE, FURNACE, GLASS_BLOCK, GOLD, HARDENED_SAND, HEART_LANTERN, HELLFORGE,
+    HELLSTONE, HELLSTONE_BRICK, HIVE_BLOCK, ICE, IRON, METEORITE_ORE, MUD, OBSIDIAN,
+    OBSIDIAN_BRICK, PLATFORM, SAND, SANDSTONE, SILVER, SNOW, STONE, SUNPLATE_BLOCK, TABLE,
+    TINKERERS_WORKSHOP, WOOD_BLOCK, WORKBENCH,
 };
 
 mod prefix;
@@ -206,6 +206,91 @@ pub const BIRD_ITEM: ItemId = ItemId(2015);
 pub const SQUIRREL_ITEM: ItemId = ItemId(2018);
 pub const CAVE_CRITTER_ITEM: ItemId = ItemId(2007);
 
+// Wave 1 Pre-Hardmode items (Terraria item ids)
+pub const STARFURY: ItemId = ItemId(65);
+pub const GRAPPLING_HOOK: ItemId = ItemId(84);
+pub const IRON_CHAIN: ItemId = ItemId(85);
+pub const LESSER_MANA_POTION: ItemId = ItemId(110);
+pub const METEORITE_ITEM: ItemId = ItemId(116);
+pub const BOMB: ItemId = ItemId(166);
+pub const DYNAMITE: ItemId = ItemId(167);
+pub const GRENADE: ItemId = ItemId(168);
+pub const GLOWING_MUSHROOM: ItemId = ItemId(183);
+pub const HEALING_POTION: ItemId = ItemId(188);
+pub const MANA_POTION: ItemId = ItemId(189);
+pub const HOOK: ItemId = ItemId(210);
+pub const REGENERATION_POTION: ItemId = ItemId(289);
+pub const SWIFTNESS_POTION: ItemId = ItemId(290);
+pub const IRONSKIN_POTION: ItemId = ItemId(292);
+pub const SHINE_POTION: ItemId = ItemId(298);
+pub const WATER_WALKING_POTION: ItemId = ItemId(302);
+pub const TINKERERS_WORKSHOP_ITEM: ItemId = ItemId(398);
+pub const CLOUD_ITEM: ItemId = ItemId(751);
+pub const SUNPLATE_ITEM: ItemId = ItemId(824);
+pub const CAMPFIRE_ITEM: ItemId = ItemId(966);
+pub const HIVE_ITEM: ItemId = ItemId(1124);
+pub const HEART_LANTERN_ITEM: ItemId = ItemId(1859);
+pub const RECALL_POTION: ItemId = ItemId(2350);
+
+// Pre-Hardmode Wave 2 items (Terraria ItemIDs)
+pub const JUNGLE_SPORES: ItemId = ItemId(331);
+pub const STINGER: ItemId = ItemId(209);
+pub const VINE: ItemId = ItemId(332);
+pub const BLADE_OF_GRASS: ItemId = ItemId(190);
+pub const THORN_CHAKRAM: ItemId = ItemId(191);
+pub const AMAZON: ItemId = ItemId(3286);
+pub const NIGHTS_EDGE: ItemId = ItemId(273);
+pub const METEORITE_BAR: ItemId = ItemId(117);
+pub const METEOR_HELMET: ItemId = ItemId(123);
+pub const METEOR_SUIT: ItemId = ItemId(124);
+pub const METEOR_LEGGINGS: ItemId = ItemId(125);
+pub const SPACE_GUN: ItemId = ItemId(127);
+pub const BLUE_PHASEBLADE: ItemId = ItemId(198);
+pub const STAR_CANNON: ItemId = ItemId(197);
+pub const WATER_BOLT: ItemId = ItemId(165);
+pub const SUNFURY: ItemId = ItemId(220);
+pub const DARK_LANCE: ItemId = ItemId(277);
+pub const FLAMELASH: ItemId = ItemId(218);
+pub const FLOWER_OF_FIRE: ItemId = ItemId(112);
+pub const NECRO_HELMET: ItemId = ItemId(151);
+pub const NECRO_BREASTPLATE: ItemId = ItemId(152);
+pub const NECRO_GREAVES: ItemId = ItemId(153);
+pub const JUNGLE_HAT: ItemId = ItemId(228);
+pub const JUNGLE_SHIRT: ItemId = ItemId(229);
+pub const JUNGLE_PANTS: ItemId = ItemId(230);
+pub const BEE_HEADGEAR: ItemId = ItemId(2361);
+pub const BEE_BREASTPLATE: ItemId = ItemId(2362);
+pub const BEE_GREAVES: ItemId = ItemId(2363);
+pub const ROCKET_BOOTS: ItemId = ItemId(128);
+pub const SPECTRE_BOOTS: ItemId = ItemId(405);
+pub const OBSIDIAN_SHIELD: ItemId = ItemId(397);
+pub const CLOUD_IN_A_BALLOON: ItemId = ItemId(399);
+pub const LIGHTNING_BOOTS: ItemId = ItemId(898);
+pub const AGLET: ItemId = ItemId(285);
+pub const ANKLET_OF_THE_WIND: ItemId = ItemId(212);
+pub const FERAL_CLAWS: ItemId = ItemId(211);
+pub const SHARK_TOOTH_NECKLACE: ItemId = ItemId(3212);
+
+// Pre-Hardmode Wave 4 items (King Slime & Queen Bee)
+pub const SLIME_CROWN: ItemId = ItemId(560);
+pub const NINJA_HOOD: ItemId = ItemId(256);
+pub const NINJA_SHIRT: ItemId = ItemId(257);
+pub const NINJA_PANTS: ItemId = ItemId(258);
+pub const SLIME_HOOK: ItemId = ItemId(2585);
+pub const SLIMY_SADDLE: ItemId = ItemId(2430);
+pub const ABEEMINATION: ItemId = ItemId(1133);
+pub const BEE_WAX: ItemId = ItemId(2431);
+pub const BEENADE: ItemId = ItemId(1130);
+pub const BEE_GUN: ItemId = ItemId(1121);
+pub const BEE_KEEPER: ItemId = ItemId(1123);
+pub const HONEY_COMB: ItemId = ItemId(1132);
+
+// Pre-Hardmode Wave 5 items (Events)
+pub const GOBLIN_BATTLE_STANDARD: ItemId = ItemId(361);
+pub const HARPOON: ItemId = ItemId(160);
+pub const SPIKY_BALL: ItemId = ItemId(161);
+pub const MONEY_TROUGH: ItemId = ItemId(3213);
+
 pub fn is_coin(id: ItemId) -> bool {
     [COPPER_COIN, SILVER_COIN, GOLD_COIN, PLATINUM_COIN].contains(&id)
 }
@@ -223,7 +308,9 @@ pub fn is_bullet(id: ItemId) -> bool {
 }
 
 pub fn matches_ammo(weapon: ItemId, ammo: ItemId) -> bool {
-    if weapon == MUSKET
+    if weapon == STAR_CANNON {
+        ammo == FALLEN_STAR
+    } else if weapon == MUSKET
         || weapon == FLINTLOCK_PISTOL
         || weapon == MINISHARK
         || weapon == HANDGUN
@@ -526,6 +613,37 @@ const fn misc(name: &'static str, max_stack: u32) -> ItemData {
     }
 }
 
+const fn material(name: &'static str, max_stack: u32) -> ItemData {
+    misc(name, max_stack)
+}
+
+const fn sword(name: &'static str, damage: i32, knock_back: f32, use_time: i32) -> ItemData {
+    ItemData {
+        name,
+        max_stack: 1,
+        damage,
+        knock_back,
+        crit: 4,
+        use_time,
+        use_animation: use_time,
+        pick: 0,
+        axe: 0,
+        hammer: 0,
+        create_tile: None,
+        class: ItemClass::Melee,
+        scale: 1.0,
+        defense: 0,
+        armor_slot: None,
+        shoot_speed: 0.0,
+        mana: 0,
+        auto_reuse: false,
+        value: 1000,
+        rarity: Rarity::White,
+        tooltip: "Melee weapon",
+        buff_secs: 0,
+    }
+}
+
 /// Consumable with the given `useTime`/`useAnimation` (gameplay spec `consumable = true`).
 /// Arrow-class ammo: stacks like a block, never used on its own.
 const fn ammo(name: &'static str, damage: i32, knock_back: f32) -> ItemData {
@@ -569,7 +687,7 @@ const fn bucket(name: &'static str, max_stack: u32) -> ItemData {
 
 // Names: Terraria.Localization.Content.en-US.Items.json, ItemName.
 // TODO(localization): hand table limited to the items in play.
-static ITEMS: [(ItemId, ItemData); 148] = [
+static ITEMS: [(ItemId, ItemData); 225] = [
     (
         COPPER_HELMET,
         armor("Copper Helmet", ArmorSlot::Head, 1)
@@ -1960,6 +2078,977 @@ static ITEMS: [(ItemId, ItemData); 148] = [
         .with_rarity(Rarity::White)
         .with_tooltip("Releases a cave critter"),
     ),
+    // Wave 1 Pre-Hardmode items
+    (
+        STARFURY,
+        ItemData {
+            name: "Starfury",
+            max_stack: 1,
+            damage: 25,
+            knock_back: 5.0,
+            crit: 4,
+            use_time: 20,
+            use_animation: 20,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Melee,
+            scale: 1.15,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 12.0,
+            mana: 0,
+            auto_reuse: true,
+            value: 10000,
+            rarity: Rarity::Green,
+            tooltip: "Forged with the fury of heaven; rains falling stars from the sky",
+            buff_secs: 0,
+        },
+    ),
+    (
+        GRAPPLING_HOOK,
+        ItemData {
+            name: "Grappling Hook",
+            max_stack: 1,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            use_time: 20,
+            use_animation: 20,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Tool,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 11.5,
+            mana: 0,
+            auto_reuse: false,
+            value: 2000,
+            rarity: Rarity::Blue,
+            tooltip: "Get over here! Latches onto solid blocks and pulls you in",
+            buff_secs: 0,
+        },
+    ),
+    (
+        IRON_CHAIN,
+        ItemData {
+            name: "Chain",
+            max_stack: 9999,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            use_time: 10,
+            use_animation: 15,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Other,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 0.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 10,
+            rarity: Rarity::White,
+            tooltip: "Forged iron links used for hooks and lanterns",
+            buff_secs: 0,
+        },
+    ),
+    (
+        HOOK,
+        ItemData {
+            name: "Hook",
+            max_stack: 99,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            use_time: 10,
+            use_animation: 15,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Other,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 0.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 2000,
+            rarity: Rarity::White,
+            tooltip: "Used to craft a Grappling Hook",
+            buff_secs: 0,
+        },
+    ),
+    (
+        LESSER_MANA_POTION,
+        ItemData {
+            ..consumable("Lesser Mana Potion", 50, 17)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Restores 50 mana"),
+    ),
+    (
+        MANA_POTION,
+        ItemData {
+            ..consumable("Mana Potion", 50, 17)
+        }
+        .with_value(250)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Restores 100 mana"),
+    ),
+    (
+        HEALING_POTION,
+        ItemData {
+            ..consumable("Healing Potion", 50, 17)
+        }
+        .with_value(1000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Restores 100 life"),
+    ),
+    (
+        GLOWING_MUSHROOM,
+        ItemData {
+            ..consumable("Glowing Mushroom", 9999, 17)
+        }
+        .with_value(250)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Restores 25 life and used to brew stronger potions"),
+    ),
+    (
+        REGENERATION_POTION,
+        ItemData {
+            ..consumable("Regeneration Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(480)
+        .with_tooltip("Provides life regeneration"),
+    ),
+    (
+        SWIFTNESS_POTION,
+        ItemData {
+            ..consumable("Swiftness Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(480)
+        .with_tooltip("25% increased movement speed"),
+    ),
+    (
+        IRONSKIN_POTION,
+        ItemData {
+            ..consumable("Ironskin Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(480)
+        .with_tooltip("Increases defense by 8"),
+    ),
+    (
+        SHINE_POTION,
+        ItemData {
+            ..consumable("Shine Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(300)
+        .with_tooltip("Emits an aura of light"),
+    ),
+    (
+        WATER_WALKING_POTION,
+        ItemData {
+            ..consumable("Water Walking Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(600)
+        .with_tooltip("Allows the ability to walk on water and lava"),
+    ),
+    (
+        RECALL_POTION,
+        ItemData {
+            ..consumable("Recall Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Teleports you home to your spawn point"),
+    ),
+    (
+        BOMB,
+        ItemData {
+            name: "Bomb",
+            max_stack: 99,
+            damage: 100,
+            knock_back: 8.0,
+            crit: 0,
+            use_time: 25,
+            use_animation: 25,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Consumable,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 5.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 300,
+            rarity: Rarity::White,
+            tooltip: "A small explosion that will destroy most tiles",
+            buff_secs: 0,
+        },
+    ),
+    (
+        DYNAMITE,
+        ItemData {
+            name: "Dynamite",
+            max_stack: 99,
+            damage: 250,
+            knock_back: 10.0,
+            crit: 0,
+            use_time: 40,
+            use_animation: 40,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Consumable,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 4.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 2000,
+            rarity: Rarity::Blue,
+            tooltip: "A large explosion that will destroy most tiles",
+            buff_secs: 0,
+        },
+    ),
+    (
+        GRENADE,
+        ItemData {
+            name: "Grenade",
+            max_stack: 99,
+            damage: 60,
+            knock_back: 8.0,
+            crit: 4,
+            use_time: 44,
+            use_animation: 44,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Consumable,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 5.5,
+            mana: 0,
+            auto_reuse: false,
+            value: 75,
+            rarity: Rarity::White,
+            tooltip: "A small explosion that will not destroy tiles",
+            buff_secs: 0,
+        },
+    ),
+    (
+        METEORITE_ITEM,
+        ItemData {
+            ..block("Meteorite", METEORITE_ORE)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Warm to the touch"),
+    ),
+    (
+        CLOUD_ITEM,
+        ItemData {
+            ..block("Cloud", CLOUD_BLOCK)
+        }
+        .with_value(5)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Soft floating sky block"),
+    ),
+    (
+        SUNPLATE_ITEM,
+        ItemData {
+            ..block("Sunplate Block", SUNPLATE_BLOCK)
+        }
+        .with_value(10)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Ornate block from a Floating Island"),
+    ),
+    (
+        HIVE_ITEM,
+        ItemData {
+            ..block("Hive", HIVE_BLOCK)
+        }
+        .with_value(5)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Sticky honeycomb wall from a Jungle Hive"),
+    ),
+    (
+        CAMPFIRE_ITEM,
+        ItemData {
+            class: ItemClass::Placeable,
+            ..block("Campfire", CAMPFIRE)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Life regen is increased when near a campfire"),
+    ),
+    (
+        HEART_LANTERN_ITEM,
+        ItemData {
+            class: ItemClass::Placeable,
+            ..block("Heart Lantern", HEART_LANTERN)
+        }
+        .with_value(15000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Increases life regeneration when placed nearby"),
+    ),
+    (
+        TINKERERS_WORKSHOP_ITEM,
+        ItemData {
+            class: ItemClass::Placeable,
+            max_stack: 99,
+            ..block("Tinkerer's Workshop", TINKERERS_WORKSHOP)
+        }
+        .with_value(100000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Used to combine accessories"),
+    ),
+    // Pre-Hardmode Wave 2 items
+    (
+        JUNGLE_SPORES,
+        ItemData {
+            ..material("Jungle Spores", 9999)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Glowing spores harvested from the Underground Jungle"),
+    ),
+    (
+        STINGER,
+        ItemData {
+            ..material("Stinger", 9999)
+        }
+        .with_value(40)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Venomous Jungle stinger"),
+    ),
+    (
+        VINE,
+        ItemData {
+            ..material("Vine", 9999)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Tough Jungle vine"),
+    ),
+    (
+        BLADE_OF_GRASS,
+        ItemData {
+            scale: 1.35,
+            ..sword("Blade of Grass", 18, 4.5, 20)
+        }
+        .with_value(5400)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Has a chance to poison enemies"),
+    ),
+    (
+        THORN_CHAKRAM,
+        ItemData {
+            shoot_speed: 11.0,
+            ..sword("Thorn Chakram", 25, 8.0, 15)
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Bounces off walls and has a chance to poison"),
+    ),
+    (
+        AMAZON,
+        ItemData {
+            shoot_speed: 10.0,
+            ..sword("Amazon", 18, 3.75, 25)
+        }
+        .with_value(13000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Jungle yoyo"),
+    ),
+    (
+        NIGHTS_EDGE,
+        ItemData {
+            scale: 1.4,
+            auto_reuse: true,
+            ..sword("Night's Edge", 40, 4.5, 25)
+        }
+        .with_value(40000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Forged from four legendary blades"),
+    ),
+    (
+        METEORITE_BAR,
+        ItemData {
+            ..material("Meteorite Bar", 9999)
+        }
+        .with_value(1400)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Warm to the touch"),
+    ),
+    (
+        METEOR_HELMET,
+        ItemData {
+            ..armor("Meteor Helmet", ArmorSlot::Head, 5)
+        }
+        .with_value(9000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("9% increased magic damage; Set: Space Gun costs 0 mana"),
+    ),
+    (
+        METEOR_SUIT,
+        ItemData {
+            ..armor("Meteor Suit", ArmorSlot::Body, 6)
+        }
+        .with_value(6000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("9% increased magic damage; Set: Space Gun costs 0 mana"),
+    ),
+    (
+        METEOR_LEGGINGS,
+        ItemData {
+            ..armor("Meteor Leggings", ArmorSlot::Legs, 5)
+        }
+        .with_value(6000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("9% increased magic damage; Set: Space Gun costs 0 mana"),
+    ),
+    (
+        SPACE_GUN,
+        ItemData {
+            name: "Space Gun",
+            max_stack: 1,
+            damage: 17,
+            knock_back: 0.75,
+            crit: 4,
+            use_time: 17,
+            use_animation: 17,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Magic,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 10.0,
+            mana: 6,
+            auto_reuse: true,
+            value: 4000,
+            rarity: Rarity::Blue,
+            tooltip: "Fires green laser bolts; free with Meteor Armor",
+            buff_secs: 0,
+        },
+    ),
+    (
+        BLUE_PHASEBLADE,
+        ItemData {
+            scale: 1.15,
+            auto_reuse: true,
+            ..sword("Blue Phaseblade", 25, 3.0, 18)
+        }
+        .with_value(5400)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Glowing meteorite laser blade"),
+    ),
+    (
+        STAR_CANNON,
+        ItemData {
+            name: "Star Cannon",
+            max_stack: 1,
+            damage: 55,
+            knock_back: 3.0,
+            crit: 4,
+            use_time: 12,
+            use_animation: 12,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Ranged,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 14.0,
+            mana: 0,
+            auto_reuse: true,
+            value: 100000,
+            rarity: Rarity::Green,
+            tooltip: "Uses Fallen Stars as piercing ammo",
+            buff_secs: 0,
+        },
+    ),
+    (
+        WATER_BOLT,
+        ItemData {
+            name: "Water Bolt",
+            max_stack: 1,
+            damage: 19,
+            knock_back: 5.0,
+            crit: 4,
+            use_time: 17,
+            use_animation: 17,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Magic,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 6.5,
+            mana: 10,
+            auto_reuse: true,
+            value: 15000,
+            rarity: Rarity::Green,
+            tooltip: "Casts a slow-moving, wall-bouncing bolt of water",
+            buff_secs: 0,
+        },
+    ),
+    (
+        SUNFURY,
+        ItemData {
+            shoot_speed: 12.0,
+            ..sword("Sunfury", 64, 6.75, 45)
+        }
+        .with_value(17500)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Heavy fiery flail that can ignite enemies"),
+    ),
+    (
+        DARK_LANCE,
+        ItemData {
+            shoot_speed: 5.0,
+            ..sword("Dark Lance", 34, 5.0, 22)
+        }
+        .with_value(25000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Piercing shadow spear"),
+    ),
+    (
+        FLAMELASH,
+        ItemData {
+            name: "Flamelash",
+            max_stack: 1,
+            damage: 32,
+            knock_back: 6.5,
+            crit: 4,
+            use_time: 20,
+            use_animation: 20,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Magic,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 7.0,
+            mana: 21,
+            auto_reuse: false,
+            value: 25000,
+            rarity: Rarity::Orange,
+            tooltip: "Summons a controllable missile of fire",
+            buff_secs: 0,
+        },
+    ),
+    (
+        FLOWER_OF_FIRE,
+        ItemData {
+            name: "Flower of Fire",
+            max_stack: 1,
+            damage: 48,
+            knock_back: 5.5,
+            crit: 4,
+            use_time: 16,
+            use_animation: 16,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Magic,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 7.5,
+            mana: 12,
+            auto_reuse: true,
+            value: 25000,
+            rarity: Rarity::Orange,
+            tooltip: "Throws bouncing balls of fire",
+            buff_secs: 0,
+        },
+    ),
+    (
+        NECRO_HELMET,
+        ItemData {
+            ..armor("Necro Helmet", ArmorSlot::Head, 6)
+        }
+        .with_value(9000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("5% increased ranged damage; Set: +10% ranged crit"),
+    ),
+    (
+        NECRO_BREASTPLATE,
+        ItemData {
+            ..armor("Necro Breastplate", ArmorSlot::Body, 7)
+        }
+        .with_value(6000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("5% increased ranged damage; Set: +10% ranged crit"),
+    ),
+    (
+        NECRO_GREAVES,
+        ItemData {
+            ..armor("Necro Greaves", ArmorSlot::Legs, 6)
+        }
+        .with_value(6000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("5% increased ranged damage; Set: +10% ranged crit"),
+    ),
+    (
+        JUNGLE_HAT,
+        ItemData {
+            ..armor("Jungle Hat", ArmorSlot::Head, 5)
+        }
+        .with_value(9000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Increases max mana by 40; Set: 16% reduced mana cost"),
+    ),
+    (
+        JUNGLE_SHIRT,
+        ItemData {
+            ..armor("Jungle Shirt", ArmorSlot::Body, 6)
+        }
+        .with_value(6000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("6% increased magic damage and +20 max mana"),
+    ),
+    (
+        JUNGLE_PANTS,
+        ItemData {
+            ..armor("Jungle Pants", ArmorSlot::Legs, 6)
+        }
+        .with_value(6000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Increases max mana by 20; Set: 16% reduced mana cost"),
+    ),
+    (
+        BEE_HEADGEAR,
+        ItemData {
+            ..armor("Bee Headgear", ArmorSlot::Head, 4)
+        }
+        .with_value(4000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("4% increased damage; Set: +10% damage & speed"),
+    ),
+    (
+        BEE_BREASTPLATE,
+        ItemData {
+            ..armor("Bee Breastplate", ArmorSlot::Body, 5)
+        }
+        .with_value(4000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("4% increased damage; Set: +10% damage & speed"),
+    ),
+    (
+        BEE_GREAVES,
+        ItemData {
+            ..armor("Bee Greaves", ArmorSlot::Legs, 4)
+        }
+        .with_value(4000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("5% increased damage; Set: +10% damage & speed"),
+    ),
+    (
+        ROCKET_BOOTS,
+        ItemData {
+            ..accessory("Rocket Boots")
+        }
+        .with_value(50000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Allows brief rocket flight"),
+    ),
+    (
+        SPECTRE_BOOTS,
+        ItemData {
+            ..accessory("Spectre Boots")
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Allows flight and super fast running"),
+    ),
+    (
+        OBSIDIAN_SHIELD,
+        ItemData {
+            defense: 2,
+            ..accessory("Obsidian Shield")
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Grants immunity to knockback and fire blocks"),
+    ),
+    (
+        CLOUD_IN_A_BALLOON,
+        ItemData {
+            ..accessory("Cloud in a Balloon")
+        }
+        .with_value(30000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Increases jump height and allows double jump"),
+    ),
+    (
+        LIGHTNING_BOOTS,
+        ItemData {
+            ..accessory("Lightning Boots")
+        }
+        .with_value(60000)
+        .with_rarity(Rarity::LightRed)
+        .with_tooltip("Allows flight, super fast running, and +8% speed"),
+    ),
+    (
+        AGLET,
+        ItemData {
+            ..accessory("Aglet")
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("5% increased movement speed"),
+    ),
+    (
+        ANKLET_OF_THE_WIND,
+        ItemData {
+            ..accessory("Anklet of the Wind")
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("10% increased movement speed"),
+    ),
+    (
+        FERAL_CLAWS,
+        ItemData {
+            ..accessory("Feral Claws")
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("12% increased melee speed"),
+    ),
+    (
+        SHARK_TOOTH_NECKLACE,
+        ItemData {
+            ..accessory("Shark Tooth Necklace")
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Increases armor penetration by 5"),
+    ),
+    // Pre-Hardmode Wave 4 items
+    (
+        SLIME_CROWN,
+        ItemData {
+            ..consumable("Slime Crown", 20, 30)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Summons King Slime"),
+    ),
+    (
+        NINJA_HOOD,
+        ItemData {
+            ..armor("Ninja Hood", ArmorSlot::Head, 2)
+        }
+        .with_value(2000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("3% increased crit chance; Set: +20% movement speed"),
+    ),
+    (
+        NINJA_SHIRT,
+        ItemData {
+            ..armor("Ninja Shirt", ArmorSlot::Body, 4)
+        }
+        .with_value(2000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("3% increased crit chance; Set: +20% movement speed"),
+    ),
+    (
+        NINJA_PANTS,
+        ItemData {
+            ..armor("Ninja Pants", ArmorSlot::Legs, 3)
+        }
+        .with_value(2000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("3% increased crit chance; Set: +20% movement speed"),
+    ),
+    (
+        SLIME_HOOK,
+        ItemData {
+            class: ItemClass::Tool,
+            shoot_speed: 18.0,
+            use_time: 12,
+            use_animation: 12,
+            ..material("Slime Hook", 1)
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Fires up to 3 sticky slime hooks"),
+    ),
+    (
+        SLIMY_SADDLE,
+        ItemData {
+            ..accessory("Slimy Saddle")
+        }
+        .with_value(50000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("+20% movement speed and +30% jump height"),
+    ),
+    (
+        ABEEMINATION,
+        ItemData {
+            ..consumable("Abeemination", 20, 30)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Summons Queen Bee"),
+    ),
+    (
+        BEE_WAX,
+        ItemData {
+            ..material("Bee Wax", 9999)
+        }
+        .with_value(500)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Dropped by Queen Bee"),
+    ),
+    (
+        BEENADE,
+        ItemData {
+            class: ItemClass::Consumable,
+            max_stack: 999,
+            damage: 12,
+            knock_back: 1.0,
+            use_time: 15,
+            use_animation: 15,
+            shoot_speed: 7.0,
+            ..material("Beenade", 999)
+        }
+        .with_value(1000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Explodes into a swarm of bees"),
+    ),
+    (
+        BEE_GUN,
+        ItemData {
+            name: "Bee Gun",
+            max_stack: 1,
+            damage: 9,
+            knock_back: 0.5,
+            crit: 4,
+            use_time: 16,
+            use_animation: 16,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Magic,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 10.0,
+            mana: 5,
+            auto_reuse: true,
+            value: 20000,
+            rarity: Rarity::Orange,
+            tooltip: "Fires homing bees that chase enemies",
+            buff_secs: 0,
+        },
+    ),
+    (
+        BEE_KEEPER,
+        ItemData {
+            auto_reuse: true,
+            ..sword("Bee Keeper", 26, 5.3, 20)
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Summons friendly bees on hit"),
+    ),
+    (
+        HONEY_COMB,
+        ItemData {
+            ..accessory("Honey Comb")
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Releases bees when damaged"),
+    ),
+    // Pre-Hardmode Wave 5 items
+    (
+        GOBLIN_BATTLE_STANDARD,
+        ItemData {
+            ..consumable("Goblin Battle Standard", 20, 30)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Summons a Goblin Army"),
+    ),
+    (
+        HARPOON,
+        ItemData {
+            shoot_speed: 14.0,
+            auto_reuse: true,
+            ..sword("Harpoon", 25, 6.0, 25)
+        }
+        .with_value(25000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Fires a chained harpoon that retracts quickly"),
+    ),
+    (
+        SPIKY_BALL,
+        ItemData {
+            class: ItemClass::Consumable,
+            max_stack: 999,
+            damage: 15,
+            knock_back: 1.0,
+            use_time: 15,
+            use_animation: 15,
+            shoot_speed: 6.0,
+            ..material("Spiky Ball", 999)
+        }
+        .with_value(160)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Throws spiky balls that damage walking enemies"),
+    ),
+    (
+        MONEY_TROUGH,
+        ItemData {
+            ..accessory("Money Trough")
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Blood Moon treasure from Blood Zombies and Dripplers"),
+    ),
 ];
 
 static UNKNOWN: ItemData = ItemData {
@@ -2098,7 +3187,7 @@ mod tests {
     #[test]
     fn all_item_ids_includes_new_loot() {
         let ids: Vec<_> = all_item_ids().collect();
-        assert_eq!(ids.len(), 148);
+        assert_eq!(ids.len(), 225);
         for id in [
             BUG_NET,
             BUNNY_ITEM,
@@ -2410,7 +3499,10 @@ mod tests {
     #[test]
     fn existing_items_have_zero_defense() {
         for id in all_item_ids().filter(|i| {
-            item_data(*i).class != ItemClass::Armor && *i != COBALT_SHIELD && *i != OBSIDIAN_SKULL
+            item_data(*i).class != ItemClass::Armor
+                && *i != COBALT_SHIELD
+                && *i != OBSIDIAN_SKULL
+                && *i != OBSIDIAN_SHIELD
         }) {
             assert_eq!(item_data(id).defense, 0);
             assert_eq!(item_data(id).armor_slot, None);

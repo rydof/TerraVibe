@@ -42,6 +42,9 @@ pub fn mesh_liquid(
                     LiquidKind::Lava => {
                         LinearRgba::from(Color::srgb(0.98, 0.45, 0.08)).to_f32_array()
                     }
+                    LiquidKind::Honey => {
+                        LinearRgba::from(Color::srgba(0.96, 0.72, 0.10, 0.88)).to_f32_array()
+                    }
                 };
 
                 let wx = pos.x * CHUNK_SIZE + lx as i32;

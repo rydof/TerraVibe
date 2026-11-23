@@ -26,11 +26,37 @@ use crate::view::player::{LoadedBlocks, LocalPlayer};
 
 #[derive(Message, Clone, Debug)]
 pub enum TownMsg {
-    Dialogue { npc: EnemyId, text: String },
-    Shop { items: Vec<(ItemId, u32)> },
-    Result { ok: bool, cannot_afford: bool },
-    House { ok: bool, reason: u8 },
-    Speech { id: EnemyId, text: String },
+    Dialogue {
+        npc: EnemyId,
+        text: String,
+    },
+    Shop {
+        items: Vec<(ItemId, u32)>,
+    },
+    Result {
+        ok: bool,
+        cannot_afford: bool,
+    },
+    House {
+        ok: bool,
+        reason: u8,
+    },
+    Speech {
+        id: EnemyId,
+        text: String,
+    },
+    NurseHealed {
+        ok: bool,
+        healed: i32,
+        cost_copper: u32,
+    },
+    ReforgeResult {
+        ok: bool,
+        #[allow(dead_code)]
+        slot: u8,
+        new_prefix: Prefix,
+        cost_copper: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -38,6 +64,7 @@ pub enum TownTab {
     #[default]
     Talk,
     Crafting,
+    Reforge,
     Housing,
 }
 
@@ -51,6 +78,9 @@ pub struct TownPanel {
     pub note: String,
     pub tab: TownTab,
     pub is_guide: bool,
+    pub is_nurse: bool,
+    pub is_tinkerer: bool,
+    pub reforge_sel: usize,
     pub guide_scroll: usize,
     pub guide_sel: usize,
     pub housing_query_pos: Option<[i32; 3]>,
@@ -70,6 +100,9 @@ impl Default for TownPanel {
             note: String::new(),
             tab: TownTab::Talk,
             is_guide: false,
+            is_nurse: false,
+            is_tinkerer: false,
+            reforge_sel: 0,
             guide_scroll: 0,
             guide_sel: 0,
             housing_query_pos: None,
@@ -518,15 +551,20 @@ pub fn receive(
             TownMsg::Dialogue { npc, text } => {
                 // Free the cursor so clicks do not attack while the panel is up.
                 set_grab(&mut opts, false);
-                let is_guide = enemies.iter().find(|e| e.id == *npc).map_or_else(
+                let kind = enemies.iter().find(|e| e.id == *npc).map(|e| e.kind);
+                let is_guide = kind.map_or_else(
                     || !text.starts_with("Old Man:"),
-                    |e| e.kind == terravibe_sim::enemy::EnemyKind::Guide,
+                    |k| k == terravibe_sim::enemy::EnemyKind::Guide,
                 );
+                let is_nurse = kind == Some(terravibe_sim::enemy::EnemyKind::Nurse);
+                let is_tinkerer = kind == Some(terravibe_sim::enemy::EnemyKind::GoblinTinkerer);
                 *panel = TownPanel {
                     npc: Some(*npc),
                     text: text.clone(),
                     tab: TownTab::Talk,
                     is_guide,
+                    is_nurse,
+                    is_tinkerer,
                     ..default()
                 };
             }
@@ -560,6 +598,33 @@ pub fn receive(
                 if panel.tab == TownTab::Housing || panel.npc == Some(*id) {
                     panel.note = text.clone();
                 }
+            }
+            TownMsg::NurseHealed {
+                ok,
+                healed,
+                cost_copper,
+            } => {
+                panel.note = if *ok {
+                    format!("Healed {healed} HP for {}.", price_text(*cost_copper))
+                } else if *cost_copper == 0 {
+                    "You're already at full health!".into()
+                } else {
+                    format!("Need {} to heal.", price_text(*cost_copper))
+                };
+            }
+            TownMsg::ReforgeResult {
+                ok,
+                new_prefix,
+                cost_copper,
+                ..
+            } => {
+                panel.note = if *ok {
+                    let pname = terravibe_sim::item::prefix_name(*new_prefix);
+                    let pdisp = if pname.is_empty() { "Normal" } else { pname };
+                    format!("Reforged to {pdisp} for {}!", price_text(*cost_copper))
+                } else {
+                    "Cannot reforge (need eligible item & coins).".into()
+                };
             }
         }
     }
@@ -614,11 +679,9 @@ pub fn format_shop_row(
 }
 
 fn cycle_town_npc(npc: TownKind) -> TownKind {
-    match npc {
-        TownKind::Guide => TownKind::Merchant,
-        TownKind::Merchant => TownKind::ArmsDealer,
-        TownKind::ArmsDealer => TownKind::Guide,
-    }
+    let all = TownKind::ALL;
+    let idx = all.iter().position(|&k| k == npc).unwrap_or(0);
+    all[(idx + 1) % all.len()]
 }
 
 /// Hit-test for the `[Assign NPC]` button in the Housing tab.
@@ -646,6 +709,7 @@ pub fn handle_input(
     mut wheel: Option<MessageReader<bevy::input::mouse::MouseWheel>>,
     guide_slot: Option<Res<crate::net::LocalGuideSlot>>,
     held: Option<Res<crate::net::LocalHeld>>,
+    local_inv: Option<Res<crate::net::LocalInventory>>,
 ) {
     let Some(net) = net else {
         return;
@@ -674,6 +738,9 @@ pub fn handle_input(
             TownTab::Talk => {
                 if panel.is_guide {
                     switch_to_crafting(&mut panel, &mut inv, &mut opts);
+                } else if panel.is_tinkerer {
+                    panel.tab = TownTab::Reforge;
+                    panel.reforge_sel = 0;
                 } else {
                     panel.tab = TownTab::Housing;
                     if panel.housing_query_pos.is_none()
@@ -685,6 +752,14 @@ pub fn handle_input(
             }
             TownTab::Crafting => {
                 let _ = net.send(ClientMsg::CloseGuideCrafting);
+                panel.tab = TownTab::Housing;
+                if panel.housing_query_pos.is_none()
+                    && let Some(player) = player.as_ref()
+                {
+                    query_housing_at_player(player, stream.as_deref(), &mut panel, &net);
+                }
+            }
+            TownTab::Reforge => {
                 panel.tab = TownTab::Housing;
                 if panel.housing_query_pos.is_none()
                     && let Some(player) = player.as_ref()
@@ -716,6 +791,38 @@ pub fn handle_input(
                 200.0..=296.0
             };
             if (120.0..=188.0).contains(&rel_x) {
+                if panel.tab == TownTab::Reforge
+                    && panel.is_tinkerer
+                    && let Some(npc) = panel.npc
+                {
+                    let eligible: Vec<usize> = local_inv
+                        .as_ref()
+                        .map(|li| {
+                            li.0.slots[..BAG]
+                                .iter()
+                                .enumerate()
+                                .filter_map(|(idx, s)| {
+                                    let st = (*s)?;
+                                    terravibe_sim::shop::is_reforgeable(st.id).then_some(idx)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !eligible.is_empty() {
+                        panel.reforge_sel = panel.reforge_sel.min(eligible.len() - 1);
+                        if keys.just_pressed(KeyCode::ArrowDown)
+                            && panel.reforge_sel + 1 < eligible.len()
+                        {
+                            panel.reforge_sel += 1;
+                        } else if keys.just_pressed(KeyCode::ArrowUp) && panel.reforge_sel > 0 {
+                            panel.reforge_sel -= 1;
+                        } else if keys.just_pressed(KeyCode::Enter) {
+                            let slot = eligible[panel.reforge_sel] as u8;
+                            let _ = net.send(ClientMsg::ReforgeItem { npc, slot });
+                        }
+                    }
+                    return;
+                }
                 if panel.tab == TownTab::Crafting {
                     let _ = net.send(ClientMsg::CloseGuideCrafting);
                 }
@@ -725,6 +832,38 @@ pub fn handle_input(
                 switch_to_crafting(&mut panel, &mut inv, &mut opts);
                 return;
             } else if housing_range.contains(&rel_x) {
+                if panel.tab == TownTab::Reforge
+                    && panel.is_tinkerer
+                    && let Some(npc) = panel.npc
+                {
+                    let eligible: Vec<usize> = local_inv
+                        .as_ref()
+                        .map(|li| {
+                            li.0.slots[..BAG]
+                                .iter()
+                                .enumerate()
+                                .filter_map(|(idx, s)| {
+                                    let st = (*s)?;
+                                    terravibe_sim::shop::is_reforgeable(st.id).then_some(idx)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !eligible.is_empty() {
+                        panel.reforge_sel = panel.reforge_sel.min(eligible.len() - 1);
+                        if keys.just_pressed(KeyCode::ArrowDown)
+                            && panel.reforge_sel + 1 < eligible.len()
+                        {
+                            panel.reforge_sel += 1;
+                        } else if keys.just_pressed(KeyCode::ArrowUp) && panel.reforge_sel > 0 {
+                            panel.reforge_sel -= 1;
+                        } else if keys.just_pressed(KeyCode::Enter) {
+                            let slot = eligible[panel.reforge_sel] as u8;
+                            let _ = net.send(ClientMsg::ReforgeItem { npc, slot });
+                        }
+                    }
+                    return;
+                }
                 if panel.tab == TownTab::Crafting {
                     let _ = net.send(ClientMsg::CloseGuideCrafting);
                 }
@@ -739,6 +878,36 @@ pub fn handle_input(
         }
     }
 
+    if panel.tab == TownTab::Reforge
+        && panel.is_tinkerer
+        && let Some(npc) = panel.npc
+    {
+        let eligible: Vec<usize> = local_inv
+            .as_ref()
+            .map(|li| {
+                li.0.slots[..BAG]
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, s)| {
+                        let st = (*s)?;
+                        terravibe_sim::shop::is_reforgeable(st.id).then_some(idx)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !eligible.is_empty() {
+            panel.reforge_sel = panel.reforge_sel.min(eligible.len() - 1);
+            if keys.just_pressed(KeyCode::ArrowDown) && panel.reforge_sel + 1 < eligible.len() {
+                panel.reforge_sel += 1;
+            } else if keys.just_pressed(KeyCode::ArrowUp) && panel.reforge_sel > 0 {
+                panel.reforge_sel -= 1;
+            } else if keys.just_pressed(KeyCode::Enter) {
+                let slot = eligible[panel.reforge_sel] as u8;
+                let _ = net.send(ClientMsg::ReforgeItem { npc, slot });
+            }
+        }
+        return;
+    }
     if panel.tab == TownTab::Crafting {
         let recipes = guide_slot
             .as_ref()
@@ -838,6 +1007,19 @@ pub fn handle_input(
                 pos,
             });
         }
+        return;
+    }
+
+    if panel.is_nurse
+        && (keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::KeyH))
+        && let Some(npc) = panel.npc
+    {
+        let _ = net.send(ClientMsg::HealAtNurse { npc });
+        return;
+    }
+    if panel.is_tinkerer && keys.just_pressed(KeyCode::KeyR) {
+        panel.tab = TownTab::Reforge;
+        panel.reforge_sel = 0;
         return;
     }
 
@@ -1455,6 +1637,39 @@ pub fn update_view(
             .as_ref()
             .map(|f| wrap_text(&f.mouse.0, &raw, max_text_w))
             .unwrap_or(raw)
+    } else if panel.tab == TownTab::Reforge && panel.is_tinkerer {
+        let mut rows =
+            String::from("Reforge (Up/Down to select, Enter to reforge, Tab: switch):\n");
+        if let Some(inv_ref) = inv.as_ref().map(|i| &i.0) {
+            let eligible: Vec<(usize, ItemStack)> = inv_ref.slots[..BAG]
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, s)| {
+                    let st = (*s)?;
+                    terravibe_sim::shop::is_reforgeable(st.id).then_some((idx, st))
+                })
+                .collect();
+            if eligible.is_empty() {
+                rows += "\nNo reforgeable weapons, tools, or accessories in bag.";
+            } else {
+                let sel = panel.reforge_sel.min(eligible.len() - 1);
+                for (i, (slot_idx, st)) in eligible.iter().take(10).enumerate() {
+                    let mark = if i == sel { ">" } else { " " };
+                    let pfx = terravibe_sim::item::prefix_name(st.prefix);
+                    let name = if pfx.is_empty() {
+                        item_data(st.id).name.to_string()
+                    } else {
+                        format!("{pfx} {}", item_data(st.id).name)
+                    };
+                    let cost = price_text(terravibe_sim::shop::reforge_cost(st.id));
+                    rows += &format!("\n{mark} [{slot_idx}] {name} — {cost}");
+                }
+            }
+        }
+        if !panel.note.is_empty() {
+            rows += &format!("\n\n{}", panel.note);
+        }
+        rows
     } else if show_guide {
         guide_crafting_body(
             &panel,
@@ -1487,9 +1702,13 @@ pub fn update_view(
         if panel.npc.is_some() && panel.shop.is_empty() {
             if panel.is_guide {
                 s += "\n\n[G] Advice: What should I do next?   [C] Crafting   Esc: close";
+            } else if panel.is_nurse {
+                s += "\n\n[Enter] Heal & Clear Debuffs   [G] Advice   Esc: close";
             } else {
                 s += "\n\n[G] Advice: What should I do next?   Esc: close";
             }
+        } else if panel.is_tinkerer {
+            s += "\n\n[R] Open Reforge Tab";
         }
         if !panel.note.is_empty() {
             let wrapped_note = fonts
@@ -1511,6 +1730,8 @@ pub fn update_view(
 
     let speaker_name = if panel.tab == TownTab::Housing {
         "Housing"
+    } else if panel.tab == TownTab::Reforge && panel.is_tinkerer {
+        "Goblin Tinkerer — Reforge"
     } else if show_guide {
         "Guide — Crafting"
     } else if !panel.shop.is_empty() {
@@ -1521,11 +1742,23 @@ pub fn update_view(
                 .any(|(id, _)| *id == terravibe_sim::item::FLINTLOCK_PISTOL)
         {
             "Arms Dealer"
+        } else if panel.is_tinkerer {
+            "Goblin Tinkerer"
+        } else if panel.text.starts_with("Demolitionist:") {
+            "Demolitionist"
+        } else if panel.text.starts_with("Dryad:") {
+            "Dryad"
         } else {
             "Merchant"
         }
     } else if panel.npc.is_some() {
-        if panel.is_guide { "Guide" } else { "Town NPC" }
+        if panel.is_guide {
+            "Guide"
+        } else if panel.is_nurse {
+            "Nurse"
+        } else {
+            "Town NPC"
+        }
     } else {
         "Housing Query"
     };

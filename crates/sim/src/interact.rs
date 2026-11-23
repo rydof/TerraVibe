@@ -5,18 +5,25 @@ use std::collections::HashMap;
 
 use crate::block::{
     AIR, BLUE_DUNGEON_BRICK, BlockId, CHAIR, DEMON_ALTAR, DEMONITE_ORE, DOOR_CLOSED, DOOR_OPEN,
-    EBONSTONE, GREEN_DUNGEON_BRICK, HELLFORGE, HELLSTONE, MOSS, OBSIDIAN, PINK_DUNGEON_BRICK, POT,
-    SHADOW_ORB, SHELF_MUSHROOM, SMALL_ROCK, STALACTITE, TABLE, TORCH, TRUNK,
+    EBONSTONE, GREEN_DUNGEON_BRICK, HELLFORGE, HELLSTONE, METEORITE_ORE, MOSS, OBSIDIAN,
+    PINK_DUNGEON_BRICK, POT, SHADOW_ORB, SHELF_MUSHROOM, SMALL_ROCK, STALACTITE, TABLE, TORCH,
+    TRUNK,
 };
 use crate::chunk::BlockQuery;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::{
-    EMPTY_BUCKET, GOLDEN_KEY, ItemClass, ItemId, LAVA_BUCKET, LESSER_HEALING_POTION,
-    LIFE_CRYSTAL_ITEM, MANA_CRYSTAL, MINISHARK, MUSHROOM, OBSIDIAN_SKIN_POTION, Prefix, Rng,
-    SHADOW_KEY, WATER_BUCKET, WOOD, WOOD_WALL, item_data, prefix_stats,
+    BOMB, DYNAMITE, EMPTY_BUCKET, GLOWING_MUSHROOM, GOLDEN_KEY, GRAPPLING_HOOK, GRENADE,
+    HEALING_POTION, IRONSKIN_POTION, ItemClass, ItemId, LAVA_BUCKET, LESSER_HEALING_POTION,
+    LESSER_MANA_POTION, LIFE_CRYSTAL_ITEM, MANA_CRYSTAL, MANA_POTION, MINISHARK, MUSHROOM,
+    OBSIDIAN_SKIN_POTION, Prefix, REGENERATION_POTION, Rng, SHADOW_KEY, SHINE_POTION,
+    SWIFTNESS_POTION, WATER_BUCKET, WATER_WALKING_POTION, WOOD, WOOD_WALL, item_data, prefix_stats,
 };
 use crate::liquid_cell::{Liquid, LiquidKind};
-use crate::player::consts::{HALF_WIDTH, HEIGHT, OBSIDIAN_SKIN_TICKS, TILE_BLOCKS};
+use crate::player::consts::{
+    HALF_WIDTH, HEALING_POTION_HEAL, HEIGHT, IRONSKIN_TICKS, LESSER_MANA_RESTORE, MANA_RESTORE,
+    OBSIDIAN_SKIN_TICKS, REGEN_TICKS, SHINE_TICKS, SWIFTNESS_TICKS, TILE_BLOCKS,
+    WATER_WALKING_TICKS,
+};
 use crate::player::vitals::LESSER_HEALING_HEAL;
 use crate::player::{PlayerBody, PlayerInput, Vitals};
 
@@ -191,6 +198,7 @@ fn pick_damage(tile: BlockId, pick: i32) -> i32 {
 const MIN_PICK: &[(BlockId, i32)] = &[
     (DEMONITE_ORE, 55),
     (OBSIDIAN, 55),
+    (METEORITE_ORE, 50),
     (EBONSTONE, 65),
     (HELLSTONE, 65),
     (HELLFORGE, 65),
@@ -352,6 +360,17 @@ pub enum UseEvent {
     ShadowOrbBroken {
         pos: [i32; 3],
     },
+    /// Player threw an explosive (Bomb, Dynamite, Grenade).
+    Throw {
+        item: ItemId,
+        origin: [f32; 3],
+        dir: [f32; 3],
+    },
+    /// Player fired the Grappling Hook.
+    Grapple {
+        origin: [f32; 3],
+        dir: [f32; 3],
+    },
 }
 
 /// Right click on a door: swaps `DOOR_CLOSED` <-> `DOOR_OPEN` (WorldGen.OpenDoor /
@@ -418,6 +437,7 @@ pub fn apply_consumable(item: ItemId, v: &mut Vitals, inv: &mut Inventory) -> bo
         LIFE_CRYSTAL_ITEM => v.use_crystal(),
         MANA_CRYSTAL => v.use_mana_crystal(),
         LESSER_HEALING_POTION => v.use_potion(LESSER_HEALING_HEAL),
+        HEALING_POTION => v.use_potion(HEALING_POTION_HEAL),
         MUSHROOM => {
             if v.use_potion(15) {
                 v.potion_delay_ticks = 1800; // 30s Potion Sickness
@@ -426,8 +446,52 @@ pub fn apply_consumable(item: ItemId, v: &mut Vitals, inv: &mut Inventory) -> bo
                 false
             }
         }
+        GLOWING_MUSHROOM => {
+            if v.use_potion(25) {
+                v.potion_delay_ticks = 1800; // 30s Potion Sickness
+                true
+            } else {
+                false
+            }
+        }
+        LESSER_MANA_POTION => {
+            if v.mana < v.mana_max {
+                v.mana = (v.mana + LESSER_MANA_RESTORE).min(v.mana_max);
+                true
+            } else {
+                false
+            }
+        }
+        MANA_POTION => {
+            if v.mana < v.mana_max {
+                v.mana = (v.mana + MANA_RESTORE).min(v.mana_max);
+                true
+            } else {
+                false
+            }
+        }
         OBSIDIAN_SKIN_POTION => {
             v.obsidian_skin_ticks = OBSIDIAN_SKIN_TICKS;
+            true
+        }
+        IRONSKIN_POTION => {
+            v.ironskin_ticks = IRONSKIN_TICKS;
+            true
+        }
+        SWIFTNESS_POTION => {
+            v.swiftness_ticks = SWIFTNESS_TICKS;
+            true
+        }
+        REGENERATION_POTION => {
+            v.regen_ticks = REGEN_TICKS;
+            true
+        }
+        SHINE_POTION => {
+            v.shine_ticks = SHINE_TICKS;
+            true
+        }
+        WATER_WALKING_POTION => {
+            v.water_walking_ticks = WATER_WALKING_TICKS;
             true
         }
         _ => false,
@@ -440,10 +504,15 @@ pub fn apply_consumable(item: ItemId, v: &mut Vitals, inv: &mut Inventory) -> bo
 
 fn healing_item(id: ItemId) -> Option<(i32, i32)> {
     match id {
+        HEALING_POTION => Some((
+            HEALING_POTION_HEAL,
+            crate::player::vitals::POTION_DELAY_TICKS,
+        )),
         LESSER_HEALING_POTION => Some((
             LESSER_HEALING_HEAL,
             crate::player::vitals::POTION_DELAY_TICKS,
         )),
+        GLOWING_MUSHROOM => Some((25, 1800)),
         MUSHROOM => Some((15, 1800)),
         _ => None,
     }
@@ -451,6 +520,8 @@ fn healing_item(id: ItemId) -> Option<(i32, i32)> {
 
 fn mana_restore_amount(id: ItemId) -> Option<i32> {
     match id {
+        MANA_POTION => Some(MANA_RESTORE),
+        LESSER_MANA_POTION => Some(LESSER_MANA_RESTORE),
         _ => None,
     }
 }
@@ -530,8 +601,28 @@ pub fn quick_buff(v: &mut Vitals, inv: &mut Inventory) -> bool {
         let Some(id) = inv.slots[idx].map(|s| s.id) else {
             continue;
         };
-        if id == OBSIDIAN_SKIN_POTION && v.obsidian_skin_ticks == 0 {
+        let used = if id == OBSIDIAN_SKIN_POTION && v.obsidian_skin_ticks == 0 {
             v.obsidian_skin_ticks = OBSIDIAN_SKIN_TICKS;
+            true
+        } else if id == IRONSKIN_POTION && v.ironskin_ticks == 0 {
+            v.ironskin_ticks = IRONSKIN_TICKS;
+            true
+        } else if id == SWIFTNESS_POTION && v.swiftness_ticks == 0 {
+            v.swiftness_ticks = SWIFTNESS_TICKS;
+            true
+        } else if id == REGENERATION_POTION && v.regen_ticks == 0 {
+            v.regen_ticks = REGEN_TICKS;
+            true
+        } else if id == SHINE_POTION && v.shine_ticks == 0 {
+            v.shine_ticks = SHINE_TICKS;
+            true
+        } else if id == WATER_WALKING_POTION && v.water_walking_ticks == 0 {
+            v.water_walking_ticks = WATER_WALKING_TICKS;
+            true
+        } else {
+            false
+        };
+        if used {
             consume_bag_slot(inv, idx);
             applied = true;
         }
@@ -790,6 +881,20 @@ pub fn tick_use_with_mana(
                         st.time = use_time;
                     }
                 }
+            } else if matches!(
+                s.id,
+                BOMB | DYNAMITE | GRENADE | crate::item::BEENADE | crate::item::SPIKY_BALL
+            ) {
+                inv.take_one_selected();
+                ev.push(UseEvent::Throw {
+                    item: s.id,
+                    origin: eye,
+                    dir,
+                });
+                st.time = use_time;
+            } else if s.id == GRAPPLING_HOOK || s.id == crate::item::SLIME_HOOK {
+                ev.push(UseEvent::Grapple { origin: eye, dir });
+                st.time = use_time;
             } else if data.class == ItemClass::Consumable {
                 ev.push(UseEvent::Consume { item: s.id });
                 st.time = use_time;
@@ -2529,5 +2634,86 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn healing_potion_mana_potion_and_quick_buffs_work() {
+        let mut v = Vitals::new();
+        v.life = 10;
+        v.mana = 0;
+        v.mana_max = 100;
+
+        let mut inv = Inventory::empty();
+        inv.slots[0] = Some(ItemStack {
+            id: HEALING_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[1] = Some(ItemStack {
+            id: LESSER_MANA_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[2] = Some(ItemStack {
+            id: MANA_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[3] = Some(ItemStack {
+            id: IRONSKIN_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[4] = Some(ItemStack {
+            id: SWIFTNESS_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[5] = Some(ItemStack {
+            id: REGENERATION_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[6] = Some(ItemStack {
+            id: SHINE_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[7] = Some(ItemStack {
+            id: WATER_WALKING_POTION,
+            count: 1,
+            prefix: Prefix(0),
+        });
+
+        assert!(quick_heal(&mut v, &mut inv));
+        assert_eq!(v.life, 100);
+        assert!(inv.slots[0].is_none());
+
+        assert!(quick_mana_with_max(&mut v, &mut inv, 150));
+        assert_eq!(v.mana, 100);
+        assert!(inv.slots[2].is_none());
+        assert!(quick_mana_with_max(&mut v, &mut inv, 150));
+        assert_eq!(v.mana, 150);
+        assert!(inv.slots[1].is_none());
+
+        assert!(quick_buff(&mut v, &mut inv));
+        assert_eq!(v.ironskin_ticks, IRONSKIN_TICKS);
+        assert_eq!(v.swiftness_ticks, SWIFTNESS_TICKS);
+        assert_eq!(v.regen_ticks, REGEN_TICKS);
+        assert_eq!(v.shine_ticks, SHINE_TICKS);
+        assert_eq!(v.water_walking_ticks, WATER_WALKING_TICKS);
+        for slot in 3..=7 {
+            assert!(
+                inv.slots[slot].is_none(),
+                "buff slot {slot} must be consumed"
+            );
+        }
+
+        // Direct use of Swiftness potion also applies swiftness_ticks
+        let mut sw_inv = inv_with(SWIFTNESS_POTION, 1, Prefix(0));
+        let mut v2 = Vitals::new();
+        assert!(apply_consumable(SWIFTNESS_POTION, &mut v2, &mut sw_inv));
+        assert_eq!(v2.swiftness_ticks, SWIFTNESS_TICKS);
+        assert!(sw_inv.slots[0].is_none());
     }
 }

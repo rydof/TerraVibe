@@ -100,6 +100,28 @@ pub const SMALL_ROCK: BlockId = BlockId(185);
 /// Cave shelf mushroom dressing (tile 71). Non-solid.
 pub const SHELF_MUSHROOM: BlockId = BlockId(71);
 
+// Pre-Hardmode Wave 1 blocks (Terraria tile ids)
+/// TileID.Meteorite (37). Solid, opaque, hot block (burns unless Obsidian Skull / fire_walk).
+pub const METEORITE_ORE: BlockId = BlockId(37);
+/// TileID.HeartLantern (42). Non-solid, non-opaque, emits warm pink light & regen aura.
+pub const HEART_LANTERN: BlockId = BlockId(42);
+/// TileID.MushroomGrass (70). Solid, opaque glowing blue mushroom grass on mud.
+pub const MUSHROOM_GRASS: BlockId = BlockId(70);
+/// TileID.MushroomPlants (72). Non-solid, non-opaque glowing mushroom herb.
+pub const GLOWING_MUSHROOM_PLANT: BlockId = BlockId(72);
+/// TileID.TinkerersWorkbench (114). Solid, opaque accessory combining station.
+pub const TINKERERS_WORKSHOP: BlockId = BlockId(114);
+/// TileID.Cloud (189). Solid, opaque floating island cloud block.
+pub const CLOUD_BLOCK: BlockId = BlockId(189);
+/// TileID.Sunplate (202). Solid, opaque skyware house block.
+pub const SUNPLATE_BLOCK: BlockId = BlockId(202);
+/// TileID.Campfire (215). Non-solid, non-opaque cozy fire light & regen aura.
+pub const CAMPFIRE: BlockId = BlockId(215);
+/// TileID.Hive (225). Solid, opaque jungle bee hive block.
+pub const HIVE_BLOCK: BlockId = BlockId(225);
+/// TileID.Larva (231). Non-solid, non-opaque Queen Bee summon object inside Jungle Bee Hives.
+pub const BEE_LARVA: BlockId = BlockId(231);
+
 /// What a physics `BlockQuery` returns for chunks that aren't loaded, so the
 /// player never falls through unloaded terrain.
 pub const SOLID_UNLOADED: BlockId = STONE;
@@ -124,6 +146,10 @@ impl BlockId {
                 | MOSS
                 | SMALL_ROCK
                 | SHELF_MUSHROOM
+                | HEART_LANTERN
+                | GLOWING_MUSHROOM_PLANT
+                | CAMPFIRE
+                | BEE_LARVA
         )
     }
 
@@ -146,6 +172,10 @@ impl BlockId {
                 | MOSS
                 | SMALL_ROCK
                 | SHELF_MUSHROOM
+                | HEART_LANTERN
+                | GLOWING_MUSHROOM_PLANT
+                | CAMPFIRE
+                | BEE_LARVA
         )
     }
 
@@ -154,41 +184,50 @@ impl BlockId {
         use crate::item as i;
         // WorldGen.KillTile_GetItemDrops
         Some(match self {
-            DIRT | GRASS => i::DIRT_BLOCK,              // case 0, 2
-            STONE => i::STONE_BLOCK,                    // case 1
-            TORCH => i::TORCH,                          // tile 4 drops its torch item
-            IRON => i::IRON_ORE,                        // case 6
-            COPPER => i::COPPER_ORE,                    // case 7
-            GOLD => i::GOLD_ORE,                        // case 8
-            SILVER => i::SILVER_ORE,                    // case 9
-            SAND => i::SAND_BLOCK,                      // case 53
-            MUD | JUNGLE_GRASS => i::MUD_BLOCK,         // case 59, 60
-            DEMONITE_ORE => i::DEMONITE_ORE_ITEM,       // case 22 (gameplay spec)
-            CORRUPT_GRASS => i::DIRT_BLOCK,             // case 23 (gameplay spec)
-            EBONSTONE => i::EBONSTONE_BLOCK,            // case 25 (gameplay spec)
-            SNOW => i::SNOW_BLOCK,                      // case 147
-            ICE => i::ICE_BLOCK,                        // createTile 161 (ItemID 664)
-            SANDSTONE => i::SANDSTONE_BLOCK,            // createTile 396 (ItemID 3271)
-            HARDENED_SAND => i::HARDENED_SAND_BLOCK,    // createTile 397 (ItemID 3272)
-            WOOD_BLOCK => i::WOOD,                      // createTile 30 (ItemID 9)
-            WORKBENCH => i::WORKBENCH_ITEM,             // createTile 18 (ItemID 36)
-            ANVIL => i::ANVIL_ITEM,                     // createTile 16 (ItemID 35, gameplay spec)
-            LIFE_CRYSTAL => i::LIFE_CRYSTAL_ITEM,       // case 12 (ItemID 29, gameplay spec)
-            CHEST => i::CHEST_ITEM,                     // createTile 21 (ItemID 48, gameplay spec)
-            DOOR_CLOSED | DOOR_OPEN => i::WOODEN_DOOR,  // createTile 10 (gameplay spec)
-            TABLE => i::WOODEN_TABLE,                   // createTile 14 (gameplay spec)
-            CHAIR => i::WOODEN_CHAIR,                   // createTile 15 (gameplay spec)
-            PLATFORM => i::WOOD_PLATFORM,               // createTile 19 (gameplay spec)
-            MUSHROOM_PLANT => i::MUSHROOM,              // surface mushroom plant (ItemID 5)
-            BOTTLE => i::BOTTLE_ITEM,                   // createTile 13 (gameplay spec case 31)
-            GLASS_BLOCK => i::GLASS,                    // createTile 54 (gameplay spec case 170)
-            FURNACE => i::FURNACE_ITEM,                 // createTile 17 (ItemID 33, gameplay spec)
-            OBSIDIAN => i::OBSIDIAN_ITEM,               // case 56 (ItemID 173)
-            ASH => i::ASH_BLOCK,                        // case 57 (ItemID 172)
-            HELLSTONE => i::HELLSTONE_ITEM,             // case 58 (ItemID 174)
-            OBSIDIAN_BRICK => i::OBSIDIAN_BRICK_ITEM,   // case 75 (ItemID 192)
+            DIRT | GRASS => i::DIRT_BLOCK,                    // case 0, 2
+            STONE => i::STONE_BLOCK,                          // case 1
+            TORCH => i::TORCH,                                // tile 4 drops its torch item
+            IRON => i::IRON_ORE,                              // case 6
+            COPPER => i::COPPER_ORE,                          // case 7
+            GOLD => i::GOLD_ORE,                              // case 8
+            SILVER => i::SILVER_ORE,                          // case 9
+            SAND => i::SAND_BLOCK,                            // case 53
+            MUD | JUNGLE_GRASS => i::MUD_BLOCK,               // case 59, 60
+            DEMONITE_ORE => i::DEMONITE_ORE_ITEM,             // case 22 (gameplay spec)
+            CORRUPT_GRASS => i::DIRT_BLOCK,                   // case 23 (gameplay spec)
+            EBONSTONE => i::EBONSTONE_BLOCK,                  // case 25 (gameplay spec)
+            SNOW => i::SNOW_BLOCK,                            // case 147
+            ICE => i::ICE_BLOCK,                              // createTile 161 (ItemID 664)
+            SANDSTONE => i::SANDSTONE_BLOCK,                  // createTile 396 (ItemID 3271)
+            HARDENED_SAND => i::HARDENED_SAND_BLOCK,          // createTile 397 (ItemID 3272)
+            WOOD_BLOCK => i::WOOD,                            // createTile 30 (ItemID 9)
+            WORKBENCH => i::WORKBENCH_ITEM,                   // createTile 18 (ItemID 36)
+            ANVIL => i::ANVIL_ITEM, // createTile 16 (ItemID 35, gameplay spec)
+            LIFE_CRYSTAL => i::LIFE_CRYSTAL_ITEM, // case 12 (ItemID 29, gameplay spec)
+            CHEST => i::CHEST_ITEM, // createTile 21 (ItemID 48, gameplay spec)
+            DOOR_CLOSED | DOOR_OPEN => i::WOODEN_DOOR, // createTile 10 (gameplay spec)
+            TABLE => i::WOODEN_TABLE, // createTile 14 (gameplay spec)
+            CHAIR => i::WOODEN_CHAIR, // createTile 15 (gameplay spec)
+            PLATFORM => i::WOOD_PLATFORM, // createTile 19 (gameplay spec)
+            MUSHROOM_PLANT => i::MUSHROOM, // surface mushroom plant (ItemID 5)
+            BOTTLE => i::BOTTLE_ITEM, // createTile 13 (gameplay spec case 31)
+            GLASS_BLOCK => i::GLASS, // createTile 54 (gameplay spec case 170)
+            FURNACE => i::FURNACE_ITEM, // createTile 17 (ItemID 33, gameplay spec)
+            OBSIDIAN => i::OBSIDIAN_ITEM, // case 56 (ItemID 173)
+            ASH => i::ASH_BLOCK,    // case 57 (ItemID 172)
+            HELLSTONE => i::HELLSTONE_ITEM, // case 58 (ItemID 174)
+            OBSIDIAN_BRICK => i::OBSIDIAN_BRICK_ITEM, // case 75 (ItemID 192)
             HELLSTONE_BRICK => i::HELLSTONE_BRICK_ITEM, // case 76 (ItemID 214)
-            HELLFORGE => i::HELLFORGE_ITEM,             // case 77 (ItemID 221)
+            HELLFORGE => i::HELLFORGE_ITEM, // case 77 (ItemID 221)
+            METEORITE_ORE => i::METEORITE_ITEM, // case 37 (ItemID 116)
+            HEART_LANTERN => i::HEART_LANTERN_ITEM, // case 42 (ItemID 1859)
+            MUSHROOM_GRASS => i::MUD_BLOCK, // case 70 drops Mud
+            GLOWING_MUSHROOM_PLANT => i::GLOWING_MUSHROOM, // case 72 (ItemID 183)
+            TINKERERS_WORKSHOP => i::TINKERERS_WORKSHOP_ITEM, // case 114 (ItemID 398)
+            CLOUD_BLOCK => i::CLOUD_ITEM, // case 189 (ItemID 751)
+            SUNPLATE_BLOCK => i::SUNPLATE_ITEM, // case 202 (ItemID 824)
+            CAMPFIRE => i::CAMPFIRE_ITEM, // case 215 (ItemID 966)
+            HIVE_BLOCK => i::HIVE_ITEM, // case 225 (ItemID 1124)
             // TRUNK (tile 5) drops nothing; the axe grants Wood per block.
             _ => return None,
         })

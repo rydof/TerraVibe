@@ -1,15 +1,19 @@
 //! World generation.
 
+pub mod bee_hive;
 pub mod biome;
 pub mod chest_gen;
 pub mod corruption;
 pub mod crystal;
 pub mod dressing;
 pub mod dungeon;
+pub mod jungle_shrine;
 pub mod liquid;
 pub mod mushroom;
+pub mod mushroom_biome;
 mod noise;
 pub mod ore;
+pub mod sky_island;
 pub mod terrain;
 pub mod tree;
 pub mod underworld;

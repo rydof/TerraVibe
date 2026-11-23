@@ -392,6 +392,15 @@ pub fn block_minimap_color(block: BlockId) -> [u8; 3] {
         terravibe_sim::block::SHELF_MUSHROOM => [205, 145, 85],
         terravibe_sim::block::STALACTITE => [110, 110, 120],
         terravibe_sim::block::SMALL_ROCK => [145, 140, 135],
+        terravibe_sim::block::METEORITE_ORE => [120, 65, 45],
+        terravibe_sim::block::HEART_LANTERN => [235, 60, 100],
+        terravibe_sim::block::MUSHROOM_GRASS => [45, 95, 210],
+        terravibe_sim::block::GLOWING_MUSHROOM_PLANT => [85, 165, 255],
+        terravibe_sim::block::TINKERERS_WORKSHOP => [75, 115, 190],
+        terravibe_sim::block::CLOUD_BLOCK => [235, 245, 255],
+        terravibe_sim::block::SUNPLATE_BLOCK => [215, 165, 60],
+        terravibe_sim::block::CAMPFIRE => [255, 150, 45],
+        terravibe_sim::block::HIVE_BLOCK => [190, 120, 35],
         _ => [128, 128, 128],
     }
 }

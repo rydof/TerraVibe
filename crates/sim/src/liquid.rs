@@ -405,7 +405,7 @@ impl LiquidSim {
 
             // Rule 5 (lava period check): Lava runs rules 1-3 only when tick % LAVA_PERIOD == 0.
             // Otherwise it stays in queue and does NOT count against the budget.
-            if cur.kind == LiquidKind::Lava && !tick.is_multiple_of(LAVA_PERIOD) {
+            if cur.kind != LiquidKind::Water && !tick.is_multiple_of(LAVA_PERIOD) {
                 if self.next_set.insert_tracked(p) {
                     self.next_queue.push(p);
                 }

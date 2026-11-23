@@ -29,7 +29,7 @@ const TURN_MIN: f32 = 0.005;
 /// Travel between snapshots (blocks) that counts as moving.
 const MOVE_MIN: f32 = 0.02;
 
-pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 38] = [
+pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 63] = [
     EnemyKind::Slime,
     EnemyKind::DemonEye,
     EnemyKind::EaterOfSouls,
@@ -39,6 +39,10 @@ pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 38] = [
     EnemyKind::Guide,
     EnemyKind::Merchant,
     EnemyKind::ArmsDealer,
+    EnemyKind::Nurse,
+    EnemyKind::Demolitionist,
+    EnemyKind::Dryad,
+    EnemyKind::GoblinTinkerer,
     EnemyKind::Skeleton,
     EnemyKind::CaveBat,
     EnemyKind::GiantWorm,
@@ -68,9 +72,30 @@ pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 38] = [
     EnemyKind::WallOfFleshEye,
     EnemyKind::TheHungry,
     EnemyKind::Leech,
+    EnemyKind::KingSlime,
+    EnemyKind::QueenBee,
+    EnemyKind::Bee,
+    EnemyKind::BloodZombie,
+    EnemyKind::Drippler,
+    EnemyKind::GoblinPeon,
+    EnemyKind::GoblinThief,
+    EnemyKind::GoblinWarrior,
+    EnemyKind::GoblinSorcerer,
+    EnemyKind::GoblinArcher,
+    EnemyKind::Antlion,
+    EnemyKind::Vulture,
+    EnemyKind::IceSlime,
+    EnemyKind::SnowFlinx,
+    EnemyKind::JungleSlime,
+    EnemyKind::Hornet,
+    EnemyKind::ManEater,
+    EnemyKind::Harpy,
+    EnemyKind::Shark,
+    EnemyKind::Crab,
+    EnemyKind::Piranha,
 ];
 
-pub(crate) const KINDS: [EnemyKind; 38] = ALL_ENEMY_KINDS;
+pub(crate) const KINDS: [EnemyKind; 63] = ALL_ENEMY_KINDS;
 
 /// Whether `kind` is rendered with a bespoke multi-part procedural 3D rig
 /// rather than a `.vox` rig directory.
@@ -86,6 +111,10 @@ pub(crate) fn has_procedural_rig(kind: EnemyKind) -> bool {
             | EnemyKind::Guide
             | EnemyKind::Merchant
             | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer
     )
 }
 
@@ -97,9 +126,9 @@ pub fn model_dir(kind: EnemyKind) -> &'static str {
         EnemyKind::EaterOfSouls => "eater_of_souls",
         EnemyKind::Zombie => "zombie",
         EnemyKind::EyeOfCthulhu => "eye_of_cthulhu",
-        EnemyKind::Guide => "guide",
-        EnemyKind::Merchant => "merchant",
-        EnemyKind::ArmsDealer => "arms_dealer",
+        EnemyKind::Guide | EnemyKind::Dryad => "guide",
+        EnemyKind::Merchant | EnemyKind::Nurse | EnemyKind::GoblinTinkerer => "merchant",
+        EnemyKind::ArmsDealer | EnemyKind::Demolitionist => "arms_dealer",
         _ => "procedural",
     }
 }
@@ -111,6 +140,10 @@ pub(crate) fn model_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::Guide
         | EnemyKind::Merchant
         | EnemyKind::ArmsDealer
+        | EnemyKind::Nurse
+        | EnemyKind::Demolitionist
+        | EnemyKind::Dryad
+        | EnemyKind::GoblinTinkerer
         | EnemyKind::Skeleton
         | EnemyKind::OldMan
         | EnemyKind::AngryBones
@@ -161,6 +194,27 @@ pub(crate) fn tint_for(kind: EnemyKind) -> Color {
         EnemyKind::WallOfFleshMouth | EnemyKind::WallOfFleshEye => Color::srgb(0.68, 0.16, 0.22),
         EnemyKind::TheHungry => Color::srgb(0.78, 0.20, 0.24),
         EnemyKind::Leech => Color::srgb(0.55, 0.14, 0.28),
+        EnemyKind::KingSlime => Color::srgba(0.22, 0.58, 0.96, 0.85),
+        EnemyKind::QueenBee => Color::srgb(0.95, 0.75, 0.15),
+        EnemyKind::Bee => Color::srgb(0.96, 0.80, 0.18),
+        EnemyKind::BloodZombie => Color::srgb(0.68, 0.16, 0.18),
+        EnemyKind::Drippler => Color::srgb(0.75, 0.12, 0.20),
+        EnemyKind::GoblinPeon
+        | EnemyKind::GoblinThief
+        | EnemyKind::GoblinWarrior
+        | EnemyKind::GoblinSorcerer
+        | EnemyKind::GoblinArcher => Color::srgb(0.42, 0.65, 0.34),
+        EnemyKind::Antlion => Color::srgb(0.78, 0.62, 0.32),
+        EnemyKind::Vulture => Color::srgb(0.45, 0.35, 0.28),
+        EnemyKind::IceSlime => Color::srgba(0.60, 0.88, 1.0, 0.85),
+        EnemyKind::SnowFlinx => Color::srgb(0.88, 0.90, 0.96),
+        EnemyKind::JungleSlime => Color::srgba(0.28, 0.72, 0.24, 0.85),
+        EnemyKind::Hornet => Color::srgb(0.85, 0.72, 0.14),
+        EnemyKind::ManEater => Color::srgb(0.25, 0.62, 0.22),
+        EnemyKind::Harpy => Color::srgb(0.48, 0.62, 0.92),
+        EnemyKind::Shark => Color::srgb(0.42, 0.50, 0.62),
+        EnemyKind::Crab => Color::srgb(0.88, 0.32, 0.18),
+        EnemyKind::Piranha => Color::srgb(0.32, 0.58, 0.42),
         _ => Color::WHITE,
     }
 }
@@ -191,6 +245,10 @@ pub(crate) fn anim_for(kind: EnemyKind, moving: bool) -> &'static str {
             | EnemyKind::Guide
             | EnemyKind::Merchant
             | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer
             | EnemyKind::Skeleton
             | EnemyKind::OldMan
             | EnemyKind::AngryBones
@@ -241,6 +299,10 @@ pub(crate) fn is_contact_enemy(kind: EnemyKind) -> bool {
         EnemyKind::Guide
             | EnemyKind::Merchant
             | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer
             | EnemyKind::OldMan
             | EnemyKind::FireImp
             | EnemyKind::DarkCaster
@@ -707,6 +769,121 @@ fn spawn_procedural_enemy(
                     proc_part(p, m, [0.16, 0.16, 0.25], tooth, [0.20, 0.0, 0.65]);
                 }),
             )
+        }
+        EnemyKind::KingSlime => {
+            let base = tint_for(kind);
+            let mat = proc_mat(materials, base, None);
+            let gold = proc_mat(
+                materials,
+                Color::srgb(1.0, 0.84, 0.18),
+                Some(LinearRgba::rgb(0.35, 0.25, 0.02)),
+            );
+            let ninja = proc_mat(materials, Color::srgb(0.14, 0.14, 0.20), None);
+            spawn_with(
+                commands,
+                meshes,
+                [4.2, 3.6, 4.2],
+                mat,
+                base,
+                Box::new(move |p, m| {
+                    // Ninja silhouette inside slime + golden crown on top
+                    proc_part(p, m, [1.2, 1.8, 1.0], ninja, [0.0, -0.2, 0.0]);
+                    proc_part(p, m, [1.8, 0.6, 1.8], gold.clone(), [0.0, 2.0, 0.0]);
+                    proc_part(p, m, [0.35, 0.5, 0.35], gold.clone(), [-0.65, 2.45, -0.65]);
+                    proc_part(p, m, [0.35, 0.5, 0.35], gold.clone(), [0.65, 2.45, -0.65]);
+                    proc_part(p, m, [0.35, 0.5, 0.35], gold, [0.0, 2.55, 0.65]);
+                }),
+            )
+        }
+        EnemyKind::QueenBee => {
+            let base = tint_for(kind);
+            let yellow = proc_mat(materials, base, None);
+            let stripe = proc_mat(materials, Color::srgb(0.16, 0.12, 0.08), None);
+            let wing = proc_mat(materials, Color::srgba(0.88, 0.94, 1.0, 0.72), None);
+            spawn_with(
+                commands,
+                meshes,
+                [1.8, 1.6, 2.8],
+                yellow,
+                base,
+                Box::new(move |p, m| {
+                    proc_part(p, m, [1.9, 1.4, 0.5], stripe.clone(), [0.0, 0.0, -0.5]);
+                    proc_part(p, m, [1.9, 1.4, 0.5], stripe.clone(), [0.0, 0.0, 0.5]);
+                    proc_part(p, m, [0.35, 0.35, 0.9], stripe, [0.0, -0.2, -1.7]);
+                    proc_part(p, m, [2.2, 0.12, 1.1], wing.clone(), [-1.4, 0.9, 0.0]);
+                    proc_part(p, m, [2.2, 0.12, 1.1], wing, [1.4, 0.9, 0.0]);
+                }),
+            )
+        }
+        EnemyKind::Bee => {
+            let base = tint_for(kind);
+            let yellow = proc_mat(materials, base, None);
+            let wing = proc_mat(materials, Color::srgba(0.90, 0.95, 1.0, 0.72), None);
+            spawn_with(
+                commands,
+                meshes,
+                [0.45, 0.4, 0.6],
+                yellow,
+                base,
+                Box::new(move |p, m| {
+                    proc_part(p, m, [0.55, 0.06, 0.3], wing.clone(), [-0.35, 0.25, 0.0]);
+                    proc_part(p, m, [0.55, 0.06, 0.3], wing, [0.35, 0.25, 0.0]);
+                }),
+            )
+        }
+        EnemyKind::BloodZombie
+        | EnemyKind::GoblinPeon
+        | EnemyKind::GoblinThief
+        | EnemyKind::GoblinWarrior
+        | EnemyKind::GoblinSorcerer
+        | EnemyKind::GoblinArcher
+        | EnemyKind::SnowFlinx => {
+            let base = tint_for(kind);
+            let mat = proc_mat(materials, base, None);
+            let dark = proc_mat(materials, Color::srgb(0.22, 0.20, 0.24), None);
+            spawn_with(
+                commands,
+                meshes,
+                [0.8, 1.1, 0.5],
+                mat.clone(),
+                base,
+                Box::new(move |p, m| {
+                    proc_part(p, m, [0.6, 0.6, 0.6], mat, [0.0, 0.85, 0.0]);
+                    proc_part(p, m, [0.25, 0.75, 0.25], dark.clone(), [-0.25, -0.75, 0.0]);
+                    proc_part(p, m, [0.25, 0.75, 0.25], dark, [0.25, -0.75, 0.0]);
+                }),
+            )
+        }
+        EnemyKind::IceSlime | EnemyKind::JungleSlime => {
+            let base = tint_for(kind);
+            let mat = proc_mat(materials, base, None);
+            spawn_with(
+                commands,
+                meshes,
+                [1.1, 0.8, 1.1],
+                mat,
+                base,
+                Box::new(|_, _| {}),
+            )
+        }
+        EnemyKind::Drippler
+        | EnemyKind::Antlion
+        | EnemyKind::Vulture
+        | EnemyKind::Hornet
+        | EnemyKind::ManEater
+        | EnemyKind::Harpy
+        | EnemyKind::Shark
+        | EnemyKind::Crab
+        | EnemyKind::Piranha => {
+            let base = tint_for(kind);
+            let mat = proc_mat(materials, base, None);
+            let size = match kind {
+                EnemyKind::Shark => [1.0, 0.7, 2.2],
+                EnemyKind::Crab => [1.1, 0.6, 0.9],
+                EnemyKind::Harpy => [0.9, 1.3, 0.7],
+                _ => [0.9, 0.8, 1.0],
+            };
+            spawn_with(commands, meshes, size, mat, base, Box::new(|_, _| {}))
         }
         EnemyKind::SkeletronHead | EnemyKind::DungeonGuardian => {
             let base = Color::srgb(0.92, 0.90, 0.82);

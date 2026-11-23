@@ -10,16 +10,27 @@ use std::sync::Arc;
 use bevy::prelude::*;
 use terravibe_sim::BlockId;
 use terravibe_sim::item::{
-    BREAKER_BLADE, COPPER_BAR, COPPER_BROADSWORD, COPPER_CHAINMAIL, COPPER_COIN, COPPER_GREAVES,
-    COPPER_HELMET, COPPER_SHORTSWORD, DEMON_BOW, EMPTY_BUCKET, FALLEN_STAR, FIERY_GREATSWORD,
-    FLAMING_ARROW, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_COIN, GOLD_GREAVES, GOLD_HELMET,
-    HEART, IRON_BAR, IRON_BROADSWORD, IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, ItemClass, ItemId,
-    LAVA_BUCKET, LENS, LESSER_HEALING_POTION, LIGHTS_BANE, MANA_CRYSTAL, MOLTEN_BREASTPLATE,
-    MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MURAMASA, MUSHROOM,
-    NIGHTMARE_PICKAXE, PLATINUM_COIN, PWNHAMMER, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALEMAIL,
-    SILVER_BAR, SILVER_BROADSWORD, SILVER_CHAINMAIL, SILVER_COIN, SILVER_GREAVES, SILVER_HELMET,
-    SPEAR, SUSPICIOUS_LOOKING_EYE, TORCH, WAND_OF_SPARKING, WAR_AXE_OF_THE_NIGHT, WATER_BUCKET,
-    WOOD_WALL, WOODEN_SWORD, all_item_ids, item_data,
+    ABEEMINATION, AGLET, AMAZON, ANKLET_OF_THE_WIND, BEE_BREASTPLATE, BEE_GREAVES, BEE_GUN,
+    BEE_HEADGEAR, BEE_KEEPER, BEE_WAX, BEENADE, BLADE_OF_GRASS, BLUE_PHASEBLADE, BREAKER_BLADE,
+    CLOUD_IN_A_BALLOON, COPPER_BAR, COPPER_BROADSWORD, COPPER_CHAINMAIL, COPPER_COIN,
+    COPPER_GREAVES, COPPER_HELMET, COPPER_SHORTSWORD, DARK_LANCE, DEMON_BOW, EMPTY_BUCKET,
+    FALLEN_STAR, FERAL_CLAWS, FIERY_GREATSWORD, FLAMELASH, FLAMING_ARROW, FLOWER_OF_FIRE,
+    GLOWING_MUSHROOM, GOBLIN_BATTLE_STANDARD, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_COIN,
+    GOLD_GREAVES, GOLD_HELMET, HARPOON, HEALING_POTION, HEART, HONEY_COMB, HOOK, IRON_BAR,
+    IRON_BROADSWORD, IRON_CHAIN, IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, IRONSKIN_POTION,
+    ItemClass, ItemId, JUNGLE_HAT, JUNGLE_PANTS, JUNGLE_SHIRT, JUNGLE_SPORES, LAVA_BUCKET, LENS,
+    LESSER_HEALING_POTION, LESSER_MANA_POTION, LIGHTNING_BOOTS, LIGHTS_BANE, MANA_CRYSTAL,
+    MANA_POTION, METEOR_HELMET, METEOR_LEGGINGS, METEOR_SUIT, METEORITE_BAR, MOLTEN_BREASTPLATE,
+    MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MONEY_TROUGH, MURAMASA, MUSHROOM,
+    NECRO_BREASTPLATE, NECRO_GREAVES, NECRO_HELMET, NIGHTMARE_PICKAXE, NIGHTS_EDGE, NINJA_HOOD,
+    NINJA_PANTS, NINJA_SHIRT, OBSIDIAN_SHIELD, PLATINUM_COIN, PWNHAMMER, RECALL_POTION,
+    REGENERATION_POTION, ROCKET_BOOTS, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALEMAIL,
+    SHARK_TOOTH_NECKLACE, SHINE_POTION, SILVER_BAR, SILVER_BROADSWORD, SILVER_CHAINMAIL,
+    SILVER_COIN, SILVER_GREAVES, SILVER_HELMET, SLIME_CROWN, SLIME_HOOK, SLIMY_SADDLE, SPACE_GUN,
+    SPEAR, SPECTRE_BOOTS, SPIKY_BALL, STAR_CANNON, STINGER, SUNFURY, SUSPICIOUS_LOOKING_EYE,
+    SWIFTNESS_POTION, THORN_CHAKRAM, TORCH, VINE, WAND_OF_SPARKING, WAR_AXE_OF_THE_NIGHT,
+    WATER_BOLT, WATER_BUCKET, WATER_WALKING_POTION, WOOD_WALL, WOODEN_SWORD, all_item_ids,
+    item_data,
 };
 
 use super::camera::{CameraMode, ControlMode, FlyCamera};
@@ -98,6 +109,12 @@ pub fn armor_parts(item: ItemId) -> Parts {
         MOLTEN_HELMET => set!(head "molten"),
         MOLTEN_BREASTPLATE => set!(body "molten"),
         MOLTEN_GREAVES => set!(legs "molten"),
+        METEOR_HELMET | JUNGLE_HAT | BEE_HEADGEAR | NINJA_HOOD => set!(head "shadow"),
+        METEOR_SUIT | JUNGLE_SHIRT | BEE_BREASTPLATE | NINJA_SHIRT => set!(body "shadow"),
+        METEOR_LEGGINGS | JUNGLE_PANTS | BEE_GREAVES | NINJA_PANTS => set!(legs "shadow"),
+        NECRO_HELMET => set!(head "silver"),
+        NECRO_BREASTPLATE => set!(body "silver"),
+        NECRO_GREAVES => set!(legs "silver"),
         _ => &[],
     }
 }
@@ -147,6 +164,17 @@ pub fn held_visual_for_item(id: ItemId) -> HeldVisualKind {
         GOLD_HELMET => vox("102.vox", [1.0, 0.85, 0.25, 1.0]),
         // Potions and buckets
         LESSER_HEALING_POTION => vox("288.vox", [1.0, 0.28, 0.35, 1.0]),
+        HEALING_POTION => vox("288.vox", [1.0, 0.12, 0.24, 1.0]),
+        LESSER_MANA_POTION => vox("288.vox", [0.35, 0.55, 1.0, 1.0]),
+        MANA_POTION => vox("288.vox", [0.18, 0.35, 1.0, 1.0]),
+        REGENERATION_POTION => vox("288.vox", [0.95, 0.38, 0.65, 1.0]),
+        SWIFTNESS_POTION => vox("288.vox", [0.40, 0.92, 0.62, 1.0]),
+        IRONSKIN_POTION => vox("288.vox", [0.95, 0.86, 0.32, 1.0]),
+        SHINE_POTION => vox("288.vox", [1.0, 0.96, 0.55, 1.0]),
+        WATER_WALKING_POTION => vox("288.vox", [0.22, 0.72, 0.95, 1.0]),
+        RECALL_POTION => vox("288.vox", [0.35, 0.85, 0.92, 1.0]),
+        GLOWING_MUSHROOM => vox("23.vox", [0.28, 0.62, 1.0, 1.0]),
+        IRON_CHAIN | HOOK => vox("57.vox", [0.68, 0.72, 0.78, 1.0]),
         EMPTY_BUCKET => vox("53.vox", [0.65, 0.68, 0.72, 1.0]),
         WATER_BUCKET => vox("53.vox", [0.25, 0.55, 0.95, 1.0]),
         LAVA_BUCKET => vox("53.vox", [1.0, 0.42, 0.12, 1.0]),
@@ -162,6 +190,58 @@ pub fn held_visual_for_item(id: ItemId) -> HeldVisualKind {
         HEART => vox("23.vox", [1.0, 0.20, 0.30, 1.0]),
         FALLEN_STAR => vox("115.vox", [1.0, 0.95, 0.35, 1.0]),
         MANA_CRYSTAL => vox("115.vox", [0.25, 0.55, 1.0, 1.0]),
+        // Wave 2: Jungle, Night's Edge, Meteorite, Shadow Chest, Class Armor, Accessories
+        JUNGLE_SPORES => vox("23.vox", [0.45, 0.95, 0.35, 1.0]),
+        STINGER => vox("40.vox", [0.85, 0.78, 0.25, 1.0]),
+        VINE => vox("9.vox", [0.22, 0.65, 0.25, 1.0]),
+        BLADE_OF_GRASS => vox("121.vox", [0.30, 0.88, 0.28, 1.0]),
+        THORN_CHAKRAM => vox("119.vox", [0.35, 0.85, 0.30, 1.0]),
+        AMAZON => vox("3317.vox", [0.28, 0.82, 0.35, 1.0]),
+        NIGHTS_EDGE => vox("121.vox", [0.58, 0.20, 0.85, 1.0]),
+        METEORITE_BAR => vox("57.vox", [0.82, 0.35, 0.22, 1.0]),
+        METEOR_HELMET | BEE_HEADGEAR => vox("102.vox", [0.75, 0.38, 0.25, 1.0]),
+        METEOR_SUIT | BEE_BREASTPLATE => vox("101.vox", [0.75, 0.38, 0.25, 1.0]),
+        METEOR_LEGGINGS | BEE_GREAVES => vox("100.vox", [0.75, 0.38, 0.25, 1.0]),
+        NECRO_HELMET => vox("102.vox", [0.85, 0.82, 0.78, 1.0]),
+        NECRO_BREASTPLATE => vox("101.vox", [0.85, 0.82, 0.78, 1.0]),
+        NECRO_GREAVES => vox("100.vox", [0.85, 0.82, 0.78, 1.0]),
+        JUNGLE_HAT => vox("102.vox", [0.25, 0.72, 0.32, 1.0]),
+        JUNGLE_SHIRT => vox("101.vox", [0.25, 0.72, 0.32, 1.0]),
+        JUNGLE_PANTS => vox("100.vox", [0.25, 0.72, 0.32, 1.0]),
+        SPACE_GUN => vox("514.vox", [0.45, 0.95, 0.35, 1.0]),
+        BLUE_PHASEBLADE => vox("155.vox", [0.25, 0.75, 1.0, 1.0]),
+        STAR_CANNON => vox("434.vox", [0.35, 0.55, 0.95, 1.0]),
+        WATER_BOLT => vox("157.vox", [0.20, 0.55, 1.0, 1.0]),
+        SUNFURY => vox("163.vox", [1.0, 0.45, 0.12, 1.0]),
+        DARK_LANCE => vox("274.vox", [0.48, 0.18, 0.65, 1.0]),
+        FLAMELASH => vox("113.vox", [1.0, 0.42, 0.15, 1.0]),
+        FLOWER_OF_FIRE => vox("157.vox", [1.0, 0.35, 0.12, 1.0]),
+        ROCKET_BOOTS => vox("54.vox", [0.85, 0.35, 0.25, 1.0]),
+        SPECTRE_BOOTS => vox("54.vox", [0.45, 0.85, 1.0, 1.0]),
+        LIGHTNING_BOOTS => vox("54.vox", [0.35, 0.95, 0.45, 1.0]),
+        OBSIDIAN_SHIELD => vox("156.vox", [0.38, 0.28, 0.55, 1.0]),
+        CLOUD_IN_A_BALLOON => vox("159.vox", [0.75, 0.92, 1.0, 1.0]),
+        AGLET | ANKLET_OF_THE_WIND => vox("49.vox", [0.45, 0.90, 0.45, 1.0]),
+        FERAL_CLAWS => vox("156.vox", [0.55, 0.38, 0.22, 1.0]),
+        SHARK_TOOTH_NECKLACE => vox("49.vox", [0.92, 0.90, 0.85, 1.0]),
+        // Wave 4: King Slime & Queen Bee
+        SLIME_CROWN => vox("102.vox", [0.30, 0.72, 1.0, 1.0]),
+        NINJA_HOOD => vox("102.vox", [0.22, 0.22, 0.30, 1.0]),
+        NINJA_SHIRT => vox("101.vox", [0.22, 0.22, 0.30, 1.0]),
+        NINJA_PANTS => vox("100.vox", [0.22, 0.22, 0.30, 1.0]),
+        SLIME_HOOK => vox("84.vox", [0.35, 0.78, 1.0, 1.0]),
+        SLIMY_SADDLE => vox("23.vox", [0.30, 0.75, 1.0, 1.0]),
+        ABEEMINATION => vox("23.vox", [0.96, 0.78, 0.18, 1.0]),
+        BEE_WAX => vox("23.vox", [0.95, 0.75, 0.15, 1.0]),
+        BEENADE => vox("168.vox", [0.98, 0.82, 0.15, 1.0]),
+        BEE_GUN => vox("514.vox", [0.96, 0.76, 0.12, 1.0]),
+        BEE_KEEPER => vox("121.vox", [0.95, 0.75, 0.15, 1.0]),
+        HONEY_COMB => vox("49.vox", [0.98, 0.74, 0.12, 1.0]),
+        // Wave 5: Events
+        GOBLIN_BATTLE_STANDARD => vox("39.vox", [0.45, 0.72, 0.35, 1.0]),
+        HARPOON => vox("274.vox", [0.72, 0.76, 0.82, 1.0]),
+        SPIKY_BALL => vox("168.vox", [0.65, 0.68, 0.72, 1.0]),
+        MONEY_TROUGH => vox("23.vox", [0.88, 0.52, 0.65, 1.0]),
         _ => vox("23.vox", UNTINTED),
     }
 }
@@ -187,7 +267,9 @@ fn explicit_vox_file(id: ItemId) -> Option<&'static str> {
         56 => "56.vox",
         57 => "57.vox",
         64 => "64.vox",
+        65 => "65.vox",
         70 => "70.vox",
+        84 => "84.vox",
         86 => "86.vox",
         95 => "95.vox",
         96 => "96.vox",
@@ -214,6 +296,9 @@ fn explicit_vox_file(id: ItemId) -> Option<&'static str> {
         162 => "162.vox",
         163 => "163.vox",
         164 => "164.vox",
+        166 => "166.vox",
+        167 => "167.vox",
+        168 => "168.vox",
         172 => "172.vox",
         173 => "173.vox",
         174 => "174.vox",
@@ -1035,7 +1120,7 @@ mod tests {
             }
             n += 1;
         }
-        assert_eq!(n, 18);
+        assert_eq!(n, 33);
     }
 
     #[test]
@@ -1061,7 +1146,7 @@ mod tests {
                 pairs += 1;
             }
         }
-        assert_eq!(pairs, 36);
+        assert_eq!(pairs, 66);
     }
 
     #[test]
@@ -1080,9 +1165,9 @@ mod tests {
     }
 
     #[test]
-    fn all_148_items_have_3d_held_representation() {
+    fn all_items_have_3d_held_representation() {
         let ids: Vec<_> = all_item_ids().collect();
-        assert_eq!(ids.len(), 148);
+        assert_eq!(ids.len(), 225);
         for id in ids {
             match held_visual_for_item(id) {
                 HeldVisualKind::Vox { file, .. } => {

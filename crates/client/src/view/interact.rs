@@ -786,7 +786,10 @@ fn on_use(
                 }
             }
             // Server-internal; never forwarded.
-            UseEvent::ItemDrop { .. } | UseEvent::ShadowOrbBroken { .. } => {}
+            UseEvent::ItemDrop { .. }
+            | UseEvent::ShadowOrbBroken { .. }
+            | UseEvent::Throw { .. }
+            | UseEvent::Grapple { .. } => {}
         }
     }
     let sound_gain = if crate::audio::focus_muted(settings.as_deref(), focus.as_deref()) {

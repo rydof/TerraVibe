@@ -46,6 +46,14 @@ pub struct Vitals {
     pub lava_time: i32,
     pub lava_max: i32,
     pub obsidian_skin_ticks: i32,
+    pub ironskin_ticks: i32,
+    pub swiftness_ticks: i32,
+    pub regen_ticks: i32,
+    pub shine_ticks: i32,
+    pub water_walking_ticks: i32,
+    pub campfire_active: bool,
+    pub heart_lantern_active: bool,
+    pub honey_ticks: i32,
 }
 
 impl Default for Vitals {
@@ -74,11 +82,28 @@ impl Vitals {
             lava_time: 0,
             lava_max: 0,
             obsidian_skin_ticks: 0,
+            ironskin_ticks: 0,
+            swiftness_ticks: 0,
+            regen_ticks: 0,
+            shine_ticks: 0,
+            water_walking_ticks: 0,
+            campfire_active: false,
+            heart_lantern_active: false,
+            honey_ticks: 0,
         }
     }
 
     pub fn tick_obsidian_skin(&mut self) {
         self.obsidian_skin_ticks = (self.obsidian_skin_ticks - 1).max(0);
+    }
+
+    pub fn tick_buffs(&mut self) {
+        self.ironskin_ticks = (self.ironskin_ticks - 1).max(0);
+        self.swiftness_ticks = (self.swiftness_ticks - 1).max(0);
+        self.regen_ticks = (self.regen_ticks - 1).max(0);
+        self.shine_ticks = (self.shine_ticks - 1).max(0);
+        self.water_walking_ticks = (self.water_walking_ticks - 1).max(0);
+        self.honey_ticks = (self.honey_ticks - 1).max(0);
     }
 
     pub fn tick_lava(&mut self, in_lava: bool) {

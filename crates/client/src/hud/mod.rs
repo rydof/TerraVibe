@@ -151,6 +151,13 @@ pub enum BuffBadgeKind {
     OnFire,
     ObsidianSkin,
     LavaWard,
+    Ironskin,
+    Swiftness,
+    Regen,
+    Shine,
+    WaterWalking,
+    CozyFire,
+    HeartLantern,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -199,6 +206,69 @@ pub fn active_buff_badges(v: &terravibe_sim::player::Vitals) -> Vec<BuffBadgeInf
             secs: (v.lava_time + 59).max(0) / 60,
             bg_color: Color::srgba(0.38, 0.22, 0.06, 0.92),
             border_color: Color::srgb(0.95, 0.72, 0.20),
+        });
+    }
+    if v.ironskin_ticks > 0 {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::Ironskin,
+            label: "Ironskin",
+            secs: (v.ironskin_ticks + 59) / 60,
+            bg_color: Color::srgba(0.35, 0.30, 0.12, 0.92),
+            border_color: Color::srgb(0.92, 0.80, 0.30),
+        });
+    }
+    if v.swiftness_ticks > 0 {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::Swiftness,
+            label: "Swiftness",
+            secs: (v.swiftness_ticks + 59) / 60,
+            bg_color: Color::srgba(0.12, 0.34, 0.22, 0.92),
+            border_color: Color::srgb(0.35, 0.90, 0.58),
+        });
+    }
+    if v.regen_ticks > 0 {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::Regen,
+            label: "Regen",
+            secs: (v.regen_ticks + 59) / 60,
+            bg_color: Color::srgba(0.38, 0.14, 0.28, 0.92),
+            border_color: Color::srgb(0.95, 0.42, 0.72),
+        });
+    }
+    if v.shine_ticks > 0 {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::Shine,
+            label: "Shine",
+            secs: (v.shine_ticks + 59) / 60,
+            bg_color: Color::srgba(0.38, 0.36, 0.14, 0.92),
+            border_color: Color::srgb(1.0, 0.94, 0.45),
+        });
+    }
+    if v.water_walking_ticks > 0 {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::WaterWalking,
+            label: "Water Walk",
+            secs: (v.water_walking_ticks + 59) / 60,
+            bg_color: Color::srgba(0.10, 0.28, 0.42, 0.92),
+            border_color: Color::srgb(0.32, 0.78, 0.98),
+        });
+    }
+    if v.campfire_active {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::CozyFire,
+            label: "Cozy Fire",
+            secs: 1,
+            bg_color: Color::srgba(0.42, 0.20, 0.08, 0.92),
+            border_color: Color::srgb(1.0, 0.58, 0.22),
+        });
+    }
+    if v.heart_lantern_active {
+        out.push(BuffBadgeInfo {
+            kind: BuffBadgeKind::HeartLantern,
+            label: "Heart Lamp",
+            secs: 1,
+            bg_color: Color::srgba(0.42, 0.12, 0.20, 0.92),
+            border_color: Color::srgb(1.0, 0.42, 0.56),
         });
     }
     out
@@ -720,8 +790,8 @@ fn setup_hud(
             p.spawn((ManaLabel, label("Mana"), abs_node([750.0, 6.0])));
         });
 
-    for i in 0..4 {
-        let left_x = 32.0 + i as f32 * 112.0;
+    for i in 0..8 {
+        let left_x = 32.0 + i as f32 * 100.0;
         let mut icon_ent = commands.spawn((
             BuffSlotIcon(i),
             Node {

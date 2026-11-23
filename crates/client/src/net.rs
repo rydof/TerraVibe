@@ -609,6 +609,30 @@ pub(crate) fn pump(
             ServerMsg::ShopResult { ok, cannot_afford } => {
                 town.write(crate::hud::town::TownMsg::Result { ok, cannot_afford });
             }
+            ServerMsg::NurseHealed {
+                ok,
+                healed,
+                cost_copper,
+            } => {
+                town.write(crate::hud::town::TownMsg::NurseHealed {
+                    ok,
+                    healed,
+                    cost_copper,
+                });
+            }
+            ServerMsg::ReforgeResult {
+                ok,
+                slot,
+                new_prefix,
+                cost_copper,
+            } => {
+                town.write(crate::hud::town::TownMsg::ReforgeResult {
+                    ok,
+                    slot,
+                    new_prefix,
+                    cost_copper,
+                });
+            }
             ServerMsg::Inventory(inv) => commands.insert_resource(LocalInventory(inv)),
             ServerMsg::Armor { pieces } => {
                 commands.insert_resource(LocalArmor(pieces));

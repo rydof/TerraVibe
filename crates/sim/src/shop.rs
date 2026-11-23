@@ -13,8 +13,10 @@ use crate::coin;
 use crate::facts::WorldFacts;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::{
-    ANVIL_ITEM, BUG_NET, COPPER_AXE, COPPER_PICKAXE, FLINTLOCK_PISTOL, ItemId,
-    LESSER_HEALING_POTION, MINISHARK, MUSKET_BALL, Prefix, Rng, TORCH, WOODEN_ARROW,
+    ANVIL_ITEM, BOMB, BUG_NET, COPPER_AXE, COPPER_PICKAXE, DYNAMITE, FLINTLOCK_PISTOL,
+    GLOWING_MUSHROOM, GRENADE, HOOK, IRON_CHAIN, ItemId, LESSER_HEALING_POTION, LESSER_MANA_POTION,
+    MINISHARK, MUSKET_BALL, Prefix, ROCKET_BOOTS, Rng, TINKERERS_WORKSHOP_ITEM, TORCH, VINE,
+    WOODEN_ARROW,
 };
 use crate::town_npc::TownKind;
 use crate::weather::WeatherKind;
@@ -37,7 +39,7 @@ const fn si(item: ItemId, price_copper: u32) -> ShopItem {
 
 /// Buy price is `value * PriceAdjustment` with a neutral 1.0 here
 /// (`Player.GetItemExpectedPrice`, gameplay spec).
-const MERCHANT: [ShopItem; 7] = [
+const MERCHANT: [ShopItem; 8] = [
     si(ANVIL_ITEM, 5000),
     si(COPPER_PICKAXE, 500),
     si(COPPER_AXE, 400),
@@ -45,6 +47,7 @@ const MERCHANT: [ShopItem; 7] = [
     si(LESSER_HEALING_POTION, 300),
     si(WOODEN_ARROW, 5),
     si(BUG_NET, 2500),
+    si(LESSER_MANA_POTION, 100),
 ];
 
 /// Arms Dealer stock: Musket Ball (7c), Flintlock Pistol (5g), Minishark (35g).
@@ -54,12 +57,76 @@ pub const ARMS_DEALER: [ShopItem; 3] = [
     si(MINISHARK, 350_000),
 ];
 
+pub const DEMOLITIONIST: [ShopItem; 3] = [si(GRENADE, 75), si(BOMB, 300), si(DYNAMITE, 2000)];
+
+pub const DRYAD: [ShopItem; 2] = [si(GLOWING_MUSHROOM, 100), si(VINE, 400)];
+
+pub const GOBLIN_TINKERER: [ShopItem; 4] = [
+    si(TINKERERS_WORKSHOP_ITEM, 100_000),
+    si(ROCKET_BOOTS, 50_000),
+    si(HOOK, 2000),
+    si(IRON_CHAIN, 200),
+];
+
 pub fn shop_stock(kind: TownKind) -> &'static [ShopItem] {
     match kind {
         TownKind::Merchant => &MERCHANT,
         TownKind::ArmsDealer => &ARMS_DEALER,
-        TownKind::Guide => &[],
+        TownKind::Demolitionist => &DEMOLITIONIST,
+        TownKind::Dryad => &DRYAD,
+        TownKind::GoblinTinkerer => &GOBLIN_TINKERER,
+        TownKind::Guide | TownKind::Nurse => &[],
     }
+}
+
+/// Nurse healing cost in copper: 1c per missing HP + 75c per active debuff (min 1c if needed).
+pub fn nurse_heal_cost(missing_hp: i32, debuff_count: u32) -> u32 {
+    let raw = missing_hp.max(0) as u32 + debuff_count * 75;
+    if missing_hp > 0 || debuff_count > 0 {
+        raw.max(1)
+    } else {
+        0
+    }
+}
+
+/// Goblin Tinkerer reforge cost in copper: 1/3 of item sell value (minimum 10 copper).
+pub fn reforge_cost(item: ItemId) -> u32 {
+    let val = item_value(item);
+    if val == 0 { 0 } else { (val / 3).max(10) }
+}
+
+/// Whether `item` can be reforged by the Goblin Tinkerer.
+pub fn is_reforgeable(item: ItemId) -> bool {
+    let d = crate::item::item_data(item);
+    matches!(
+        d.class,
+        crate::item::ItemClass::Melee
+            | crate::item::ItemClass::Ranged
+            | crate::item::ItemClass::Magic
+            | crate::item::ItemClass::Tool
+            | crate::item::ItemClass::Accessory
+    ) && d.max_stack == 1
+        && item_value(item) > 0
+}
+
+/// Pays the reforge cost and rolls a new prefix for `inv.slots[slot]`.
+pub fn reforge_slot(inv: &mut Inventory, slot: usize, rng: &mut Rng) -> Option<(Prefix, u32)> {
+    let st = inv.slots.get(slot).copied().flatten()?;
+    if !is_reforgeable(st.id) {
+        return None;
+    }
+    let cost = reforge_cost(st.id);
+    if !coin::pay(inv, cost) {
+        return None;
+    }
+    let mut new_prefix = crate::item::roll_prefix(st.id, &mut || rng.next_u32());
+    if new_prefix == st.prefix {
+        new_prefix = crate::item::roll_prefix(st.id, &mut || rng.next_u32());
+    }
+    if let Some(s) = inv.slots[slot].as_mut() {
+        s.prefix = new_prefix;
+    }
+    Some((new_prefix, cost))
 }
 
 /// Buys up to `count` units of stock entry `index`, clamped by affordability
@@ -182,7 +249,7 @@ pub fn town_dialogue(kind: TownKind, ctx: &DialogueContext, rng: &mut Rng) -> &'
         (TownKind::ArmsDealer, WeatherKind::Storm) => {
             pool.push("Thunder covers gunfire nicely, don't you think?");
         }
-        (_, WeatherKind::Clear) => {}
+        (_, _) => {}
     }
 
     if !ctx.is_day {
@@ -196,6 +263,7 @@ pub fn town_dialogue(kind: TownKind, ctx: &DialogueContext, rng: &mut Rng) -> &'
             TownKind::ArmsDealer => {
                 pool.push("Good night for hunting, if you have enough silver bullets.");
             }
+            _ => {}
         }
     }
 
@@ -227,7 +295,7 @@ pub fn town_dialogue(kind: TownKind, ctx: &DialogueContext, rng: &mut Rng) -> &'
         (TownKind::ArmsDealer, Biome::Jungle) => {
             pool.push("Plenty of target practice out in the jungle.");
         }
-        (_, Biome::Forest) => {}
+        (_, _) => {}
     }
 
     if ctx.facts.downed_skeletron {
@@ -241,6 +309,7 @@ pub fn town_dialogue(kind: TownKind, ctx: &DialogueContext, rng: &mut Rng) -> &'
             TownKind::ArmsDealer => {
                 pool.push("Nice trophy from Skeletron. Now let's talk firepower.");
             }
+            _ => {}
         }
     } else if ctx.facts.downed_eye {
         match kind {
@@ -253,6 +322,7 @@ pub fn town_dialogue(kind: TownKind, ctx: &DialogueContext, rng: &mut Rng) -> &'
             TownKind::ArmsDealer => {
                 pool.push("Dropped that giant eye, huh? You've earned a Minishark upgrade.");
             }
+            _ => {}
         }
     } else if ctx.facts.underworld_reached {
         match kind {
@@ -265,14 +335,35 @@ pub fn town_dialogue(kind: TownKind, ctx: &DialogueContext, rng: &mut Rng) -> &'
             TownKind::ArmsDealer => {
                 pool.push("Things get hot down there—bring plenty of lead.");
             }
+            _ => {}
         }
     }
 
     if pool.is_empty() {
-        let lines = match kind {
+        let lines: &[&str] = match kind {
             TownKind::Guide => &GUIDE_LINES,
             TownKind::Merchant => &MERCHANT_LINES,
             TownKind::ArmsDealer => &ARMS_DEALER_LINES,
+            TownKind::Nurse => &[
+                "Hold still! This will only sting for a second.",
+                "Let me patch those scratches right up.",
+                "Stop jumping into lava if you want to keep your coins!",
+            ],
+            TownKind::Demolitionist => &[
+                "Nothing solves a cave-in like a well-placed stick of dynamite!",
+                "Why mine with a pickaxe when you can blow up the whole mountain?",
+                "Keep your torches away from my pockets!",
+            ],
+            TownKind::Dryad => &[
+                "The balance of nature is fragile. Keep the Corruption at bay.",
+                "Listen to the trees; they remember every step you take.",
+                "You must cleanse the land before the darkness spreads further.",
+            ],
+            TownKind::GoblinTinkerer => &[
+                "I was kicked out for being too clever. Their loss, your gain!",
+                "Give me a weapon and some coins—I'll reforge it into something legendary.",
+                "Rocket boots? Oh yes, I never leave home without them.",
+            ],
         };
         return lines[rng.below(lines.len() as u32) as usize];
     }

@@ -45,6 +45,7 @@ pub struct Chunk {
 struct LiquidLayer {
     amounts: [u8; VOLUME],
     kind_bits: [u64; VOLUME / 64], // 0 = water, 1 = lava
+    honey_bits: [u64; VOLUME / 64],
     non_zero: usize,
 }
 
@@ -53,6 +54,7 @@ impl LiquidLayer {
         Box::new(LiquidLayer {
             amounts: [0; VOLUME],
             kind_bits: [0; VOLUME / 64],
+            honey_bits: [0; VOLUME / 64],
             non_zero: 0,
         })
     }
@@ -116,7 +118,9 @@ impl Chunk {
         if amount == 0 {
             return None;
         }
-        let kind = if (layer.kind_bits[i / 64] >> (i % 64)) & 1 == 1 {
+        let kind = if (layer.honey_bits[i / 64] >> (i % 64)) & 1 == 1 {
+            LiquidKind::Honey
+        } else if (layer.kind_bits[i / 64] >> (i % 64)) & 1 == 1 {
             LiquidKind::Lava
         } else {
             LiquidKind::Water
@@ -134,8 +138,18 @@ impl Chunk {
                 }
                 layer.amounts[i] = liquid.amount;
                 match liquid.kind {
-                    LiquidKind::Water => layer.kind_bits[i / 64] &= !(1u64 << (i % 64)),
-                    LiquidKind::Lava => layer.kind_bits[i / 64] |= 1u64 << (i % 64),
+                    LiquidKind::Water => {
+                        layer.kind_bits[i / 64] &= !(1u64 << (i % 64));
+                        layer.honey_bits[i / 64] &= !(1u64 << (i % 64));
+                    }
+                    LiquidKind::Lava => {
+                        layer.kind_bits[i / 64] |= 1u64 << (i % 64);
+                        layer.honey_bits[i / 64] &= !(1u64 << (i % 64));
+                    }
+                    LiquidKind::Honey => {
+                        layer.kind_bits[i / 64] &= !(1u64 << (i % 64));
+                        layer.honey_bits[i / 64] |= 1u64 << (i % 64);
+                    }
                 }
             }
             _ => {
@@ -143,6 +157,7 @@ impl Chunk {
                     if layer.amounts[i] != 0 {
                         layer.amounts[i] = 0;
                         layer.kind_bits[i / 64] &= !(1u64 << (i % 64));
+                        layer.honey_bits[i / 64] &= !(1u64 << (i % 64));
                         layer.non_zero -= 1;
                         if layer.non_zero == 0 {
                             self.liquid = None;

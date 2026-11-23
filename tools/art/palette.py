@@ -147,3 +147,24 @@ OBS_BRICK_L = hexc("#534378")
 HELL_BRICK_D = hexc("#3b1614")
 HELL_BRICK = hexc("#69251e")
 HELL_BRICK_L = hexc("#d95326")
+
+# Wave 1 Pre-Hardmode block/model palette colours.
+MUSH_BLUE_D = hexc("#16347a")
+MUSH_BLUE = hexc("#285ec4")
+MUSH_BLUE_L = hexc("#5ca3ff")
+
+CLOUD_D = hexc("#c7d8eb")
+CLOUD = hexc("#ebf4fc")
+CLOUD_L = hexc("#ffffff")
+
+SUNPLATE_D = hexc("#8a5d1c")
+SUNPLATE = hexc("#d69f38")
+SUNPLATE_L = hexc("#ffe278")
+
+METEOR_D = hexc("#331c1a")
+METEOR = hexc("#633326")
+METEOR_L = hexc("#ff7828")
+
+HIVE_D = hexc("#804914")
+HIVE = hexc("#bf7821")
+HIVE_L = hexc("#ebaa42")

@@ -516,8 +516,12 @@ pub fn generate_chunk_sized(seed: u32, pos: ChunkPos, size: WorldSize) -> Chunk 
     super::chest_gen::apply_for_size(seed, pos, size, &mut chunk);
     tree::decorate_for_size(seed, pos, size, &mut chunk);
     super::mushroom::apply_for_size(seed, pos, size, &mut chunk);
+    super::mushroom_biome::apply_for_size(seed, pos, size, &mut chunk);
     apply_cabins_for_size(seed, pos, size, &mut chunk);
     super::dungeon::apply_for_size(seed, pos, size, &mut chunk);
+    super::jungle_shrine::apply_for_size(seed, pos, size, &mut chunk);
+    super::bee_hive::apply_for_size(seed, pos, size, &mut chunk);
+    super::sky_island::apply_for_size(seed, pos, size, &mut chunk);
     super::liquid::apply(seed, pos, size, &mut chunk);
     super::dressing::apply_for_size(seed, pos, size, &mut chunk);
     chunk
@@ -757,6 +761,7 @@ mod tests {
         seen.remove(&TRUNK);
         // The mushroom plant drops its Mushroom pickup, and Life Crystal drops Heart Crystal (consumables).
         seen.remove(&crate::block::MUSHROOM_PLANT);
+        seen.remove(&crate::block::GLOWING_MUSHROOM_PLANT);
         seen.remove(&LIFE_CRYSTAL);
         // Pots drop server-rolled coins/potions and dressing tiles are worldgen-only.
         for dressing in [POT, STALACTITE, MOSS, SMALL_ROCK, SHELF_MUSHROOM] {

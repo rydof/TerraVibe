@@ -17,8 +17,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn audit_covers_all_148_items() {
+    fn audit_covers_all_items() {
         let audit = build_held_items_audit();
-        assert_eq!(audit.len(), 148);
+        assert_eq!(audit.len(), 225);
     }
 }

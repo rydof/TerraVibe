@@ -2,6 +2,7 @@
 pub enum LiquidKind {
     Water,
     Lava,
+    Honey,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -29,15 +30,23 @@ impl Liquid {
         }
     }
 
+    pub const fn honey(amount: u8) -> Self {
+        Self {
+            kind: LiquidKind::Honey,
+            amount,
+        }
+    }
+
     pub const fn pack(l: Option<Liquid>) -> u16 {
         match l {
             Some(Liquid { amount, .. }) if amount == 0 => 0,
             Some(Liquid { kind, amount }) => {
-                let kind_bit = match kind {
+                let kind_bits = match kind {
                     LiquidKind::Water => 0u16,
                     LiquidKind::Lava => 1u16,
+                    LiquidKind::Honey => 2u16,
                 };
-                (kind_bit << 8) | (amount as u16)
+                (kind_bits << 8) | (amount as u16)
             }
             None => 0,
         }
@@ -48,10 +57,10 @@ impl Liquid {
         if amount == 0 {
             return None;
         }
-        let kind = if (raw >> 8) & 1 == 1 {
-            LiquidKind::Lava
-        } else {
-            LiquidKind::Water
+        let kind = match (raw >> 8) & 3 {
+            1 => LiquidKind::Lava,
+            2 => LiquidKind::Honey,
+            _ => LiquidKind::Water,
         };
         Some(Liquid { kind, amount })
     }
