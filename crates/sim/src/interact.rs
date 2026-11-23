@@ -881,7 +881,7 @@ pub fn tick_use_with_mana(
                         st.time = use_time;
                     }
                 }
-            } else if matches!(s.id, BOMB | DYNAMITE | GRENADE) {
+            } else if matches!(s.id, BOMB | DYNAMITE | GRENADE | crate::item::BEENADE) {
                 inv.take_one_selected();
                 ev.push(UseEvent::Throw {
                     item: s.id,
@@ -889,7 +889,7 @@ pub fn tick_use_with_mana(
                     dir,
                 });
                 st.time = use_time;
-            } else if s.id == GRAPPLING_HOOK {
+            } else if s.id == GRAPPLING_HOOK || s.id == crate::item::SLIME_HOOK {
                 ev.push(UseEvent::Grapple { origin: eye, dir });
                 st.time = use_time;
             } else if data.class == ItemClass::Consumable {

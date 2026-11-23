@@ -53,6 +53,7 @@ pub struct Vitals {
     pub water_walking_ticks: i32,
     pub campfire_active: bool,
     pub heart_lantern_active: bool,
+    pub honey_ticks: i32,
 }
 
 impl Default for Vitals {
@@ -88,6 +89,7 @@ impl Vitals {
             water_walking_ticks: 0,
             campfire_active: false,
             heart_lantern_active: false,
+            honey_ticks: 0,
         }
     }
 
@@ -101,6 +103,7 @@ impl Vitals {
         self.regen_ticks = (self.regen_ticks - 1).max(0);
         self.shine_ticks = (self.shine_ticks - 1).max(0);
         self.water_walking_ticks = (self.water_walking_ticks - 1).max(0);
+        self.honey_ticks = (self.honey_ticks - 1).max(0);
     }
 
     pub fn tick_lava(&mut self, in_lava: bool) {

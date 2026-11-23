@@ -77,6 +77,9 @@ pub fn cause_text(cause: DeathCause) -> String {
             EnemyKind::Demolitionist => "Slain by Demolitionist.".into(),
             EnemyKind::Dryad => "Slain by Dryad.".into(),
             EnemyKind::GoblinTinkerer => "Slain by Goblin Tinkerer.".into(),
+            EnemyKind::KingSlime => "Squashed by King Slime.".into(),
+            EnemyKind::QueenBee => "Stung to death by Queen Bee.".into(),
+            EnemyKind::Bee => "Stung by a Bee.".into(),
             EnemyKind::OldMan => "Slain by Old Man.".into(),
             EnemyKind::Bunny | EnemyKind::Squirrel | EnemyKind::Bird | EnemyKind::CaveCritter => {
                 "Slain by critter.".into()
@@ -110,6 +113,7 @@ pub fn cause_text(cause: DeathCause) -> String {
             ProjKind::FallenStarShot => "Obliterated by a Star Cannon.".into(),
             ProjKind::FlowerOfFire => "Incinerated by a Flower of Fire.".into(),
             ProjKind::Flamelash => "Scorched by a Flamelash.".into(),
+            ProjKind::BeeShot => "Stung by a homing Bee.".into(),
         },
         DeathCause::Fall => "Fell to their death.".into(),
         DeathCause::Lava => "Burned in lava.".into(),

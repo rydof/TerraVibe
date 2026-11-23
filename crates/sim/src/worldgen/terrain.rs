@@ -520,6 +520,7 @@ pub fn generate_chunk_sized(seed: u32, pos: ChunkPos, size: WorldSize) -> Chunk 
     apply_cabins_for_size(seed, pos, size, &mut chunk);
     super::dungeon::apply_for_size(seed, pos, size, &mut chunk);
     super::jungle_shrine::apply_for_size(seed, pos, size, &mut chunk);
+    super::bee_hive::apply_for_size(seed, pos, size, &mut chunk);
     super::sky_island::apply_for_size(seed, pos, size, &mut chunk);
     super::liquid::apply(seed, pos, size, &mut chunk);
     super::dressing::apply_for_size(seed, pos, size, &mut chunk);

@@ -198,6 +198,55 @@ pub fn roll_wof_loot(rng: &mut Rng) -> Vec<ItemStack> {
     out
 }
 
+/// King Slime guaranteed drops: Slime Hook or Slimy Saddle, 2 Ninja pieces, coins, potions.
+pub fn roll_king_slime_loot(rng: &mut Rng) -> Vec<ItemStack> {
+    use crate::item::{
+        GOLD_COIN, LESSER_HEALING_POTION, NINJA_HOOD, NINJA_PANTS, NINJA_SHIRT, SLIME_HOOK,
+        SLIMY_SADDLE,
+    };
+    let main = if rng.below(2) == 0 {
+        SLIME_HOOK
+    } else {
+        SLIMY_SADDLE
+    };
+    let ninja = match rng.below(3) {
+        0 => (NINJA_HOOD, NINJA_SHIRT),
+        1 => (NINJA_SHIRT, NINJA_PANTS),
+        _ => (NINJA_HOOD, NINJA_PANTS),
+    };
+    let mut out = vec![
+        stack(main, 1),
+        stack(ninja.0, 1),
+        stack(ninja.1, 1),
+        stack(GOLD_COIN, 1 + rng.below(2)),
+        stack(LESSER_HEALING_POTION, 5 + rng.below(6)),
+    ];
+    roll_item_prefixes(&mut out, rng);
+    out
+}
+
+/// Queen Bee guaranteed drops: Bee Wax, Beenades, Bee Gun/Bee Keeper, Honey Comb, coins, potions.
+pub fn roll_queen_bee_loot(rng: &mut Rng) -> Vec<ItemStack> {
+    use crate::item::{
+        BEE_GUN, BEE_KEEPER, BEE_WAX, BEENADE, GOLD_COIN, HONEY_COMB, LESSER_HEALING_POTION,
+    };
+    let weapon = if rng.below(2) == 0 {
+        BEE_GUN
+    } else {
+        BEE_KEEPER
+    };
+    let mut out = vec![
+        stack(weapon, 1),
+        stack(HONEY_COMB, 1),
+        stack(BEE_WAX, 16 + rng.below(11)),
+        stack(BEENADE, 15 + rng.below(16)),
+        stack(GOLD_COIN, 5),
+        stack(LESSER_HEALING_POTION, 5 + rng.below(6)),
+    ];
+    roll_item_prefixes(&mut out, rng);
+    out
+}
+
 /// Breakable pot loot: always drops coins, with a chance for Lesser Healing
 /// Potions and Torches.
 pub fn roll_pot_loot(rng: &mut Rng) -> Vec<ItemStack> {

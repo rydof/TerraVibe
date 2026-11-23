@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use terravibe_sim::{
-    ANVIL, BOTTLE, BlockId, CAMPFIRE, CHAIR, CHEST, CHUNK_SIZE, Chunk, ChunkPos, DEMON_ALTAR,
-    DOOR_CLOSED, DOOR_OPEN, FURNACE, GLOWING_MUSHROOM_PLANT, HEART_LANTERN, HELLFORGE,
+    ANVIL, BEE_LARVA, BOTTLE, BlockId, CAMPFIRE, CHAIR, CHEST, CHUNK_SIZE, Chunk, ChunkPos,
+    DEMON_ALTAR, DOOR_CLOSED, DOOR_OPEN, FURNACE, GLOWING_MUSHROOM_PLANT, HEART_LANTERN, HELLFORGE,
     LIFE_CRYSTAL, MOSS, MUSHROOM_PLANT, PLATFORM, POT, SHELF_MUSHROOM, SMALL_ROCK, STALACTITE,
     TABLE, TINKERERS_WORKSHOP, TORCH, TRUNK, WORKBENCH,
 };
@@ -50,6 +50,7 @@ pub fn model_file(id: BlockId) -> Option<&'static str> {
         GLOWING_MUSHROOM_PLANT => "glowing_mushroom.vox",
         TINKERERS_WORKSHOP => "tinkerers_workshop.vox",
         CAMPFIRE => "campfire.vox",
+        BEE_LARVA => "life_crystal.vox",
         _ => return None,
     })
 }

@@ -7,8 +7,8 @@ use crate::chunk::BlockQuery;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::Prefix;
 use crate::item::{
-    AGLET, AMAZON, ANKLET_OF_THE_WIND, ANVIL_ITEM, BEE_BREASTPLATE, BEE_GREAVES, BEE_HEADGEAR,
-    BLADE_OF_GRASS, BLUE_PHASEBLADE, BONE, BOTTLE_ITEM, CAMPFIRE_ITEM, CHEST_ITEM,
+    ABEEMINATION, AGLET, AMAZON, ANKLET_OF_THE_WIND, ANVIL_ITEM, BEE_BREASTPLATE, BEE_GREAVES,
+    BEE_HEADGEAR, BLADE_OF_GRASS, BLUE_PHASEBLADE, BONE, BOTTLE_ITEM, CAMPFIRE_ITEM, CHEST_ITEM,
     CLOUD_IN_A_BALLOON, CLOUD_IN_A_BOTTLE, COBALT_SHIELD, COPPER_AXE, COPPER_BAR,
     COPPER_BROADSWORD, COPPER_CHAINMAIL, COPPER_GREAVES, COPPER_HELMET, COPPER_ORE, COPPER_PICKAXE,
     DEMON_BOW, DEMONITE_BAR, DEMONITE_ORE_ITEM, EBONSTONE_BLOCK, EMPTY_BUCKET, ENCHANTED_BOOMERANG,
@@ -26,11 +26,11 @@ use crate::item::{
     OBSIDIAN_BRICK_ITEM, OBSIDIAN_ITEM, OBSIDIAN_SHIELD, OBSIDIAN_SKULL, PHOENIX_BLASTER,
     REGENERATION_POTION, ROCKET_BOOTS, SAND_BLOCK, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALE,
     SHADOW_SCALEMAIL, SHINE_POTION, SHINY_RED_BALLOON, SILVER_AXE, SILVER_BAR, SILVER_BROADSWORD,
-    SILVER_CHAINMAIL, SILVER_GREAVES, SILVER_HELMET, SILVER_ORE, SILVER_PICKAXE, SPACE_GUN,
-    SPECTRE_BOOTS, STAR_CANNON, STINGER, STONE_BLOCK, SUSPICIOUS_LOOKING_EYE, SWIFTNESS_POTION,
-    THE_BREAKER, THORN_CHAKRAM, TORCH, VINE, WAR_AXE_OF_THE_NIGHT, WATER_WALKING_POTION, WOOD,
-    WOOD_PLATFORM, WOOD_WALL, WOODEN_ARROW, WOODEN_BOW, WOODEN_CHAIR, WOODEN_DOOR, WOODEN_HAMMER,
-    WOODEN_SWORD, WOODEN_TABLE, WORKBENCH_ITEM, WORM_FOOD,
+    SILVER_CHAINMAIL, SILVER_GREAVES, SILVER_HELMET, SILVER_ORE, SILVER_PICKAXE, SLIME_CROWN,
+    SPACE_GUN, SPECTRE_BOOTS, STAR_CANNON, STINGER, STONE_BLOCK, SUSPICIOUS_LOOKING_EYE,
+    SWIFTNESS_POTION, THE_BREAKER, THORN_CHAKRAM, TORCH, VINE, WAR_AXE_OF_THE_NIGHT,
+    WATER_WALKING_POTION, WOOD, WOOD_PLATFORM, WOOD_WALL, WOODEN_ARROW, WOODEN_BOW, WOODEN_CHAIR,
+    WOODEN_DOOR, WOODEN_HAMMER, WOODEN_SWORD, WOODEN_TABLE, WORKBENCH_ITEM, WORM_FOOD,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -161,12 +161,14 @@ pub const SPECTRE_BOOTS_RECIPE: RecipeId = RecipeId(103);
 pub const OBSIDIAN_SHIELD_RECIPE: RecipeId = RecipeId(104);
 pub const CLOUD_IN_A_BALLOON_RECIPE: RecipeId = RecipeId(105);
 pub const LIGHTNING_BOOTS_RECIPE: RecipeId = RecipeId(106);
+pub const SLIME_CROWN_RECIPE: RecipeId = RecipeId(107);
+pub const ABEEMINATION_RECIPE: RecipeId = RecipeId(108);
 
 const fn ing(item: ItemId, count: u32) -> Ingredient {
     Ingredient { item, count }
 }
 
-pub static RECIPES: [Recipe; 107] = [
+pub static RECIPES: [Recipe; 109] = [
     // gameplay spec: 10 Wood -> Work Bench, no station
     Recipe {
         id: WORKBENCH_RECIPE,
@@ -903,6 +905,18 @@ pub static RECIPES: [Recipe; 107] = [
         ],
         station: Some(TINKERERS_WORKSHOP),
     },
+    Recipe {
+        id: SLIME_CROWN_RECIPE,
+        output: ing(SLIME_CROWN, 1),
+        ingredients: &[ing(GEL, 20), ing(GOLD_BAR, 5)],
+        station: Some(DEMON_ALTAR),
+    },
+    Recipe {
+        id: ABEEMINATION_RECIPE,
+        output: ing(ABEEMINATION, 1),
+        ingredients: &[ing(HIVE_ITEM, 5), ing(STINGER, 2), ing(BOTTLE_ITEM, 1)],
+        station: None,
+    },
 ];
 
 pub fn recipe(id: RecipeId) -> Option<&'static Recipe> {
@@ -1302,11 +1316,11 @@ mod tests {
 
     #[test]
     fn recipe_lookup_by_id() {
-        for i in 0..107 {
+        for i in 0..109 {
             assert_eq!(recipe(RecipeId(i)).unwrap().id, RecipeId(i));
         }
         assert!(recipe(RecipeId(999)).is_none());
-        assert_eq!(recipes().len(), 107);
+        assert_eq!(recipes().len(), 109);
     }
 
     #[test]
@@ -1523,7 +1537,7 @@ mod tests {
         assert_eq!(r.output, ing(MANA_CRYSTAL, 1));
         assert_eq!(r.ingredients, &[ing(FALLEN_STAR, 5)]);
         assert_eq!(r.station, None);
-        assert_eq!(recipes().len(), 107);
+        assert_eq!(recipes().len(), 109);
     }
 
     #[test]

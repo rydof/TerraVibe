@@ -1,5 +1,6 @@
 //! World generation.
 
+pub mod bee_hive;
 pub mod biome;
 pub mod chest_gen;
 pub mod corruption;

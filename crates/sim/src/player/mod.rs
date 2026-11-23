@@ -224,6 +224,13 @@ impl Player {
             && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::JUNGLE_PANTS)
     }
 
+    /// Full set bonus for Ninja Armor: +20% movement speed and +9% crit.
+    pub fn has_ninja_set(&self) -> bool {
+        self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::NINJA_HOOD)
+            && self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::NINJA_SHIRT)
+            && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::NINJA_PANTS)
+    }
+
     /// Full set bonus for Bee Armor: +10% damage and +10% movement speed.
     pub fn has_bee_set(&self) -> bool {
         self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::BEE_HEADGEAR)
@@ -624,6 +631,9 @@ pub fn tick_player_bounded(
         let z = p.body.pos[2].floor() as i32;
         q.liquid(x, y, z).filter(|l| l.amount >= 1)
     };
+    if p.body.wet == Some(LiquidKind::Honey) {
+        p.vitals.honey_ticks = 1800;
+    }
     let in_water = p.body.wet == Some(LiquidKind::Water)
         || head_l.is_some_and(|l| l.kind == LiquidKind::Water);
     let in_lava =
@@ -844,6 +854,10 @@ fn query_body_liquid(q: &impl BlockQuery, b: &PlayerBody) -> Option<LiquidKind> 
         || torso_l.is_some_and(|l| l.kind == LiquidKind::Lava)
     {
         Some(LiquidKind::Lava)
+    } else if feet_l.is_some_and(|l| l.kind == LiquidKind::Honey)
+        || torso_l.is_some_and(|l| l.kind == LiquidKind::Honey)
+    {
+        Some(LiquidKind::Honey)
     } else if feet_l.is_some_and(|l| l.kind == LiquidKind::Water)
         || torso_l.is_some_and(|l| l.kind == LiquidKind::Water)
     {
@@ -895,7 +909,7 @@ pub fn step_body_bounded(
 
     let move_scale = match body.wet {
         Some(LiquidKind::Water) => consts::WATER_MOVE_SCALE,
-        Some(LiquidKind::Lava) => consts::LAVA_MOVE_SCALE,
+        Some(LiquidKind::Lava | LiquidKind::Honey) => consts::LAVA_MOVE_SCALE,
         None => 1.0,
     };
 
@@ -1002,7 +1016,7 @@ pub fn step_body_bounded(
     } else {
         consts::JUMP_HEIGHT_TICKS
     };
-    if body.wet == Some(LiquidKind::Water) {
+    if matches!(body.wet, Some(LiquidKind::Water | LiquidKind::Honey)) {
         if input.jump {
             body.vel[1] = consts::SWIM_UP_SPEED;
             body.jump_ticks = 0;

@@ -231,10 +231,8 @@ fn pack_cell(chunk: &Chunk, lx: usize, ly: usize, lz: usize) -> u8 {
     } else if let Some(liq) = chunk.liquid(lx, ly, lz)
         && liq.amount >= 1
     {
-        match liq.kind {
-            LiquidKind::Lava => CELL_LAVA,
-            LiquidKind::Water => CELL_WATER,
-        }
+        let is_lava = matches!(liq.kind, LiquidKind::Lava);
+        if is_lava { CELL_LAVA } else { CELL_WATER }
     } else {
         CELL_AIR
     }

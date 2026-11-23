@@ -209,6 +209,7 @@ fn projectile_scale_and_axis(kind: ProjKind) -> (f32, Vec3) {
         ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => (0.45, Vec3::Y),
         ProjKind::GrappleHook => (0.42, MODEL_AXIS.normalize()),
         ProjKind::StarfuryStar | ProjKind::FallenStarShot => (1.0, Vec3::Y),
+        ProjKind::BeeShot => (0.28, MODEL_AXIS.normalize()),
         ProjKind::Arrow
         | ProjKind::FlamingArrow
         | ProjKind::Spark
@@ -241,6 +242,7 @@ fn projectile_trail_color(kind: ProjKind) -> Color {
         ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => Color::srgb(1.0, 0.55, 0.15),
         ProjKind::GrappleHook => Color::srgb(0.70, 0.74, 0.80),
         ProjKind::StarfuryStar | ProjKind::FallenStarShot => Color::srgb(1.0, 0.65, 0.92),
+        ProjKind::BeeShot => Color::srgb(0.98, 0.80, 0.15),
         ProjKind::Arrow | ProjKind::Boomerang | ProjKind::Spear => Color::srgb(0.85, 0.85, 0.88),
     }
 }
@@ -278,6 +280,7 @@ fn projectile_visual_pair(
         ProjKind::StarfuryStar | ProjKind::FallenStarShot => {
             (vis.star_mat.clone(), vis.star_mesh.clone())
         }
+        ProjKind::BeeShot => (vis.bullet.clone(), vis.bullet_mesh.clone()),
     }
 }
 

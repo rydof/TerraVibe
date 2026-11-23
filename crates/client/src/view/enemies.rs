@@ -29,7 +29,7 @@ const TURN_MIN: f32 = 0.005;
 /// Travel between snapshots (blocks) that counts as moving.
 const MOVE_MIN: f32 = 0.02;
 
-pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 42] = [
+pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 45] = [
     EnemyKind::Slime,
     EnemyKind::DemonEye,
     EnemyKind::EaterOfSouls,
@@ -72,9 +72,12 @@ pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 42] = [
     EnemyKind::WallOfFleshEye,
     EnemyKind::TheHungry,
     EnemyKind::Leech,
+    EnemyKind::KingSlime,
+    EnemyKind::QueenBee,
+    EnemyKind::Bee,
 ];
 
-pub(crate) const KINDS: [EnemyKind; 42] = ALL_ENEMY_KINDS;
+pub(crate) const KINDS: [EnemyKind; 45] = ALL_ENEMY_KINDS;
 
 /// Whether `kind` is rendered with a bespoke multi-part procedural 3D rig
 /// rather than a `.vox` rig directory.
@@ -173,6 +176,9 @@ pub(crate) fn tint_for(kind: EnemyKind) -> Color {
         EnemyKind::WallOfFleshMouth | EnemyKind::WallOfFleshEye => Color::srgb(0.68, 0.16, 0.22),
         EnemyKind::TheHungry => Color::srgb(0.78, 0.20, 0.24),
         EnemyKind::Leech => Color::srgb(0.55, 0.14, 0.28),
+        EnemyKind::KingSlime => Color::srgba(0.22, 0.58, 0.96, 0.85),
+        EnemyKind::QueenBee => Color::srgb(0.95, 0.75, 0.15),
+        EnemyKind::Bee => Color::srgb(0.96, 0.80, 0.18),
         _ => Color::WHITE,
     }
 }
@@ -725,6 +731,67 @@ fn spawn_procedural_enemy(
                     ));
                     proc_part(p, m, [0.16, 0.16, 0.25], tooth.clone(), [-0.20, 0.0, 0.65]);
                     proc_part(p, m, [0.16, 0.16, 0.25], tooth, [0.20, 0.0, 0.65]);
+                }),
+            )
+        }
+        EnemyKind::KingSlime => {
+            let base = tint_for(kind);
+            let mat = proc_mat(materials, base, None);
+            let gold = proc_mat(
+                materials,
+                Color::srgb(1.0, 0.84, 0.18),
+                Some(LinearRgba::rgb(0.35, 0.25, 0.02)),
+            );
+            let ninja = proc_mat(materials, Color::srgb(0.14, 0.14, 0.20), None);
+            spawn_with(
+                commands,
+                meshes,
+                [4.2, 3.6, 4.2],
+                mat,
+                base,
+                Box::new(move |p, m| {
+                    // Ninja silhouette inside slime + golden crown on top
+                    proc_part(p, m, [1.2, 1.8, 1.0], ninja, [0.0, -0.2, 0.0]);
+                    proc_part(p, m, [1.8, 0.6, 1.8], gold.clone(), [0.0, 2.0, 0.0]);
+                    proc_part(p, m, [0.35, 0.5, 0.35], gold.clone(), [-0.65, 2.45, -0.65]);
+                    proc_part(p, m, [0.35, 0.5, 0.35], gold.clone(), [0.65, 2.45, -0.65]);
+                    proc_part(p, m, [0.35, 0.5, 0.35], gold, [0.0, 2.55, 0.65]);
+                }),
+            )
+        }
+        EnemyKind::QueenBee => {
+            let base = tint_for(kind);
+            let yellow = proc_mat(materials, base, None);
+            let stripe = proc_mat(materials, Color::srgb(0.16, 0.12, 0.08), None);
+            let wing = proc_mat(materials, Color::srgba(0.88, 0.94, 1.0, 0.72), None);
+            spawn_with(
+                commands,
+                meshes,
+                [1.8, 1.6, 2.8],
+                yellow,
+                base,
+                Box::new(move |p, m| {
+                    proc_part(p, m, [1.9, 1.4, 0.5], stripe.clone(), [0.0, 0.0, -0.5]);
+                    proc_part(p, m, [1.9, 1.4, 0.5], stripe.clone(), [0.0, 0.0, 0.5]);
+                    proc_part(p, m, [0.35, 0.35, 0.9], stripe, [0.0, -0.2, -1.7]);
+                    proc_part(p, m, [2.2, 0.12, 1.1], wing.clone(), [-1.4, 0.9, 0.0]);
+                    proc_part(p, m, [2.2, 0.12, 1.1], wing, [1.4, 0.9, 0.0]);
+                }),
+            )
+        }
+        EnemyKind::Bee => {
+            let base = tint_for(kind);
+            let yellow = proc_mat(materials, base, None);
+            let wing = proc_mat(materials, Color::srgba(0.90, 0.95, 1.0, 0.72), None);
+            spawn_with(
+                commands,
+                meshes,
+                [0.45, 0.4, 0.6],
+                yellow,
+                base,
+                Box::new(move |p, m| {
+                    proc_part(p, m, [0.55, 0.06, 0.3], wing.clone(), [-0.35, 0.25, 0.0]);
+                    proc_part(p, m, [0.55, 0.06, 0.3], wing, [0.35, 0.25, 0.0]);
                 }),
             )
         }

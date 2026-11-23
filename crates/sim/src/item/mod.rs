@@ -271,6 +271,20 @@ pub const ANKLET_OF_THE_WIND: ItemId = ItemId(212);
 pub const FERAL_CLAWS: ItemId = ItemId(211);
 pub const SHARK_TOOTH_NECKLACE: ItemId = ItemId(3212);
 
+// Pre-Hardmode Wave 4 items (King Slime & Queen Bee)
+pub const SLIME_CROWN: ItemId = ItemId(560);
+pub const NINJA_HOOD: ItemId = ItemId(256);
+pub const NINJA_SHIRT: ItemId = ItemId(257);
+pub const NINJA_PANTS: ItemId = ItemId(258);
+pub const SLIME_HOOK: ItemId = ItemId(2585);
+pub const SLIMY_SADDLE: ItemId = ItemId(2430);
+pub const ABEEMINATION: ItemId = ItemId(1133);
+pub const BEE_WAX: ItemId = ItemId(2431);
+pub const BEENADE: ItemId = ItemId(1130);
+pub const BEE_GUN: ItemId = ItemId(1121);
+pub const BEE_KEEPER: ItemId = ItemId(1123);
+pub const HONEY_COMB: ItemId = ItemId(1132);
+
 pub fn is_coin(id: ItemId) -> bool {
     [COPPER_COIN, SILVER_COIN, GOLD_COIN, PLATINUM_COIN].contains(&id)
 }
@@ -667,7 +681,7 @@ const fn bucket(name: &'static str, max_stack: u32) -> ItemData {
 
 // Names: Terraria.Localization.Content.en-US.Items.json, ItemName.
 // TODO(localization): hand table limited to the items in play.
-static ITEMS: [(ItemId, ItemData); 209] = [
+static ITEMS: [(ItemId, ItemData); 221] = [
     (
         COPPER_HELMET,
         armor("Copper Helmet", ArmorSlot::Head, 1)
@@ -2844,6 +2858,145 @@ static ITEMS: [(ItemId, ItemData); 209] = [
         .with_rarity(Rarity::Blue)
         .with_tooltip("Increases armor penetration by 5"),
     ),
+    // Pre-Hardmode Wave 4 items
+    (
+        SLIME_CROWN,
+        ItemData {
+            ..consumable("Slime Crown", 20, 30)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Summons King Slime"),
+    ),
+    (
+        NINJA_HOOD,
+        ItemData {
+            ..armor("Ninja Hood", ArmorSlot::Head, 2)
+        }
+        .with_value(2000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("3% increased crit chance; Set: +20% movement speed"),
+    ),
+    (
+        NINJA_SHIRT,
+        ItemData {
+            ..armor("Ninja Shirt", ArmorSlot::Body, 4)
+        }
+        .with_value(2000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("3% increased crit chance; Set: +20% movement speed"),
+    ),
+    (
+        NINJA_PANTS,
+        ItemData {
+            ..armor("Ninja Pants", ArmorSlot::Legs, 3)
+        }
+        .with_value(2000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("3% increased crit chance; Set: +20% movement speed"),
+    ),
+    (
+        SLIME_HOOK,
+        ItemData {
+            class: ItemClass::Tool,
+            shoot_speed: 18.0,
+            use_time: 12,
+            use_animation: 12,
+            ..material("Slime Hook", 1)
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Fires up to 3 sticky slime hooks"),
+    ),
+    (
+        SLIMY_SADDLE,
+        ItemData {
+            ..accessory("Slimy Saddle")
+        }
+        .with_value(50000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("+20% movement speed and +30% jump height"),
+    ),
+    (
+        ABEEMINATION,
+        ItemData {
+            ..consumable("Abeemination", 20, 30)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Summons Queen Bee"),
+    ),
+    (
+        BEE_WAX,
+        ItemData {
+            ..material("Bee Wax", 9999)
+        }
+        .with_value(500)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Dropped by Queen Bee"),
+    ),
+    (
+        BEENADE,
+        ItemData {
+            class: ItemClass::Consumable,
+            max_stack: 999,
+            damage: 12,
+            knock_back: 1.0,
+            use_time: 15,
+            use_animation: 15,
+            shoot_speed: 7.0,
+            ..material("Beenade", 999)
+        }
+        .with_value(1000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Explodes into a swarm of bees"),
+    ),
+    (
+        BEE_GUN,
+        ItemData {
+            name: "Bee Gun",
+            max_stack: 1,
+            damage: 9,
+            knock_back: 0.5,
+            crit: 4,
+            use_time: 16,
+            use_animation: 16,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Magic,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 10.0,
+            mana: 5,
+            auto_reuse: true,
+            value: 20000,
+            rarity: Rarity::Orange,
+            tooltip: "Fires homing bees that chase enemies",
+            buff_secs: 0,
+        },
+    ),
+    (
+        BEE_KEEPER,
+        ItemData {
+            auto_reuse: true,
+            ..sword("Bee Keeper", 26, 5.3, 20)
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Orange)
+        .with_tooltip("Summons friendly bees on hit"),
+    ),
+    (
+        HONEY_COMB,
+        ItemData {
+            ..accessory("Honey Comb")
+        }
+        .with_value(20000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Releases bees when damaged"),
+    ),
 ];
 
 static UNKNOWN: ItemData = ItemData {
@@ -2982,7 +3135,7 @@ mod tests {
     #[test]
     fn all_item_ids_includes_new_loot() {
         let ids: Vec<_> = all_item_ids().collect();
-        assert_eq!(ids.len(), 209);
+        assert_eq!(ids.len(), 221);
         for id in [
             BUG_NET,
             BUNNY_ITEM,

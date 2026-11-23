@@ -1294,6 +1294,7 @@ impl Server {
         let mut grapples: Vec<(PlayerId, [f32; 3], [f32; 3])> = Vec::new();
         let mut melee_combat_hits: Vec<ServerMsg> = Vec::new();
         let mut summons: Vec<[f32; 3]> = Vec::new();
+        let mut boss_summons: Vec<(EnemyKind, [f32; 3])> = Vec::new();
         let mut eater_summons: Vec<[f32; 3]> = Vec::new();
         let mut critter_spawns: Vec<(EnemyKind, [f32; 3])> = Vec::new();
         let mut broken_orbs: Vec<[i32; 3]> = Vec::new();
@@ -1418,6 +1419,28 @@ impl Server {
                                 eater_summons.push(p.body.pos);
                             }
                         }
+                        UseEvent::Consume { item } if item == terravibe_sim::item::SLIME_CROWN => {
+                            if !self.enemies.iter().any(|e| e.kind == EnemyKind::KingSlime)
+                                && c.inv.selected_stack().is_some_and(|s| s.id == item)
+                            {
+                                c.inv.take_one_selected();
+                                boss_summons.push((
+                                    EnemyKind::KingSlime,
+                                    [p.body.pos[0] + 10.0, p.body.pos[1] + 6.0, p.body.pos[2]],
+                                ));
+                            }
+                        }
+                        UseEvent::Consume { item } if item == terravibe_sim::item::ABEEMINATION => {
+                            if !self.enemies.iter().any(|e| e.kind == EnemyKind::QueenBee)
+                                && c.inv.selected_stack().is_some_and(|s| s.id == item)
+                            {
+                                c.inv.take_one_selected();
+                                boss_summons.push((
+                                    EnemyKind::QueenBee,
+                                    [p.body.pos[0] + 10.0, p.body.pos[1] + 8.0, p.body.pos[2]],
+                                ));
+                            }
+                        }
                         UseEvent::Consume { item }
                             if matches!(
                                 item,
@@ -1463,6 +1486,17 @@ impl Server {
                         UseEvent::TileBroken { pos, tile } => {
                             if tile == terravibe_sim::block::POT {
                                 broken_pots.push(pos);
+                            } else if tile == terravibe_sim::block::BEE_LARVA
+                                && !self.enemies.iter().any(|e| e.kind == EnemyKind::QueenBee)
+                            {
+                                boss_summons.push((
+                                    EnemyKind::QueenBee,
+                                    [
+                                        pos[0] as f32 + 0.5,
+                                        pos[1] as f32 + 3.0,
+                                        pos[2] as f32 + 0.5,
+                                    ],
+                                ));
                             } else if matches!(
                                 tile,
                                 terravibe_sim::block::MUD | terravibe_sim::block::JUNGLE_GRASS
@@ -1979,6 +2013,11 @@ impl Server {
                 c.sent_facts = Some(current_facts);
             }
         }
+        for (kind, pos) in boss_summons {
+            if !self.enemies.iter().any(|e| e.kind == kind) {
+                self.add_enemy(kind, pos);
+            }
+        }
         for (pos, block) in edits {
             let cp = ChunkPos::of_block(pos[0], pos[1], pos[2]);
             // EditQ only logs successful writes, so this chunk has real
@@ -2136,6 +2175,17 @@ impl Server {
                             )
                         } else if wand == terravibe_sim::item::FLOWER_OF_FIRE {
                             Projectile::cast_flower_of_fire(
+                                id,
+                                owner,
+                                wand,
+                                prefix,
+                                origin,
+                                dir,
+                                &mut player.vitals,
+                                Some(eff_mana),
+                            )
+                        } else if wand == terravibe_sim::item::BEE_GUN {
+                            Projectile::cast_bee_gun(
                                 id,
                                 owner,
                                 wand,
@@ -3571,7 +3621,8 @@ impl Server {
                     | ProjKind::WaterBolt
                     | ProjKind::Laser
                     | ProjKind::SpaceLaser
-                    | ProjKind::FlowerOfFire => DamageKind::Magic,
+                    | ProjKind::FlowerOfFire
+                    | ProjKind::BeeShot => DamageKind::Magic,
                     ProjKind::Boomerang
                     | ProjKind::Flamarang
                     | ProjKind::ThornChakram
@@ -3633,6 +3684,26 @@ impl Server {
                     eye[2] + dir[2] * dist,
                 ];
                 terravibe_sim::projectile::steer_magic_missile(p, aim);
+            }
+            if p.kind == ProjKind::BeeShot
+                && let Some(target_pos) = enemies
+                    .iter()
+                    .filter(|e| e.hp > 0 && !e.kind.is_friendly())
+                    .min_by(|a, b| dist2(a.pos, p.pos).total_cmp(&dist2(b.pos, p.pos)))
+                    .map(|e| [e.pos[0], e.pos[1] + e.kind.stats().half[1], e.pos[2]])
+            {
+                let dx = target_pos[0] - p.pos[0];
+                let dy = target_pos[1] - p.pos[1];
+                let dz = target_pos[2] - p.pos[2];
+                let d = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-4);
+                let spd = (p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] + p.vel[2] * p.vel[2])
+                    .sqrt()
+                    .max(0.25);
+                p.vel = [
+                    p.vel[0] + (dx / d * spd - p.vel[0]) * 0.25,
+                    p.vel[1] + (dy / d * spd - p.vel[1]) * 0.25,
+                    p.vel[2] + (dz / d * spd - p.vel[2]) * 0.25,
+                ];
             }
             let owner_pos = conns
                 .iter()
@@ -4000,6 +4071,28 @@ impl Server {
                 self.send_all_players(ServerMsg::BossGone);
                 continue;
             }
+            if kind == EnemyKind::KingSlime {
+                self.facts.downed_king_slime = true;
+                for stack in terravibe_sim::drop::roll_king_slime_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                for stack in boss::boss_extra_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                self.send_all_players(ServerMsg::BossGone);
+                continue;
+            }
+            if kind == EnemyKind::QueenBee {
+                self.facts.downed_queen_bee = true;
+                for stack in terravibe_sim::drop::roll_queen_bee_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                for stack in boss::boss_extra_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                self.send_all_players(ServerMsg::BossGone);
+                continue;
+            }
             if kind == EnemyKind::SkeletronHead {
                 self.downed_skeletron = true;
                 self.facts.downed_skeletron = true;
@@ -4007,6 +4100,28 @@ impl Server {
                     self.add_drop(stack, pos);
                 }
                 self.enemies.retain(|e| e.kind != EnemyKind::SkeletronHand);
+                self.send_all_players(ServerMsg::BossGone);
+                continue;
+            }
+            if kind == EnemyKind::KingSlime {
+                self.facts.downed_king_slime = true;
+                for stack in terravibe_sim::drop::roll_king_slime_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                for stack in boss::boss_extra_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                self.send_all_players(ServerMsg::BossGone);
+                continue;
+            }
+            if kind == EnemyKind::QueenBee {
+                self.facts.downed_queen_bee = true;
+                for stack in terravibe_sim::drop::roll_queen_bee_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
+                for stack in boss::boss_extra_loot(&mut self.rng) {
+                    self.add_drop(stack, pos);
+                }
                 self.send_all_players(ServerMsg::BossGone);
                 continue;
             }

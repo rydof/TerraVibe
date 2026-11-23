@@ -72,6 +72,7 @@ pub enum ProjKind {
     FallenStarShot,
     FlowerOfFire,
     Flamelash,
+    BeeShot,
 }
 
 impl ProjKind {
@@ -116,7 +117,8 @@ impl ProjKind {
             | ProjKind::FlowerOfFire
             | ProjKind::DemonScythe
             | ProjKind::EyeLaser
-            | ProjKind::Grenade => Some(1),
+            | ProjKind::Grenade
+            | ProjKind::BeeShot => Some(1),
         }
     }
 }
@@ -570,6 +572,58 @@ impl Projectile {
             300,
             mana_override,
         )
+    }
+
+    /// Cast a Bee Gun homing bee projectile.
+    pub fn cast_bee_gun(
+        id: u32,
+        owner: u32,
+        wand: ItemId,
+        prefix: Prefix,
+        origin: [f32; 3],
+        dir: [f32; 3],
+        vitals: &mut crate::player::Vitals,
+        mana_override: Option<i32>,
+    ) -> Option<Projectile> {
+        Self::cast_magic_proj_with_mana(
+            id,
+            owner,
+            wand,
+            prefix,
+            origin,
+            dir,
+            vitals,
+            ProjKind::BeeShot,
+            240,
+            mana_override,
+        )
+    }
+
+    /// Spawns a friendly homing bee projectile (from Beenade, Bee Keeper, or Honey Comb).
+    pub fn spawn_bee(id: u32, owner: u32, damage: i32, origin: [f32; 3], dir: [f32; 3]) -> Self {
+        let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2])
+            .sqrt()
+            .max(1e-4);
+        let speed = 8.0 * PX;
+        Projectile {
+            id,
+            pos: origin,
+            vel: [
+                dir[0] / len * speed,
+                dir[1] / len * speed,
+                dir[2] / len * speed,
+            ],
+            kind: ProjKind::BeeShot,
+            owner,
+            ttl: 240,
+            damage,
+            knock_back: 0.5,
+            crit: 4,
+            ai0: 0,
+            pierced: 0,
+            origin,
+            armor_penetration: 0,
+        }
     }
 
     /// Throws an enchanted boomerang.
@@ -1097,6 +1151,7 @@ pub fn step_with_target(q: &impl BlockQuery, p: &mut Projectile, target: [f32; 3
         | ProjKind::Laser
         | ProjKind::SpaceLaser
         | ProjKind::FallenStarShot
+        | ProjKind::BeeShot
         | ProjKind::EyeLaser => {
             if p.kind == ProjKind::DemonScythe {
                 let speed = p.vel.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -1124,6 +1179,7 @@ pub fn step_with_target(q: &impl BlockQuery, p: &mut Projectile, target: [f32; 3
                     | ProjKind::Laser
                     | ProjKind::SpaceLaser
                     | ProjKind::FallenStarShot
+                    | ProjKind::BeeShot
                     | ProjKind::EyeLaser
             ) {
                 p.ai0 += 1;

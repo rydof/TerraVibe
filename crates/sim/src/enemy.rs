@@ -52,6 +52,9 @@ pub enum EnemyKind {
     WallOfFleshEye,
     TheHungry,
     Leech,
+    KingSlime,
+    QueenBee,
+    Bee,
 }
 
 pub const MAX_CRITTERS: usize = 12;
@@ -117,6 +120,9 @@ impl EnemyKind {
             EnemyKind::WallOfFleshEye => 114,   // NPCID.WallofFleshEye
             EnemyKind::TheHungry => 115,        // NPCID.TheHungry
             EnemyKind::Leech => 117,            // NPCID.LeechHead
+            EnemyKind::KingSlime => 50,         // NPCID.KingSlime
+            EnemyKind::QueenBee => 222,         // NPCID.QueenBee
+            EnemyKind::Bee => 210,              // NPCID.Bee
         }
     }
 
@@ -156,6 +162,8 @@ impl EnemyKind {
                 | EnemyKind::SkeletronHand
                 | EnemyKind::WallOfFleshMouth
                 | EnemyKind::WallOfFleshEye
+                | EnemyKind::KingSlime
+                | EnemyKind::QueenBee
         )
     }
 
@@ -478,6 +486,30 @@ impl EnemyKind {
                 value: 0,
                 knockback_resist: 0.2,
                 half: [0.6, 0.6],
+            },
+            EnemyKind::KingSlime => EnemyStats {
+                hp: 2000,
+                damage: 40,
+                defense: 10,
+                value: 10000,
+                knockback_resist: 1.0,
+                half: [34.0 * PX, 30.0 * PX],
+            },
+            EnemyKind::QueenBee => EnemyStats {
+                hp: 3400,
+                damage: 30,
+                defense: 8,
+                value: 50000,
+                knockback_resist: 1.0,
+                half: [24.0 * PX, 24.0 * PX],
+            },
+            EnemyKind::Bee => EnemyStats {
+                hp: 18,
+                damage: 12,
+                defense: 0,
+                value: 0,
+                knockback_resist: 0.2,
+                half: [6.0 * PX, 6.0 * PX],
             },
         }
     }
@@ -1092,6 +1124,63 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
                     e.vel = [0.0; 3];
                 }
             }
+            EnemyKind::KingSlime => {
+                if e.on_ground {
+                    e.vel[0] *= SLIME_FRICTION;
+                    e.vel[2] *= SLIME_FRICTION;
+                    e.ai[0] += 1;
+                    if e.ai[0] >= 40 {
+                        e.ai[0] = 0;
+                        e.ai[1] += 1;
+                        let d = dir_xz(e.pos, target);
+                        let big = e.ai[1] % 3 == 0;
+                        let hspd = if big { 4.2 * PX } else { 2.8 * PX };
+                        e.vel[0] = d[0] * hspd;
+                        e.vel[2] = d[1] * hspd;
+                        e.vel[1] = if big { 10.5 * PX } else { 7.5 * PX };
+                        e.on_ground = false;
+                        let dist_sq =
+                            (e.pos[0] - target[0]).powi(2) + (e.pos[2] - target[2]).powi(2);
+                        if dist_sq > 24.0 * 24.0 {
+                            e.pos = [target[0], target[1] + 6.0, target[2]];
+                        }
+                    }
+                }
+            }
+            EnemyKind::QueenBee => {
+                e.ai[0] = (e.ai[0] + 1) % 240;
+                if e.ai[0] < 130 {
+                    // Hover above player and periodically signal minion/stinger attack
+                    let goal = [target[0], target[1] + 8.0, target[2]];
+                    let dx = goal[0] - e.pos[0];
+                    let dy = goal[1] - e.pos[1];
+                    let dz = goal[2] - e.pos[2];
+                    let d = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-4);
+                    let spd = 5.5 * PX;
+                    e.vel = [dx / d * spd, dy / d * spd, dz / d * spd];
+                    if e.ai[0] == 40 || e.ai[0] == 80 || e.ai[0] == 120 {
+                        e.ai[2] = 1;
+                    }
+                } else {
+                    // Dash horizontally at player's Y
+                    if e.ai[0] == 130 {
+                        let d = dir_xz(e.pos, target);
+                        let dash = 9.0 * PX;
+                        e.vel = [
+                            d[0] * dash,
+                            (target[1] + 1.0 - e.pos[1]) * 0.08,
+                            d[1] * dash,
+                        ];
+                    }
+                }
+            }
+            EnemyKind::Bee => {
+                let c = [target[0], target[1] + 1.0, target[2]];
+                let v = [c[0] - e.pos[0], c[1] - e.pos[1], c[2] - e.pos[2]];
+                let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+                let speed = 4.2 * PX;
+                e.vel = [speed * v[0] / l, speed * v[1] / l, speed * v[2] / l];
+            }
             EnemyKind::Bunny | EnemyKind::Bird | EnemyKind::Squirrel | EnemyKind::CaveCritter => {
                 let dx = e.pos[0] - target[0];
                 let dz = e.pos[2] - target[2];
@@ -1170,6 +1259,8 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
             | EnemyKind::BoneSerpentTail
             | EnemyKind::Bird
             | EnemyKind::Leech
+            | EnemyKind::QueenBee
+            | EnemyKind::Bee
     ) {
         e.vel[1] = (e.vel[1] - GRAVITY).max(-MAX_FALL_SPEED);
     }
@@ -1192,6 +1283,8 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
             | EnemyKind::BoneSerpentBody
             | EnemyKind::BoneSerpentTail
             | EnemyKind::Leech
+            | EnemyKind::QueenBee
+            | EnemyKind::Bee
     ) {
         for a in 0..3 {
             e.pos[a] += e.vel[a];

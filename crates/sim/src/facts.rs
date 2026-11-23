@@ -3,7 +3,7 @@
 use crate::codec::{DecodeError, Reader, Writer};
 
 pub const FACTS_MAGIC: &[u8; 4] = b"TVWF";
-pub const FACTS_VERSION: u8 = 4;
+pub const FACTS_VERSION: u8 = 5;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WorldFacts {
@@ -16,6 +16,8 @@ pub struct WorldFacts {
     pub downed_wall_of_flesh: bool,
     pub downed_eow: bool,
     pub meteorite_crashed: bool,
+    pub downed_king_slime: bool,
+    pub downed_queen_bee: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub fn encode_world_facts(facts: &WorldFacts) -> Vec<u8> {
     w.u8(facts.downed_wall_of_flesh as u8);
     w.u8(facts.downed_eow as u8);
     w.u8(facts.meteorite_crashed as u8);
+    w.u8(facts.downed_king_slime as u8);
+    w.u8(facts.downed_queen_bee as u8);
     w.0
 }
 
@@ -64,6 +68,8 @@ pub fn decode_world_facts(bytes: &[u8]) -> Result<WorldFacts, DecodeError> {
     let downed_wall_of_flesh = if version >= 2 { r.u8()? != 0 } else { false };
     let downed_eow = if version >= 3 { r.u8()? != 0 } else { false };
     let meteorite_crashed = if version >= 4 { r.u8()? != 0 } else { false };
+    let downed_king_slime = if version >= 5 { r.u8()? != 0 } else { false };
+    let downed_queen_bee = if version >= 5 { r.u8()? != 0 } else { false };
     if !r.is_empty() {
         return Err(DecodeError);
     }
@@ -77,6 +83,8 @@ pub fn decode_world_facts(bytes: &[u8]) -> Result<WorldFacts, DecodeError> {
         downed_wall_of_flesh,
         downed_eow,
         meteorite_crashed,
+        downed_king_slime,
+        downed_queen_bee,
     })
 }
 
@@ -122,6 +130,8 @@ mod tests {
             downed_wall_of_flesh: true,
             downed_eow: true,
             meteorite_crashed: true,
+            downed_king_slime: true,
+            downed_queen_bee: true,
         };
         let bytes = encode_world_facts(&wf);
         assert_eq!(bytes[4], FACTS_VERSION);

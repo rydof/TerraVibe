@@ -119,6 +119,8 @@ pub const SUNPLATE_BLOCK: BlockId = BlockId(202);
 pub const CAMPFIRE: BlockId = BlockId(215);
 /// TileID.Hive (225). Solid, opaque jungle bee hive block.
 pub const HIVE_BLOCK: BlockId = BlockId(225);
+/// TileID.Larva (231). Non-solid, non-opaque Queen Bee summon object inside Jungle Bee Hives.
+pub const BEE_LARVA: BlockId = BlockId(231);
 
 /// What a physics `BlockQuery` returns for chunks that aren't loaded, so the
 /// player never falls through unloaded terrain.
@@ -147,6 +149,7 @@ impl BlockId {
                 | HEART_LANTERN
                 | GLOWING_MUSHROOM_PLANT
                 | CAMPFIRE
+                | BEE_LARVA
         )
     }
 
@@ -172,6 +175,7 @@ impl BlockId {
                 | HEART_LANTERN
                 | GLOWING_MUSHROOM_PLANT
                 | CAMPFIRE
+                | BEE_LARVA
         )
     }
 
