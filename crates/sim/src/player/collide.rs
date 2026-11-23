@@ -37,7 +37,12 @@ pub fn overlaps(q: &impl BlockQuery, pos: [f32; 3]) -> bool {
 /// (gameplay spec, `fallThrough` skips `TileID.Sets.Platforms`)
 /// and the platform-top rule at gameplay spec/`:2083` (only feet above the
 /// tile top collide).
-fn platform_catch(q: &impl BlockQuery, from_y: f32, next: [f32; 3]) -> Option<f32> {
+fn platform_catch(
+    q: &impl BlockQuery,
+    from_y: f32,
+    next: [f32; 3],
+    water_walk: bool,
+) -> Option<f32> {
     let by = next[1].floor() as i32;
     let top = (by + 1) as f32;
     if from_y < top - EPS || next[1] >= top {
@@ -52,7 +57,12 @@ fn platform_catch(q: &impl BlockQuery, from_y: f32, next: [f32; 3]) -> Option<f3
         (next[2] + HALF_WIDTH - EPS).floor() as i32,
     );
     (x0..=x1)
-        .any(|x| (z0..=z1).any(|z| q.block(x, by, z).is_platform()))
+        .any(|x| {
+            (z0..=z1).any(|z| {
+                q.block(x, by, z).is_platform()
+                    || (water_walk && q.liquid(x, by, z).is_some_and(|l| l.amount >= 128))
+            })
+        })
         .then_some(top)
 }
 
@@ -70,6 +80,18 @@ pub fn move_axis_drop(
     delta: f32,
     drop: bool,
 ) -> bool {
+    move_axis_drop_walk(q, pos, axis, delta, drop, false)
+}
+
+/// [`move_axis_drop`] with optional water/lava surface walking.
+pub fn move_axis_drop_walk(
+    q: &impl BlockQuery,
+    pos: &mut [f32; 3],
+    axis: usize,
+    delta: f32,
+    drop: bool,
+    water_walk: bool,
+) -> bool {
     if delta == 0.0 {
         return false;
     }
@@ -82,7 +104,7 @@ pub fn move_axis_drop(
             && step < 0.0
             && !drop
             && !overlaps(q, next)
-            && let Some(top) = platform_catch(q, pos[1], next)
+            && let Some(top) = platform_catch(q, pos[1], next, water_walk)
         {
             pos[1] = top;
             return true;

@@ -1,11 +1,11 @@
 //! Item ids and static item data, following classic 1.4-era gameplay specs (`Item.item defaults`).
 
-use crate::block::{ANVIL, FURNACE};
 use crate::block::{
-    ASH, BOTTLE, BlockId, CHAIR, CHEST, COPPER, DEMONITE_ORE, DIRT, DOOR_CLOSED, EBONSTONE,
-    GLASS_BLOCK, GOLD, HARDENED_SAND, HELLFORGE, HELLSTONE, HELLSTONE_BRICK, ICE, IRON, MUD,
-    OBSIDIAN, OBSIDIAN_BRICK, PLATFORM, SAND, SANDSTONE, SILVER, SNOW, STONE, TABLE, WOOD_BLOCK,
-    WORKBENCH,
+    ANVIL, ASH, BOTTLE, BlockId, CAMPFIRE, CHAIR, CHEST, CLOUD_BLOCK, COPPER, DEMONITE_ORE, DIRT,
+    DOOR_CLOSED, EBONSTONE, FURNACE, GLASS_BLOCK, GOLD, HARDENED_SAND, HEART_LANTERN, HELLFORGE,
+    HELLSTONE, HELLSTONE_BRICK, HIVE_BLOCK, ICE, IRON, METEORITE_ORE, MUD, OBSIDIAN,
+    OBSIDIAN_BRICK, PLATFORM, SAND, SANDSTONE, SILVER, SNOW, STONE, SUNPLATE_BLOCK, TABLE,
+    TINKERERS_WORKSHOP, WOOD_BLOCK, WORKBENCH,
 };
 
 mod prefix;
@@ -205,6 +205,32 @@ pub const BUNNY_ITEM: ItemId = ItemId(2019);
 pub const BIRD_ITEM: ItemId = ItemId(2015);
 pub const SQUIRREL_ITEM: ItemId = ItemId(2018);
 pub const CAVE_CRITTER_ITEM: ItemId = ItemId(2007);
+
+// Wave 1 Pre-Hardmode items (Terraria item ids)
+pub const STARFURY: ItemId = ItemId(65);
+pub const GRAPPLING_HOOK: ItemId = ItemId(84);
+pub const IRON_CHAIN: ItemId = ItemId(85);
+pub const LESSER_MANA_POTION: ItemId = ItemId(110);
+pub const METEORITE_ITEM: ItemId = ItemId(116);
+pub const BOMB: ItemId = ItemId(166);
+pub const DYNAMITE: ItemId = ItemId(167);
+pub const GRENADE: ItemId = ItemId(168);
+pub const GLOWING_MUSHROOM: ItemId = ItemId(183);
+pub const HEALING_POTION: ItemId = ItemId(188);
+pub const MANA_POTION: ItemId = ItemId(189);
+pub const HOOK: ItemId = ItemId(210);
+pub const REGENERATION_POTION: ItemId = ItemId(289);
+pub const SWIFTNESS_POTION: ItemId = ItemId(290);
+pub const IRONSKIN_POTION: ItemId = ItemId(292);
+pub const SHINE_POTION: ItemId = ItemId(298);
+pub const WATER_WALKING_POTION: ItemId = ItemId(302);
+pub const TINKERERS_WORKSHOP_ITEM: ItemId = ItemId(398);
+pub const CLOUD_ITEM: ItemId = ItemId(751);
+pub const SUNPLATE_ITEM: ItemId = ItemId(824);
+pub const CAMPFIRE_ITEM: ItemId = ItemId(966);
+pub const HIVE_ITEM: ItemId = ItemId(1124);
+pub const HEART_LANTERN_ITEM: ItemId = ItemId(1859);
+pub const RECALL_POTION: ItemId = ItemId(2350);
 
 pub fn is_coin(id: ItemId) -> bool {
     [COPPER_COIN, SILVER_COIN, GOLD_COIN, PLATINUM_COIN].contains(&id)
@@ -569,7 +595,7 @@ const fn bucket(name: &'static str, max_stack: u32) -> ItemData {
 
 // Names: Terraria.Localization.Content.en-US.Items.json, ItemName.
 // TODO(localization): hand table limited to the items in play.
-static ITEMS: [(ItemId, ItemData); 148] = [
+static ITEMS: [(ItemId, ItemData); 172] = [
     (
         COPPER_HELMET,
         armor("Copper Helmet", ArmorSlot::Head, 1)
@@ -1960,6 +1986,358 @@ static ITEMS: [(ItemId, ItemData); 148] = [
         .with_rarity(Rarity::White)
         .with_tooltip("Releases a cave critter"),
     ),
+    // Wave 1 Pre-Hardmode items
+    (
+        STARFURY,
+        ItemData {
+            name: "Starfury",
+            max_stack: 1,
+            damage: 25,
+            knock_back: 5.0,
+            crit: 4,
+            use_time: 20,
+            use_animation: 20,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Melee,
+            scale: 1.15,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 12.0,
+            mana: 0,
+            auto_reuse: true,
+            value: 10000,
+            rarity: Rarity::Green,
+            tooltip: "Forged with the fury of heaven; rains falling stars from the sky",
+            buff_secs: 0,
+        },
+    ),
+    (
+        GRAPPLING_HOOK,
+        ItemData {
+            name: "Grappling Hook",
+            max_stack: 1,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            use_time: 20,
+            use_animation: 20,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Tool,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 11.5,
+            mana: 0,
+            auto_reuse: false,
+            value: 2000,
+            rarity: Rarity::Blue,
+            tooltip: "Get over here! Latches onto solid blocks and pulls you in",
+            buff_secs: 0,
+        },
+    ),
+    (
+        IRON_CHAIN,
+        ItemData {
+            name: "Chain",
+            max_stack: 9999,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            use_time: 10,
+            use_animation: 15,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Other,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 0.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 10,
+            rarity: Rarity::White,
+            tooltip: "Forged iron links used for hooks and lanterns",
+            buff_secs: 0,
+        },
+    ),
+    (
+        HOOK,
+        ItemData {
+            name: "Hook",
+            max_stack: 99,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            use_time: 10,
+            use_animation: 15,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Other,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 0.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 2000,
+            rarity: Rarity::White,
+            tooltip: "Used to craft a Grappling Hook",
+            buff_secs: 0,
+        },
+    ),
+    (
+        LESSER_MANA_POTION,
+        ItemData {
+            ..consumable("Lesser Mana Potion", 50, 17)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Restores 50 mana"),
+    ),
+    (
+        MANA_POTION,
+        ItemData {
+            ..consumable("Mana Potion", 50, 17)
+        }
+        .with_value(250)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Restores 100 mana"),
+    ),
+    (
+        HEALING_POTION,
+        ItemData {
+            ..consumable("Healing Potion", 50, 17)
+        }
+        .with_value(1000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Restores 100 life"),
+    ),
+    (
+        GLOWING_MUSHROOM,
+        ItemData {
+            ..consumable("Glowing Mushroom", 9999, 17)
+        }
+        .with_value(250)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Restores 25 life and used to brew stronger potions"),
+    ),
+    (
+        REGENERATION_POTION,
+        ItemData {
+            ..consumable("Regeneration Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(480)
+        .with_tooltip("Provides life regeneration"),
+    ),
+    (
+        SWIFTNESS_POTION,
+        ItemData {
+            ..consumable("Swiftness Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(480)
+        .with_tooltip("25% increased movement speed"),
+    ),
+    (
+        IRONSKIN_POTION,
+        ItemData {
+            ..consumable("Ironskin Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(480)
+        .with_tooltip("Increases defense by 8"),
+    ),
+    (
+        SHINE_POTION,
+        ItemData {
+            ..consumable("Shine Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(300)
+        .with_tooltip("Emits an aura of light"),
+    ),
+    (
+        WATER_WALKING_POTION,
+        ItemData {
+            ..consumable("Water Walking Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_buff_secs(600)
+        .with_tooltip("Allows the ability to walk on water and lava"),
+    ),
+    (
+        RECALL_POTION,
+        ItemData {
+            ..consumable("Recall Potion", 50, 17)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Teleports you home to your spawn point"),
+    ),
+    (
+        BOMB,
+        ItemData {
+            name: "Bomb",
+            max_stack: 99,
+            damage: 100,
+            knock_back: 8.0,
+            crit: 0,
+            use_time: 25,
+            use_animation: 25,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Consumable,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 5.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 300,
+            rarity: Rarity::White,
+            tooltip: "A small explosion that will destroy most tiles",
+            buff_secs: 0,
+        },
+    ),
+    (
+        DYNAMITE,
+        ItemData {
+            name: "Dynamite",
+            max_stack: 99,
+            damage: 250,
+            knock_back: 10.0,
+            crit: 0,
+            use_time: 40,
+            use_animation: 40,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Consumable,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 4.0,
+            mana: 0,
+            auto_reuse: false,
+            value: 2000,
+            rarity: Rarity::Blue,
+            tooltip: "A large explosion that will destroy most tiles",
+            buff_secs: 0,
+        },
+    ),
+    (
+        GRENADE,
+        ItemData {
+            name: "Grenade",
+            max_stack: 99,
+            damage: 60,
+            knock_back: 8.0,
+            crit: 4,
+            use_time: 44,
+            use_animation: 44,
+            pick: 0,
+            axe: 0,
+            hammer: 0,
+            create_tile: None,
+            class: ItemClass::Consumable,
+            scale: 1.0,
+            defense: 0,
+            armor_slot: None,
+            shoot_speed: 5.5,
+            mana: 0,
+            auto_reuse: false,
+            value: 75,
+            rarity: Rarity::White,
+            tooltip: "A small explosion that will not destroy tiles",
+            buff_secs: 0,
+        },
+    ),
+    (
+        METEORITE_ITEM,
+        ItemData {
+            ..block("Meteorite", METEORITE_ORE)
+        }
+        .with_value(200)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Warm to the touch"),
+    ),
+    (
+        CLOUD_ITEM,
+        ItemData {
+            ..block("Cloud", CLOUD_BLOCK)
+        }
+        .with_value(5)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Soft floating sky block"),
+    ),
+    (
+        SUNPLATE_ITEM,
+        ItemData {
+            ..block("Sunplate Block", SUNPLATE_BLOCK)
+        }
+        .with_value(10)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Ornate block from a Floating Island"),
+    ),
+    (
+        HIVE_ITEM,
+        ItemData {
+            ..block("Hive", HIVE_BLOCK)
+        }
+        .with_value(5)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Sticky honeycomb wall from a Jungle Hive"),
+    ),
+    (
+        CAMPFIRE_ITEM,
+        ItemData {
+            class: ItemClass::Placeable,
+            ..block("Campfire", CAMPFIRE)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Life regen is increased when near a campfire"),
+    ),
+    (
+        HEART_LANTERN_ITEM,
+        ItemData {
+            class: ItemClass::Placeable,
+            ..block("Heart Lantern", HEART_LANTERN)
+        }
+        .with_value(15000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Increases life regeneration when placed nearby"),
+    ),
+    (
+        TINKERERS_WORKSHOP_ITEM,
+        ItemData {
+            class: ItemClass::Placeable,
+            max_stack: 99,
+            ..block("Tinkerer's Workshop", TINKERERS_WORKSHOP)
+        }
+        .with_value(100000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Used to combine accessories"),
+    ),
 ];
 
 static UNKNOWN: ItemData = ItemData {
@@ -2098,7 +2476,7 @@ mod tests {
     #[test]
     fn all_item_ids_includes_new_loot() {
         let ids: Vec<_> = all_item_ids().collect();
-        assert_eq!(ids.len(), 148);
+        assert_eq!(ids.len(), 172);
         for id in [
             BUG_NET,
             BUNNY_ITEM,

@@ -12,14 +12,16 @@ use terravibe_sim::BlockId;
 use terravibe_sim::item::{
     BREAKER_BLADE, COPPER_BAR, COPPER_BROADSWORD, COPPER_CHAINMAIL, COPPER_COIN, COPPER_GREAVES,
     COPPER_HELMET, COPPER_SHORTSWORD, DEMON_BOW, EMPTY_BUCKET, FALLEN_STAR, FIERY_GREATSWORD,
-    FLAMING_ARROW, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_COIN, GOLD_GREAVES, GOLD_HELMET,
-    HEART, IRON_BAR, IRON_BROADSWORD, IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, ItemClass, ItemId,
-    LAVA_BUCKET, LENS, LESSER_HEALING_POTION, LIGHTS_BANE, MANA_CRYSTAL, MOLTEN_BREASTPLATE,
-    MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MURAMASA, MUSHROOM,
-    NIGHTMARE_PICKAXE, PLATINUM_COIN, PWNHAMMER, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALEMAIL,
-    SILVER_BAR, SILVER_BROADSWORD, SILVER_CHAINMAIL, SILVER_COIN, SILVER_GREAVES, SILVER_HELMET,
-    SPEAR, SUSPICIOUS_LOOKING_EYE, TORCH, WAND_OF_SPARKING, WAR_AXE_OF_THE_NIGHT, WATER_BUCKET,
-    WOOD_WALL, WOODEN_SWORD, all_item_ids, item_data,
+    FLAMING_ARROW, GLOWING_MUSHROOM, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_COIN,
+    GOLD_GREAVES, GOLD_HELMET, HEALING_POTION, HEART, HOOK, IRON_BAR, IRON_BROADSWORD, IRON_CHAIN,
+    IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, IRONSKIN_POTION, ItemClass, ItemId, LAVA_BUCKET,
+    LENS, LESSER_HEALING_POTION, LESSER_MANA_POTION, LIGHTS_BANE, MANA_CRYSTAL, MANA_POTION,
+    MOLTEN_BREASTPLATE, MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MURAMASA,
+    MUSHROOM, NIGHTMARE_PICKAXE, PLATINUM_COIN, PWNHAMMER, RECALL_POTION, REGENERATION_POTION,
+    SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALEMAIL, SHINE_POTION, SILVER_BAR, SILVER_BROADSWORD,
+    SILVER_CHAINMAIL, SILVER_COIN, SILVER_GREAVES, SILVER_HELMET, SPEAR, SUSPICIOUS_LOOKING_EYE,
+    SWIFTNESS_POTION, TORCH, WAND_OF_SPARKING, WAR_AXE_OF_THE_NIGHT, WATER_BUCKET,
+    WATER_WALKING_POTION, WOOD_WALL, WOODEN_SWORD, all_item_ids, item_data,
 };
 
 use super::camera::{CameraMode, ControlMode, FlyCamera};
@@ -147,6 +149,17 @@ pub fn held_visual_for_item(id: ItemId) -> HeldVisualKind {
         GOLD_HELMET => vox("102.vox", [1.0, 0.85, 0.25, 1.0]),
         // Potions and buckets
         LESSER_HEALING_POTION => vox("288.vox", [1.0, 0.28, 0.35, 1.0]),
+        HEALING_POTION => vox("288.vox", [1.0, 0.12, 0.24, 1.0]),
+        LESSER_MANA_POTION => vox("288.vox", [0.35, 0.55, 1.0, 1.0]),
+        MANA_POTION => vox("288.vox", [0.18, 0.35, 1.0, 1.0]),
+        REGENERATION_POTION => vox("288.vox", [0.95, 0.38, 0.65, 1.0]),
+        SWIFTNESS_POTION => vox("288.vox", [0.40, 0.92, 0.62, 1.0]),
+        IRONSKIN_POTION => vox("288.vox", [0.95, 0.86, 0.32, 1.0]),
+        SHINE_POTION => vox("288.vox", [1.0, 0.96, 0.55, 1.0]),
+        WATER_WALKING_POTION => vox("288.vox", [0.22, 0.72, 0.95, 1.0]),
+        RECALL_POTION => vox("288.vox", [0.35, 0.85, 0.92, 1.0]),
+        GLOWING_MUSHROOM => vox("23.vox", [0.28, 0.62, 1.0, 1.0]),
+        IRON_CHAIN | HOOK => vox("57.vox", [0.68, 0.72, 0.78, 1.0]),
         EMPTY_BUCKET => vox("53.vox", [0.65, 0.68, 0.72, 1.0]),
         WATER_BUCKET => vox("53.vox", [0.25, 0.55, 0.95, 1.0]),
         LAVA_BUCKET => vox("53.vox", [1.0, 0.42, 0.12, 1.0]),
@@ -187,7 +200,9 @@ fn explicit_vox_file(id: ItemId) -> Option<&'static str> {
         56 => "56.vox",
         57 => "57.vox",
         64 => "64.vox",
+        65 => "65.vox",
         70 => "70.vox",
+        84 => "84.vox",
         86 => "86.vox",
         95 => "95.vox",
         96 => "96.vox",
@@ -214,6 +229,9 @@ fn explicit_vox_file(id: ItemId) -> Option<&'static str> {
         162 => "162.vox",
         163 => "163.vox",
         164 => "164.vox",
+        166 => "166.vox",
+        167 => "167.vox",
+        168 => "168.vox",
         172 => "172.vox",
         173 => "173.vox",
         174 => "174.vox",
@@ -1080,9 +1098,9 @@ mod tests {
     }
 
     #[test]
-    fn all_148_items_have_3d_held_representation() {
+    fn all_items_have_3d_held_representation() {
         let ids: Vec<_> = all_item_ids().collect();
-        assert_eq!(ids.len(), 148);
+        assert_eq!(ids.len(), 172);
         for id in ids {
             match held_visual_for_item(id) {
                 HeldVisualKind::Vox { file, .. } => {

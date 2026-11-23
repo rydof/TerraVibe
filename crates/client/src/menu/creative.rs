@@ -95,7 +95,7 @@ pub fn item_matches_category(id: ItemId, category: CreativeCategory) -> bool {
             matches!(
                 d.class,
                 ItemClass::Melee | ItemClass::Ranged | ItemClass::Magic
-            )
+            ) || (d.class == ItemClass::Consumable && d.damage > 0)
         }
         CreativeCategory::Tools => is_tool,
         CreativeCategory::Armor => d.class == ItemClass::Armor,
@@ -109,7 +109,7 @@ pub fn item_matches_category(id: ItemId, category: CreativeCategory) -> bool {
         }
         CreativeCategory::BossSummon => is_boss_summon,
         CreativeCategory::Misc => {
-            !matches!(
+            !(matches!(
                 d.class,
                 ItemClass::Melee
                     | ItemClass::Ranged
@@ -119,7 +119,8 @@ pub fn item_matches_category(id: ItemId, category: CreativeCategory) -> bool {
                     | ItemClass::Block
                     | ItemClass::Placeable
                     | ItemClass::Wall
-            ) && !is_tool
+            ) || (d.class == ItemClass::Consumable && d.damage > 0))
+                && !is_tool
                 && !is_potion
                 && !is_boss_summon
         }

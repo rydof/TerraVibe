@@ -37,6 +37,8 @@ pub enum Band {
     Dungeon,
     /// Underworld ruined house chests: shadow chests.
     Underworld,
+    /// Floating Island Skyware chests.
+    Skyware,
 }
 
 pub const CAVERN_BAND_DEPTH: i32 = 115;
@@ -283,6 +285,17 @@ pub fn roll_chest_loot(rng: &mut Rng, band: Band) -> Vec<ItemStack> {
                 }
             }
         }
+        Band::Skyware => {
+            const PRIMARY: [u16; 3] = [
+                crate::item::STARFURY.0,
+                crate::item::SHINY_RED_BALLOON.0,
+                crate::item::LUCKY_HORSESHOE.0,
+            ];
+            l.add(PRIMARY[next(r, 3) as usize], 1);
+            l.add(crate::item::HEALING_POTION.0, range(r, 2, 5));
+            l.add(crate::item::RECALL_POTION.0, range(r, 2, 5));
+            l.add(73, range(r, 1, 4)); // Gold Coins
+        }
     }
     for st in &mut l.out {
         if crate::item::item_data(st.id).max_stack == 1 {
@@ -397,6 +410,26 @@ pub fn chests_in_for_size(
             );
             out.push((p, roll_chest_loot(&mut rng, Band::Underworld)));
         }
+    }
+    for (idx, p) in super::sky_island::skyware_chests_in_for_size(seed, pos, size) {
+        let mut rng = Rng::new(
+            hash(seed ^ SALT_CHEST ^ 0x534B_5949, p[0], p[1], p[2]) as u64 | ((idx as u64) << 32),
+        );
+        let mut loot = roll_chest_loot(&mut rng, Band::Skyware);
+        // Guarantee cycling primary Skyware loot across the world's islands.
+        let guaranteed = [
+            crate::item::STARFURY,
+            crate::item::SHINY_RED_BALLOON,
+            crate::item::LUCKY_HORSESHOE,
+        ][idx % 3];
+        if !loot.is_empty() {
+            loot[0] = ItemStack {
+                id: guaranteed,
+                count: 1,
+                prefix: crate::item::roll_prefix(guaranteed, &mut || rng.next_u32()),
+            };
+        }
+        out.push((p, loot));
     }
     out
 }

@@ -44,3 +44,12 @@ pub const LAVA_IMMUNITY_TICKS: u32 = 30;
 pub const LAVA_CHARM_TICKS: i32 = 420;
 pub const OBSIDIAN_SKIN_TICKS: i32 = 21_600;
 pub const HOT_BURN_TICKS: i32 = 20;
+
+pub const IRONSKIN_TICKS: i32 = 28_800;
+pub const SWIFTNESS_TICKS: i32 = 28_800;
+pub const REGEN_TICKS: i32 = 28_800;
+pub const SHINE_TICKS: i32 = 18_000;
+pub const WATER_WALKING_TICKS: i32 = 36_000;
+pub const HEALING_POTION_HEAL: i32 = 100;
+pub const LESSER_MANA_RESTORE: i32 = 50;
+pub const MANA_RESTORE: i32 = 100;

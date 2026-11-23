@@ -109,6 +109,11 @@ pub fn loot_for(kind: EnemyKind, rng: &mut Rng) -> Vec<ItemStack> {
             out.push(stack(GOLDEN_KEY, 1));
         }
     }
+    if kind == EnemyKind::Skeleton || kind == EnemyKind::AngryBones {
+        if rng.below(10) == 0 {
+            out.push(stack(crate::item::HOOK, 1));
+        }
+    }
     if kind == EnemyKind::DarkCaster {
         if rng.below(65) == 0 {
             out.push(stack(GOLDEN_KEY, 1));

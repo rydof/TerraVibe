@@ -854,7 +854,7 @@ pub mod tests {
                 "item {id:?} must have title and class lines"
             );
         }
-        assert_eq!(count, 148);
+        assert_eq!(count, 172);
     }
 
     #[test]

@@ -61,6 +61,11 @@ pub enum ProjKind {
     DemonScythe,
     Laser,
     EyeLaser,
+    Grenade,
+    Bomb,
+    Dynamite,
+    GrappleHook,
+    StarfuryStar,
 }
 
 impl ProjKind {
@@ -80,14 +85,17 @@ impl ProjKind {
     /// rapid fire (Clockwork burst, Phoenix Blaster) still lands every shot.
     pub fn pierce_cap(self) -> Option<u32> {
         match self {
-            ProjKind::Spark => Some(2),
+            ProjKind::Spark | ProjKind::StarfuryStar => Some(2),
             ProjKind::Laser => Some(3),
             ProjKind::WaterStream => Some(5),
             ProjKind::Spear
             | ProjKind::Vilethorn
             | ProjKind::Flail
             | ProjKind::Yoyo
-            | ProjKind::Flamarang => None,
+            | ProjKind::Flamarang
+            | ProjKind::Bomb
+            | ProjKind::Dynamite
+            | ProjKind::GrappleHook => None,
             ProjKind::Arrow
             | ProjKind::FlamingArrow
             | ProjKind::Boomerang
@@ -95,7 +103,8 @@ impl ProjKind {
             | ProjKind::MagicMissile
             | ProjKind::Fireball
             | ProjKind::DemonScythe
-            | ProjKind::EyeLaser => Some(1),
+            | ProjKind::EyeLaser
+            | ProjKind::Grenade => Some(1),
         }
     }
 }
@@ -225,6 +234,99 @@ impl Projectile {
             pierced: 0,
             origin,
         })
+    }
+
+    pub fn hit_enemies_detailed_guard(kind: ProjKind) -> bool {
+        matches!(
+            kind,
+            ProjKind::Bomb | ProjKind::Dynamite | ProjKind::GrappleHook
+        )
+    }
+
+    /// Throws a Bomb, Dynamite, or Grenade along `dir`.
+    pub fn throw_explosive(
+        id: u32,
+        owner: u32,
+        item: ItemId,
+        origin: [f32; 3],
+        dir: [f32; 3],
+    ) -> Projectile {
+        let data = item_data(item);
+        let speed = data.shoot_speed * PX;
+        let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2])
+            .sqrt()
+            .max(1e-6);
+        let nd = [dir[0] / len, dir[1] / len, dir[2] / len];
+        let kind = match item {
+            crate::item::DYNAMITE => ProjKind::Dynamite,
+            crate::item::GRENADE => ProjKind::Grenade,
+            _ => ProjKind::Bomb,
+        };
+        Projectile {
+            id,
+            pos: origin,
+            vel: [nd[0] * speed, nd[1] * speed + 0.14, nd[2] * speed],
+            kind,
+            owner,
+            ttl: 180,
+            damage: data.damage,
+            knock_back: data.knock_back,
+            crit: data.crit,
+            ai0: 0,
+            pierced: 0,
+            origin,
+        }
+    }
+
+    /// Fires a Grappling Hook along `dir`.
+    pub fn fire_grapple(id: u32, owner: u32, origin: [f32; 3], dir: [f32; 3]) -> Projectile {
+        let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2])
+            .sqrt()
+            .max(1e-6);
+        let speed = 1.35;
+        Projectile {
+            id,
+            pos: origin,
+            vel: [
+                dir[0] / len * speed,
+                dir[1] / len * speed,
+                dir[2] / len * speed,
+            ],
+            kind: ProjKind::GrappleHook,
+            owner,
+            ttl: 60,
+            damage: 0,
+            knock_back: 0.0,
+            crit: 0,
+            ai0: 0,
+            pierced: 0,
+            origin,
+        }
+    }
+
+    /// Spawns a Starfury falling star 22 blocks above `target_pos`.
+    pub fn spawn_starfury_star(
+        id: u32,
+        owner: u32,
+        damage: i32,
+        knock_back: f32,
+        crit: i32,
+        target_pos: [f32; 3],
+    ) -> Projectile {
+        Projectile {
+            id,
+            pos: [target_pos[0], target_pos[1] + 22.0, target_pos[2]],
+            vel: [0.0, -1.25, 0.0],
+            kind: ProjKind::StarfuryStar,
+            owner,
+            ttl: 45,
+            damage,
+            knock_back,
+            crit,
+            ai0: 0,
+            pierced: 0,
+            origin: target_pos,
+        }
     }
 
     /// Cast a Spark projectile from a wand.
@@ -706,6 +808,82 @@ pub fn step_with_target(q: &impl BlockQuery, p: &mut Projectile, target: [f32; 3
             }
             Step::Flying
         }
+        ProjKind::GrappleHook => {
+            if p.ai0 == 1 {
+                p.ttl = 600;
+                return Step::Flying;
+            }
+            let dx = p.pos[0] - target[0];
+            let dy = p.pos[1] - target[1];
+            let dz = p.pos[2] - target[2];
+            if dx * dx + dy * dy + dz * dz >= 24.0 * 24.0 {
+                return Step::Expired;
+            }
+            let len = p.vel.iter().map(|v| v * v).sum::<f32>().sqrt();
+            let n = (len / 0.25).ceil().max(1.0) as i32;
+            for _ in 0..n {
+                let next = [
+                    p.pos[0] + p.vel[0] / n as f32,
+                    p.pos[1] + p.vel[1] / n as f32,
+                    p.pos[2] + p.vel[2] / n as f32,
+                ];
+                if q.block(
+                    next[0].floor() as i32,
+                    next[1].floor() as i32,
+                    next[2].floor() as i32,
+                )
+                .is_solid()
+                {
+                    p.ai0 = 1;
+                    p.vel = [0.0; 3];
+                    p.ttl = 600;
+                    return Step::Flying;
+                }
+                p.pos = next;
+            }
+            Step::Flying
+        }
+        ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => {
+            p.vel[1] = (p.vel[1] - ARROW_GRAVITY * 1.4).max(-ARROW_MAX_FALL);
+            for axis in 0..3 {
+                let mut next = p.pos;
+                next[axis] += p.vel[axis];
+                if q.block(
+                    next[0].floor() as i32,
+                    next[1].floor() as i32,
+                    next[2].floor() as i32,
+                )
+                .is_solid()
+                {
+                    if axis == 1 {
+                        p.vel[1] = -p.vel[1] * 0.35;
+                        p.vel[0] *= 0.72;
+                        p.vel[2] *= 0.72;
+                    } else {
+                        p.vel[axis] = -p.vel[axis] * 0.5;
+                    }
+                } else {
+                    p.pos[axis] = next[axis];
+                }
+            }
+            Step::Flying
+        }
+        ProjKind::StarfuryStar => {
+            p.pos[0] += p.vel[0];
+            p.pos[1] += p.vel[1];
+            p.pos[2] += p.vel[2];
+            if p.pos[1] <= p.origin[1] - 2.0
+                && q.block(
+                    p.pos[0].floor() as i32,
+                    p.pos[1].floor() as i32,
+                    p.pos[2].floor() as i32,
+                )
+                .is_solid()
+            {
+                return Step::HitBlock;
+            }
+            Step::Flying
+        }
         ProjKind::Arrow
         | ProjKind::FlamingArrow
         | ProjKind::Spark
@@ -816,6 +994,9 @@ pub fn hit_enemies_detailed(
     enemies: &mut [Enemy],
     rng: &mut Rng,
 ) -> Vec<ProjHit> {
+    if Projectile::hit_enemies_detailed_guard(p.kind) {
+        return Vec::new();
+    }
     let mut hits = Vec::new();
     let cap = p.kind.pierce_cap();
     let ignores_immunity = cap == Some(1);
@@ -1636,5 +1817,55 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert!(hits[0].hit.killed);
         assert!(enemies[0].hp <= 0);
+    }
+
+    #[test]
+    fn grapple_hook_latches_and_explosives_bounce_and_expire() {
+        struct WallAndFloor;
+        impl BlockQuery for WallAndFloor {
+            fn block(&self, x: i32, y: i32, _z: i32) -> BlockId {
+                if y < 0 || x >= 5 { STONE } else { AIR }
+            }
+        }
+
+        let mut hook = Projectile::fire_grapple(1, 7, [0.5, 2.0, 0.5], [1.0, 0.0, 0.0]);
+        assert_eq!(hook.kind, ProjKind::GrappleHook);
+        for _ in 0..20 {
+            let st = step(&WallAndFloor, &mut hook);
+            assert_eq!(st, Step::Flying);
+            if hook.ai0 == 1 {
+                break;
+            }
+        }
+        assert_eq!(hook.ai0, 1, "grapple hook should latch onto solid wall");
+        assert_eq!(hook.vel, [0.0, 0.0, 0.0]);
+
+        for item in [
+            crate::item::BOMB,
+            crate::item::DYNAMITE,
+            crate::item::GRENADE,
+        ] {
+            let mut exp =
+                Projectile::throw_explosive(2, 7, item, [0.5, 2.0, 0.5], [1.0, -0.5, 0.0]);
+            let mut saw_bounce = false;
+            let mut expired = false;
+            for _ in 0..220 {
+                let prev_vy = exp.vel[1];
+                match step(&WallAndFloor, &mut exp) {
+                    Step::Flying => {
+                        if prev_vy < 0.0 && exp.vel[1] > 0.0 {
+                            saw_bounce = true;
+                        }
+                    }
+                    Step::Expired => {
+                        expired = true;
+                        break;
+                    }
+                    Step::HitBlock => panic!("explosives must bounce rather than despawn"),
+                }
+            }
+            assert!(saw_bounce, "{item:?} should bounce off floor");
+            assert!(expired, "{item:?} should expire at end of fuse");
+        }
     }
 }

@@ -20,7 +20,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use terravibe_sim::{CHUNK_SIZE, Chunk, ChunkPos, LiquidKind, TORCH, World};
+use terravibe_sim::{
+    CAMPFIRE, CHUNK_SIZE, Chunk, ChunkPos, GLOWING_MUSHROOM_PLANT, HEART_LANTERN, LiquidKind,
+    METEORITE_ORE, MUSHROOM_GRASS, TORCH, World,
+};
 
 use super::{LIGHT_BORDER, LIGHT_IMAGE_SIZE};
 
@@ -195,6 +198,11 @@ const CELL_SOLID: u8 = 1;
 const CELL_WATER: u8 = 2;
 const CELL_TORCH: u8 = 3;
 const CELL_LAVA: u8 = 4;
+const CELL_CAMPFIRE: u8 = 5;
+const CELL_HEART_LANTERN: u8 = 6;
+const CELL_MUSHROOM: u8 = 7;
+const CELL_MUSHROOM_GRASS: u8 = 8;
+const CELL_METEORITE: u8 = 9;
 
 /// Zero-clone compact snapshot for lighting one chunk on a worker thread.
 pub struct LightInput {
@@ -206,10 +214,20 @@ pub struct LightInput {
 #[inline]
 fn pack_cell(chunk: &Chunk, lx: usize, ly: usize, lz: usize) -> u8 {
     let b = chunk.get(lx, ly, lz);
-    if b.is_solid() {
+    if b == METEORITE_ORE {
+        CELL_METEORITE
+    } else if b == MUSHROOM_GRASS {
+        CELL_MUSHROOM_GRASS
+    } else if b.is_solid() {
         CELL_SOLID
     } else if b == TORCH {
         CELL_TORCH
+    } else if b == CAMPFIRE {
+        CELL_CAMPFIRE
+    } else if b == HEART_LANTERN {
+        CELL_HEART_LANTERN
+    } else if b == GLOWING_MUSHROOM_PLANT {
+        CELL_MUSHROOM
     } else if let Some(liq) = chunk.liquid(lx, ly, lz)
         && liq.amount >= 1
     {
@@ -421,7 +439,11 @@ pub fn light_chunk_input(input: &LightInput) -> LightVolume {
             let mut top = None;
             for py in (0..H).rev() {
                 let c = cells[index(px, py, pz)];
-                if c == CELL_SOLID || c == CELL_WATER {
+                if c == CELL_SOLID
+                    || c == CELL_WATER
+                    || c == CELL_MUSHROOM_GRASS
+                    || c == CELL_METEORITE
+                {
                     top = Some(py);
                     break;
                 }
@@ -448,17 +470,35 @@ pub fn light_chunk_input(input: &LightInput) -> LightVolume {
         (LAVA_LIGHT[2] * f32::from(FULL)).round() as u16,
         0, // sky-only channel: lava adds nothing
     ];
+    let rgb_source = |r: f32, g: f32, b: f32| -> [u16; 4] {
+        [
+            (r * f32::from(FULL)).round() as u16,
+            (g * f32::from(FULL)).round() as u16,
+            (b * f32::from(FULL)).round() as u16,
+            0,
+        ]
+    };
+    let campfire = rgb_source(1.0, 0.72, 0.35);
+    let heart_lantern = rgb_source(1.0, 0.38, 0.50);
+    let mushroom = rgb_source(0.25, 0.55, 1.0);
+    let mushroom_grass = rgb_source(0.18, 0.42, 0.85);
+    let meteorite = rgb_source(0.75, 0.25, 0.08);
     for (i, &c) in cells.iter().enumerate() {
-        if c == CELL_TORCH {
-            if torch[0] > light[i][0] {
-                light[i] = torch;
-                queue.push(i as u32);
-            }
-        } else if c == CELL_LAVA {
+        let src = match c {
+            CELL_TORCH => Some(torch),
+            CELL_LAVA => Some(lava),
+            CELL_CAMPFIRE => Some(campfire),
+            CELL_HEART_LANTERN => Some(heart_lantern),
+            CELL_MUSHROOM => Some(mushroom),
+            CELL_MUSHROOM_GRASS => Some(mushroom_grass),
+            CELL_METEORITE => Some(meteorite),
+            _ => None,
+        };
+        if let Some(s) = src {
             let mut brighter = false;
             for ch in 0..3 {
-                if lava[ch] > light[i][ch] {
-                    light[i][ch] = lava[ch];
+                if s[ch] > light[i][ch] {
+                    light[i][ch] = s[ch];
                     brighter = true;
                 }
             }
@@ -489,7 +529,7 @@ pub fn light_chunk_input(input: &LightInput) -> LightVolume {
             }
             let ni = index(nx as usize, ny as usize, nz as usize);
             let cell = cells[ni];
-            let solid = cell == CELL_SOLID;
+            let solid = cell == CELL_SOLID || cell == CELL_MUSHROOM_GRASS || cell == CELL_METEORITE;
             let mul = if solid {
                 SOLID_MUL
             } else if cell == CELL_WATER {

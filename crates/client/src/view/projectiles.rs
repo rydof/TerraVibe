@@ -6,8 +6,8 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use terravibe_sim::item::{
-    BALL_O_HURT, ENCHANTED_BOOMERANG, FLAMARANG, MAGIC_MISSILE, MUSKET_BALL, SPEAR, VALOR,
-    VILETHORN, WOODEN_ARROW,
+    BALL_O_HURT, BOMB, DYNAMITE, ENCHANTED_BOOMERANG, FLAMARANG, GRAPPLING_HOOK, GRENADE,
+    MAGIC_MISSILE, MUSKET_BALL, SPEAR, VALOR, VILETHORN, WOODEN_ARROW,
 };
 use terravibe_sim::projectile::{ProjKind, Projectile};
 
@@ -54,6 +54,13 @@ struct ArrowVisuals {
     magic_missile: Handle<StandardMaterial>,
     water_stream_mesh: Handle<Mesh>,
     water_stream: Handle<StandardMaterial>,
+    bomb_mesh: Handle<Mesh>,
+    dynamite_mesh: Handle<Mesh>,
+    grenade_mesh: Handle<Mesh>,
+    grapple_mesh: Handle<Mesh>,
+    star_mesh: Handle<Mesh>,
+    star_mat: Handle<StandardMaterial>,
+    explosive_mat: Handle<StandardMaterial>,
 }
 
 pub struct ProjectilesPlugin;
@@ -139,6 +146,21 @@ fn setup(
     let magic_missile = mat(Color::srgb(0.35, 0.82, 1.0), LinearRgba::rgb(0.6, 1.8, 3.0));
     let water_stream_mesh = meshes.add(Cuboid::new(0.11, 0.11, 0.32));
     let water_stream = mat(Color::srgb(0.20, 0.78, 1.0), LinearRgba::rgb(0.2, 0.9, 1.6));
+    let bomb_mesh = crate::art::item_model(BOMB)
+        .and_then(|p| load_mesh(&mut meshes, &p, [5.0, 6.0, 5.0]))
+        .unwrap_or_else(|| meshes.add(Cuboid::new(0.25, 0.25, 0.25)));
+    let dynamite_mesh = crate::art::item_model(DYNAMITE)
+        .and_then(|p| load_mesh(&mut meshes, &p, [4.0, 7.0, 4.0]))
+        .unwrap_or_else(|| meshes.add(Cuboid::new(0.20, 0.32, 0.20)));
+    let grenade_mesh = crate::art::item_model(GRENADE)
+        .and_then(|p| load_mesh(&mut meshes, &p, [4.0, 5.0, 4.0]))
+        .unwrap_or_else(|| meshes.add(Cuboid::new(0.20, 0.22, 0.20)));
+    let grapple_mesh = crate::art::item_model(GRAPPLING_HOOK)
+        .and_then(|p| load_mesh(&mut meshes, &p, [7.0, 7.0, 1.0]))
+        .unwrap_or_else(|| meshes.add(Cuboid::new(0.25, 0.25, 0.25)));
+    let star_mesh = meshes.add(Cuboid::new(0.32, 0.32, 0.32));
+    let star_mat = mat(Color::srgb(1.0, 0.65, 0.92), LinearRgba::rgb(3.2, 1.4, 2.8));
+    let explosive_mat = mat(Color::WHITE, LinearRgba::NONE);
     commands.insert_resource(ArrowVisuals {
         mesh,
         wood,
@@ -163,6 +185,13 @@ fn setup(
         magic_missile,
         water_stream_mesh,
         water_stream,
+        bomb_mesh,
+        dynamite_mesh,
+        grenade_mesh,
+        grapple_mesh,
+        star_mesh,
+        star_mat,
+        explosive_mat,
     });
 }
 
@@ -177,6 +206,9 @@ fn projectile_scale_and_axis(kind: ProjKind) -> (f32, Vec3) {
         ProjKind::Yoyo => (0.34, Vec3::Z),
         ProjKind::Vilethorn => (0.34, MODEL_AXIS.normalize()),
         ProjKind::MagicMissile => (0.32, MODEL_AXIS.normalize()),
+        ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => (0.45, Vec3::Y),
+        ProjKind::GrappleHook => (0.42, MODEL_AXIS.normalize()),
+        ProjKind::StarfuryStar => (1.0, Vec3::Y),
         ProjKind::Arrow
         | ProjKind::FlamingArrow
         | ProjKind::Spark
@@ -200,6 +232,9 @@ fn projectile_trail_color(kind: ProjKind) -> Color {
         ProjKind::Bullet => Color::srgb(0.95, 0.86, 0.45),
         ProjKind::Flail => Color::srgb(0.55, 0.52, 0.68),
         ProjKind::Yoyo => Color::srgb(0.30, 0.62, 0.98),
+        ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => Color::srgb(1.0, 0.55, 0.15),
+        ProjKind::GrappleHook => Color::srgb(0.70, 0.74, 0.80),
+        ProjKind::StarfuryStar => Color::srgb(1.0, 0.65, 0.92),
         ProjKind::Arrow | ProjKind::Boomerang | ProjKind::Spear => Color::srgb(0.85, 0.85, 0.88),
     }
 }
@@ -225,6 +260,11 @@ fn projectile_visual_pair(
         ProjKind::Vilethorn => (vis.vilethorn.clone(), vis.vilethorn_mesh.clone()),
         ProjKind::MagicMissile => (vis.magic_missile.clone(), vis.magic_missile_mesh.clone()),
         ProjKind::WaterStream => (vis.water_stream.clone(), vis.water_stream_mesh.clone()),
+        ProjKind::Bomb => (vis.explosive_mat.clone(), vis.bomb_mesh.clone()),
+        ProjKind::Dynamite => (vis.explosive_mat.clone(), vis.dynamite_mesh.clone()),
+        ProjKind::Grenade => (vis.explosive_mat.clone(), vis.grenade_mesh.clone()),
+        ProjKind::GrappleHook => (vis.explosive_mat.clone(), vis.grapple_mesh.clone()),
+        ProjKind::StarfuryStar => (vis.star_mat.clone(), vis.star_mesh.clone()),
     }
 }
 
@@ -237,6 +277,8 @@ fn apply(
     mut tf: Query<&mut Transform>,
     mut particles: Option<ResMut<ParticlePool>>,
     settings: Option<Res<Settings>>,
+    local_player: Option<Res<crate::view::player::LocalPlayer>>,
+    mut gizmos: Option<Gizmos>,
 ) {
     let (Some(vis), Some(ProjectilesMsg(list))) = (vis, msgs.read().last()) else {
         return;
@@ -264,6 +306,12 @@ fn apply(
     });
     for p in list {
         let pos = Vec3::from(p.pos);
+        if p.kind == ProjKind::GrappleHook
+            && let (Some(lp), Some(g)) = (local_player.as_ref(), gizmos.as_mut())
+        {
+            let hand = Vec3::new(lp.0.body.pos[0], lp.0.body.pos[1] + 1.0, lp.0.body.pos[2]);
+            g.line(hand, pos, Color::srgb(0.65, 0.70, 0.78));
+        }
         let dir = Vec3::from(p.vel);
         if let Some(pool) = particles.as_deref_mut()
             && dir.length_squared() > 1e-10

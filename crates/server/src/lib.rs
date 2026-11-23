@@ -1228,6 +1228,8 @@ impl Server {
             i32,
         )> = Vec::new();
         let mut casts: Vec<(PlayerId, ItemId, Prefix, [f32; 3], [f32; 3])> = Vec::new();
+        let mut throws: Vec<(PlayerId, ItemId, [f32; 3], [f32; 3])> = Vec::new();
+        let mut grapples: Vec<(PlayerId, [f32; 3], [f32; 3])> = Vec::new();
         let mut melee_combat_hits: Vec<ServerMsg> = Vec::new();
         let mut summons: Vec<[f32; 3]> = Vec::new();
         let mut eater_summons: Vec<[f32; 3]> = Vec::new();
@@ -1311,6 +1313,12 @@ impl Server {
                         } => {
                             casts.push((c.id, wand, prefix, origin, dir));
                         }
+                        UseEvent::Throw { item, origin, dir } => {
+                            throws.push((c.id, item, origin, dir));
+                        }
+                        UseEvent::Grapple { origin, dir } => {
+                            grapples.push((c.id, origin, dir));
+                        }
                         // Server-authoritative crystal use: life_max reaches the client
                         // in the PlayerState sent below.
                         UseEvent::Consume { item } if item == SUSPICIOUS_LOOKING_EYE => {
@@ -1361,6 +1369,18 @@ impl Server {
                                 critter_spawns.push((kind, spawn_pos));
                             }
                         }
+                        UseEvent::Consume { item }
+                            if item == terravibe_sim::item::RECALL_POTION =>
+                        {
+                            if apply_consumable(item, &mut p.vitals, &mut c.inv)
+                                || (c.inv.selected_stack().is_some_and(|s| s.id == item))
+                            {
+                                c.inv.take_one_selected();
+                                p.body.pos = self.spawn;
+                                p.body.vel = [0.0; 3];
+                                p.body.fall_peak_y = self.spawn[1];
+                            }
+                        }
                         UseEvent::Consume { item } => {
                             apply_consumable(item, &mut p.vitals, &mut c.inv);
                         }
@@ -1388,6 +1408,30 @@ impl Server {
                     p.body.vel = [0.0; 3];
                     p.body.fall_peak_y = self.spawn[1];
                     continue;
+                }
+                if item == terravibe_sim::item::STARFURY && self.projectiles.len() < MAX_PROJECTILES
+                {
+                    let (sy, cy) = yaw.sin_cos();
+                    let (sp, cp) = pitch.sin_cos();
+                    let dir = [-sy * cp, sp, -cy * cp];
+                    let target_pos = [
+                        eye[0] + dir[0] * 10.0,
+                        eye[1] + dir[1] * 10.0,
+                        eye[2] + dir[2] * 10.0,
+                    ];
+                    let star_id = self.next_proj_id;
+                    self.next_proj_id = self.next_proj_id.wrapping_add(1);
+                    let star_dmg =
+                        (36.0 * ps.damage * p.melee_damage_mult()).round_ties_even() as i32;
+                    let star_crit = item_data(item).crit + ps.crit + p.accessory_crit_bonus();
+                    self.projectiles.push(Projectile::spawn_starfury_star(
+                        star_id,
+                        c.id,
+                        star_dmg,
+                        item_data(item).knock_back * ps.knock_back,
+                        star_crit,
+                        target_pos,
+                    ));
                 }
                 if item == BUG_NET {
                     const BUG_NET_REACH: f32 = 3.8;
@@ -1950,6 +1994,60 @@ impl Server {
                         }
                     }
                 }
+            }
+        }
+        for (owner, item, origin, dir) in throws {
+            if self.projectiles.len() < MAX_PROJECTILES {
+                let id = self.next_proj_id;
+                self.next_proj_id = self.next_proj_id.wrapping_add(1);
+                self.projectiles
+                    .push(Projectile::throw_explosive(id, owner, item, origin, dir));
+            }
+        }
+        for (owner, origin, dir) in grapples {
+            self.projectiles
+                .retain(|pr| !(pr.owner == owner && pr.kind == ProjKind::GrappleHook));
+            if self.projectiles.len() < MAX_PROJECTILES {
+                let id = self.next_proj_id;
+                self.next_proj_id = self.next_proj_id.wrapping_add(1);
+                self.projectiles
+                    .push(Projectile::fire_grapple(id, owner, origin, dir));
+            }
+        }
+        if tick % 30 == 0 {
+            let wq = WorldQ(&self.world);
+            for c in &mut self.conns {
+                let Some(p) = c.player.as_mut().filter(|p| !p.dead) else {
+                    continue;
+                };
+                let px = p.body.pos[0].floor() as i32;
+                let py = p.body.pos[1].floor() as i32;
+                let pz = p.body.pos[2].floor() as i32;
+                let mut has_fire = false;
+                let mut has_lantern = false;
+                for dy in -6..=6 {
+                    for dz in -12..=12 {
+                        for dx in -12..=12 {
+                            let b = wq.block(px + dx, py + dy, pz + dz);
+                            if b == terravibe_sim::block::CAMPFIRE {
+                                has_fire = true;
+                            } else if b == terravibe_sim::block::HEART_LANTERN {
+                                has_lantern = true;
+                            }
+                            if has_fire && has_lantern {
+                                break;
+                            }
+                        }
+                        if has_fire && has_lantern {
+                            break;
+                        }
+                    }
+                    if has_fire && has_lantern {
+                        break;
+                    }
+                }
+                p.vitals.campfire_active = has_fire;
+                p.vitals.heart_lantern_active = has_lantern;
             }
         }
         for at in summons {
@@ -3173,12 +3271,58 @@ impl Server {
     /// Steps arrows and projectiles, applies hits (damage path of melee: `apply_hit`)
     /// and streams the survivors. Nothing is sent while none exist.
     fn tick_projectiles(&mut self) {
+        let mut grapple_pulls: Vec<(u32, [f32; 3])> = Vec::new();
+        for p in &self.projectiles {
+            if p.kind == ProjKind::GrappleHook && p.ai0 == 1 {
+                grapple_pulls.push((p.owner, p.pos));
+            }
+        }
+        let mut detached_owners: Vec<u32> = Vec::new();
+        for (owner, hook_pos) in grapple_pulls {
+            if let Some(c) = self.conns.iter_mut().find(|c| c.id == owner)
+                && let Some(pl) = c.player.as_mut().filter(|pl| !pl.dead)
+            {
+                if pl.body.jump_held_prev {
+                    pl.body.vel[1] = terravibe_sim::player::consts::JUMP_SPEED;
+                    detached_owners.push(owner);
+                } else {
+                    let target = [hook_pos[0], hook_pos[1] - 0.9, hook_pos[2]];
+                    let dx = target[0] - pl.body.pos[0];
+                    let dy = target[1] - pl.body.pos[1];
+                    let dz = target[2] - pl.body.pos[2];
+                    let d = (dx * dx + dy * dy + dz * dz).sqrt();
+                    if d > 0.35 {
+                        let step = 0.72f32.min(d);
+                        let wq = WorldQ(&self.world);
+                        for (axis, delta) in
+                            [(0, dx / d * step), (1, dy / d * step), (2, dz / d * step)]
+                        {
+                            terravibe_sim::player::collide::move_axis(
+                                &wq,
+                                &mut pl.body.pos,
+                                axis,
+                                delta,
+                            );
+                        }
+                    }
+                    pl.body.vel = [0.0; 3];
+                    pl.body.fall_peak_y = pl.body.pos[1];
+                }
+            }
+        }
+        if !detached_owners.is_empty() {
+            self.projectiles.retain(|p| {
+                !(p.kind == ProjKind::GrappleHook && detached_owners.contains(&p.owner))
+            });
+        }
+
         let world = &self.world;
         let bounds = self.bounds;
         let conns = &mut self.conns;
         let (enemies, rng) = (&mut self.enemies, &mut self.rng);
         let mut proj_deaths = Vec::new();
         let mut combat_hits = Vec::new();
+        let mut explosions: Vec<(ProjKind, [f32; 3], i32, f32, i32)> = Vec::new();
         self.projectiles.retain_mut(|p| {
             if p.owner == u32::MAX {
                 // Enemy-owned projectile: skip enemy hit checks, damage overlapping live players
@@ -3249,10 +3393,15 @@ impl Server {
                     | ProjKind::Flamarang
                     | ProjKind::Spear
                     | ProjKind::Flail
-                    | ProjKind::Yoyo => DamageKind::Melee,
-                    ProjKind::Fireball | ProjKind::DemonScythe | ProjKind::EyeLaser => {
-                        DamageKind::Projectile
-                    }
+                    | ProjKind::Yoyo
+                    | ProjKind::StarfuryStar => DamageKind::Melee,
+                    ProjKind::Fireball
+                    | ProjKind::DemonScythe
+                    | ProjKind::EyeLaser
+                    | ProjKind::Grenade
+                    | ProjKind::Bomb
+                    | ProjKind::Dynamite
+                    | ProjKind::GrappleHook => DamageKind::Projectile,
                 };
                 for h in &hits {
                     if let Some(e) = enemies.iter().find(|e| e.id == h.id) {
@@ -3276,6 +3425,9 @@ impl Server {
                     // Single-hit kinds and multi-hit ones alike are spent once
                     // they have damaged `cap` enemies.
                     if p.pierced >= cap {
+                        if p.kind == ProjKind::Grenade {
+                            explosions.push((p.kind, p.pos, p.damage, p.knock_back, p.crit));
+                        }
                         return false;
                     }
                 }
@@ -3304,9 +3456,21 @@ impl Server {
                 .and_then(|c| c.player.as_ref())
                 .map(|pl| [pl.body.pos[0], pl.body.pos[1] + EYE_HEIGHT, pl.body.pos[2]]);
             let target = owner_pos.unwrap_or(p.origin);
-            step_with_target(&WorldQ(world), p, target) == Step::Flying
+            let step_res = step_with_target(&WorldQ(world), p, target);
+            if step_res != Step::Flying
+                && matches!(
+                    p.kind,
+                    ProjKind::Grenade | ProjKind::Bomb | ProjKind::Dynamite
+                )
+            {
+                explosions.push((p.kind, p.pos, p.damage, p.knock_back, p.crit));
+            }
+            step_res == Step::Flying
                 && bounds.contains_column(p.pos[0].floor() as i32, p.pos[2].floor() as i32)
         });
+        for (kind, pos, dmg, kb, crit) in explosions {
+            self.explode_projectile(kind, pos, dmg, kb, crit);
+        }
         for msg in combat_hits {
             self.send_all_players(msg);
         }
@@ -3328,6 +3492,127 @@ impl Server {
             }
             c.sent_proj = !list.is_empty();
             c.dead |= c.io.send(ServerMsg::Projectiles { list }).is_err();
+        }
+    }
+
+    fn explode_projectile(
+        &mut self,
+        kind: ProjKind,
+        pos: [f32; 3],
+        damage: i32,
+        knock_back: f32,
+        crit: i32,
+    ) {
+        let radius = match kind {
+            ProjKind::Dynamite => 5.5f32,
+            _ => 3.5f32,
+        };
+        let r2 = radius * radius;
+        for e in &mut self.enemies {
+            if e.hp <= 0 || e.kind.is_friendly() {
+                continue;
+            }
+            if dist2(e.pos, pos) <= r2 {
+                let _ = apply_hit(e, pos, damage, knock_back, crit, &mut self.rng);
+            }
+        }
+        let mut player_deaths = Vec::new();
+        for (cid, c) in self.conns.iter_mut().enumerate() {
+            let Some(pl) = c.player.as_mut().filter(|pl| !pl.dead && !pl.god_mode) else {
+                continue;
+            };
+            if dist2(pl.body.pos, pos) <= r2 {
+                let mut ev = Vec::new();
+                let self_dmg = damage / 2;
+                if hurt_player_with_cause(pl, self_dmg, DeathCause::Projectile(kind), &mut ev) {
+                    let amount = damage_taken(self_dmg, pl.defense());
+                    c.dead |= c.io.send(ServerMsg::PlayerHit { amount }).is_err();
+                    if pl.dead {
+                        player_deaths.push((cid, DeathCause::Projectile(kind)));
+                    }
+                }
+            }
+        }
+        for (cid, cause) in player_deaths {
+            self.on_player_killed(cid, cause);
+        }
+        if matches!(kind, ProjKind::Bomb | ProjKind::Dynamite) {
+            let r_i = radius.ceil() as i32;
+            let cx = pos[0].floor() as i32;
+            let cy = pos[1].floor() as i32;
+            let cz = pos[2].floor() as i32;
+            let mut broken_orbs = Vec::new();
+            for dy in -r_i..=r_i {
+                let wy = cy + dy;
+                if wy <= 0 || wy >= terravibe_sim::WORLD_HEIGHT as i32 {
+                    continue;
+                }
+                for dz in -r_i..=r_i {
+                    let wz = cz + dz;
+                    for dx in -r_i..=r_i {
+                        let wx = cx + dx;
+                        if (dx * dx + dy * dy + dz * dz) as f32 > r2 {
+                            continue;
+                        }
+                        let cp = ChunkPos::of_block(wx, wy, wz);
+                        let Some(chunk) = self.world.get_mut(&cp) else {
+                            continue;
+                        };
+                        let lx = wx.rem_euclid(CHUNK_SIZE) as usize;
+                        let ly = wy.rem_euclid(CHUNK_SIZE) as usize;
+                        let lz = wz.rem_euclid(CHUNK_SIZE) as usize;
+                        let b = chunk.get(lx, ly, lz);
+                        if b == AIR
+                            || matches!(
+                                b,
+                                CHEST
+                                    | terravibe_sim::block::DEMON_ALTAR
+                                    | terravibe_sim::block::HELLSTONE
+                                    | terravibe_sim::block::HELLSTONE_BRICK
+                                    | terravibe_sim::block::OBSIDIAN
+                                    | terravibe_sim::block::BLUE_DUNGEON_BRICK
+                                    | terravibe_sim::block::GREEN_DUNGEON_BRICK
+                                    | terravibe_sim::block::PINK_DUNGEON_BRICK
+                                    | terravibe_sim::block::OBSIDIAN_BRICK
+                            )
+                        {
+                            continue;
+                        }
+                        Arc::make_mut(chunk).set(lx, ly, lz, AIR);
+                        let bpos = [wx, wy, wz];
+                        self.edited.insert(cp);
+                        self.dirty.insert(cp);
+                        self.liquid_sim.wake(bpos);
+                        for c in &mut self.conns {
+                            if c.interest.sent.contains(&cp) {
+                                c.dead |=
+                                    c.io.send(ServerMsg::BlockChanged {
+                                        pos: bpos,
+                                        block: AIR,
+                                    })
+                                    .is_err();
+                            }
+                        }
+                        if b == terravibe_sim::block::SHADOW_ORB {
+                            broken_orbs.push(bpos);
+                        } else if self.rng.below(2) == 0
+                            && let Some(item) = b.drop_item()
+                        {
+                            self.add_drop(
+                                ItemStack {
+                                    id: item,
+                                    count: 1,
+                                    prefix: Prefix(0),
+                                },
+                                [wx as f32 + 0.5, wy as f32 + 0.5, wz as f32 + 0.5],
+                            );
+                        }
+                    }
+                }
+            }
+            for orb_pos in broken_orbs {
+                self.handle_shadow_orb_broken(orb_pos);
+            }
         }
     }
 
@@ -12548,6 +12833,70 @@ mod tests {
             assert!(
                 s.conns[cid].player.as_ref().unwrap().dead,
                 "QaKill must kill the player when qa_kill is enabled"
+            );
+        }
+
+        #[test]
+        fn bomb_breaks_blocks_preserves_chest_and_grenade_preserves_terrain() {
+            let mut s = test_server();
+            let stone_pos = [10, 60, 10];
+            let ebon_pos = [11, 60, 10];
+            let chest_pos = [12, 60, 10];
+            let hell_pos = [10, 61, 10];
+            let dung_pos = [10, 62, 10];
+            for (p, b) in [
+                (stone_pos, terravibe_sim::block::STONE),
+                (ebon_pos, terravibe_sim::block::EBONSTONE),
+                (chest_pos, CHEST),
+                (hell_pos, terravibe_sim::block::HELLSTONE),
+                (dung_pos, terravibe_sim::block::BLUE_DUNGEON_BRICK),
+            ] {
+                let cp = ChunkPos::of_block(p[0], p[1], p[2]);
+                s.world
+                    .entry(cp)
+                    .or_insert_with(|| Arc::new(Chunk::filled(AIR)));
+                let ch = Arc::make_mut(s.world.get_mut(&cp).unwrap());
+                ch.set(
+                    p[0].rem_euclid(CHUNK_SIZE) as usize,
+                    p[1].rem_euclid(CHUNK_SIZE) as usize,
+                    p[2].rem_euclid(CHUNK_SIZE) as usize,
+                    b,
+                );
+            }
+            let block_at = |s: &Server, p: [i32; 3]| {
+                s.world
+                    .get(&ChunkPos::of_block(p[0], p[1], p[2]))
+                    .unwrap()
+                    .get(
+                        p[0].rem_euclid(CHUNK_SIZE) as usize,
+                        p[1].rem_euclid(CHUNK_SIZE) as usize,
+                        p[2].rem_euclid(CHUNK_SIZE) as usize,
+                    )
+            };
+
+            // Grenade damages enemy in radius without breaking STONE.
+            s.add_enemy(EnemyKind::Slime, [10.5, 60.0, 10.5]);
+            let before_hp = s.enemies.last().unwrap().hp;
+            let eid = s.enemies.last().unwrap().id;
+            s.explode_projectile(ProjKind::Grenade, [10.5, 60.5, 10.5], 60, 8.0, 4);
+            assert!(
+                s.enemies
+                    .iter()
+                    .find(|e| e.id == eid)
+                    .is_none_or(|e| e.hp < before_hp),
+                "grenade should damage nearby slime"
+            );
+            assert_eq!(block_at(&s, stone_pos), terravibe_sim::block::STONE);
+
+            // Bomb breaks STONE and EBONSTONE, preserves CHEST/HELLSTONE/DUNGEON.
+            s.explode_projectile(ProjKind::Bomb, [10.5, 60.5, 10.5], 100, 0.0, 0);
+            assert_eq!(block_at(&s, stone_pos), AIR);
+            assert_eq!(block_at(&s, ebon_pos), AIR);
+            assert_eq!(block_at(&s, chest_pos), CHEST);
+            assert_eq!(block_at(&s, hell_pos), terravibe_sim::block::HELLSTONE);
+            assert_eq!(
+                block_at(&s, dung_pos),
+                terravibe_sim::block::BLUE_DUNGEON_BRICK
             );
         }
 

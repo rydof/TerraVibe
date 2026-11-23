@@ -14,7 +14,8 @@ use crate::facts::WorldFacts;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::{
     ANVIL_ITEM, BUG_NET, COPPER_AXE, COPPER_PICKAXE, FLINTLOCK_PISTOL, ItemId,
-    LESSER_HEALING_POTION, MINISHARK, MUSKET_BALL, Prefix, Rng, TORCH, WOODEN_ARROW,
+    LESSER_HEALING_POTION, LESSER_MANA_POTION, MINISHARK, MUSKET_BALL, Prefix, Rng, TORCH,
+    WOODEN_ARROW,
 };
 use crate::town_npc::TownKind;
 use crate::weather::WeatherKind;
@@ -37,7 +38,7 @@ const fn si(item: ItemId, price_copper: u32) -> ShopItem {
 
 /// Buy price is `value * PriceAdjustment` with a neutral 1.0 here
 /// (`Player.GetItemExpectedPrice`, gameplay spec).
-const MERCHANT: [ShopItem; 7] = [
+const MERCHANT: [ShopItem; 8] = [
     si(ANVIL_ITEM, 5000),
     si(COPPER_PICKAXE, 500),
     si(COPPER_AXE, 400),
@@ -45,6 +46,7 @@ const MERCHANT: [ShopItem; 7] = [
     si(LESSER_HEALING_POTION, 300),
     si(WOODEN_ARROW, 5),
     si(BUG_NET, 2500),
+    si(LESSER_MANA_POTION, 100),
 ];
 
 /// Arms Dealer stock: Musket Ball (7c), Flintlock Pistol (5g), Minishark (35g).

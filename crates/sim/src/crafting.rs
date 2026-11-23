@@ -1,25 +1,30 @@
 //! Static recipe table. Plain data: no Bevy, no wall clock.
 
-use crate::block::{AIR, ANVIL, BOTTLE, BlockId, DEMON_ALTAR, FURNACE, HELLFORGE, WORKBENCH};
+use crate::block::{
+    AIR, ANVIL, BOTTLE, BlockId, DEMON_ALTAR, FURNACE, HELLFORGE, TINKERERS_WORKSHOP, WORKBENCH,
+};
 use crate::chunk::BlockQuery;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::Prefix;
 use crate::item::{
-    ANVIL_ITEM, BOTTLE_ITEM, CHEST_ITEM, COPPER_AXE, COPPER_BAR, COPPER_BROADSWORD,
+    ANVIL_ITEM, BOTTLE_ITEM, CAMPFIRE_ITEM, CHEST_ITEM, COPPER_AXE, COPPER_BAR, COPPER_BROADSWORD,
     COPPER_CHAINMAIL, COPPER_GREAVES, COPPER_HELMET, COPPER_ORE, COPPER_PICKAXE, DEMON_BOW,
     DEMONITE_BAR, DEMONITE_ORE_ITEM, EBONSTONE_BLOCK, EMPTY_BUCKET, ENCHANTED_BOOMERANG,
-    FALLEN_STAR, FIERY_GREATSWORD, FLAMARANG, FLAMING_ARROW, FURNACE_ITEM, GEL, GLASS, GOLD_AXE,
-    GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_GREAVES, GOLD_HELMET, GOLD_ORE, GOLD_PICKAXE,
-    HANDGUN, HELLSTONE_BAR, HELLSTONE_BRICK_ITEM, HELLSTONE_ITEM, IRON_AXE, IRON_BAR,
-    IRON_BROADSWORD, IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, IRON_ORE, IRON_PICKAXE, ItemId,
-    LENS, LESSER_HEALING_POTION, LIGHTS_BANE, MANA_CRYSTAL, MOLTEN_BREASTPLATE, MOLTEN_FURY,
+    FALLEN_STAR, FIERY_GREATSWORD, FLAMARANG, FLAMING_ARROW, FURNACE_ITEM, GEL, GLASS,
+    GLOWING_MUSHROOM, GOLD_AXE, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_GREAVES,
+    GOLD_HELMET, GOLD_ORE, GOLD_PICKAXE, GRAPPLING_HOOK, HANDGUN, HEALING_POTION,
+    HEART_LANTERN_ITEM, HELLSTONE_BAR, HELLSTONE_BRICK_ITEM, HELLSTONE_ITEM, HOOK, IRON_AXE,
+    IRON_BAR, IRON_BROADSWORD, IRON_CHAIN, IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, IRON_ORE,
+    IRON_PICKAXE, IRONSKIN_POTION, ItemId, LENS, LESSER_HEALING_POTION, LESSER_MANA_POTION,
+    LIFE_CRYSTAL_ITEM, LIGHTS_BANE, MANA_CRYSTAL, MANA_POTION, MOLTEN_BREASTPLATE, MOLTEN_FURY,
     MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MUSHROOM, NIGHTMARE_PICKAXE,
-    OBSIDIAN_BRICK_ITEM, OBSIDIAN_ITEM, OBSIDIAN_SKULL, PHOENIX_BLASTER, SAND_BLOCK,
-    SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALE, SHADOW_SCALEMAIL, SILVER_AXE, SILVER_BAR,
-    SILVER_BROADSWORD, SILVER_CHAINMAIL, SILVER_GREAVES, SILVER_HELMET, SILVER_ORE, SILVER_PICKAXE,
-    STONE_BLOCK, SUSPICIOUS_LOOKING_EYE, THE_BREAKER, TORCH, WAR_AXE_OF_THE_NIGHT, WOOD,
-    WOOD_PLATFORM, WOOD_WALL, WOODEN_ARROW, WOODEN_BOW, WOODEN_CHAIR, WOODEN_DOOR, WOODEN_HAMMER,
-    WOODEN_SWORD, WOODEN_TABLE, WORKBENCH_ITEM, WORM_FOOD,
+    OBSIDIAN_BRICK_ITEM, OBSIDIAN_ITEM, OBSIDIAN_SKULL, PHOENIX_BLASTER, REGENERATION_POTION,
+    SAND_BLOCK, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALE, SHADOW_SCALEMAIL, SHINE_POTION,
+    SILVER_AXE, SILVER_BAR, SILVER_BROADSWORD, SILVER_CHAINMAIL, SILVER_GREAVES, SILVER_HELMET,
+    SILVER_ORE, SILVER_PICKAXE, STONE_BLOCK, SUSPICIOUS_LOOKING_EYE, SWIFTNESS_POTION, THE_BREAKER,
+    TORCH, WAR_AXE_OF_THE_NIGHT, WATER_WALKING_POTION, WOOD, WOOD_PLATFORM, WOOD_WALL,
+    WOODEN_ARROW, WOODEN_BOW, WOODEN_CHAIR, WOODEN_DOOR, WOODEN_HAMMER, WOODEN_SWORD, WOODEN_TABLE,
+    WORKBENCH_ITEM, WORM_FOOD,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -115,12 +120,23 @@ pub const OBSIDIAN_SKULL_RECIPE: RecipeId = RecipeId(68);
 pub const OBSIDIAN_BRICK_RECIPE: RecipeId = RecipeId(69);
 pub const HELLSTONE_BRICK_RECIPE: RecipeId = RecipeId(70);
 pub const WORM_FOOD_RECIPE: RecipeId = RecipeId(71);
+pub const HEALING_POTION_RECIPE: RecipeId = RecipeId(72);
+pub const MANA_POTION_RECIPE: RecipeId = RecipeId(73);
+pub const IRONSKIN_POTION_RECIPE: RecipeId = RecipeId(74);
+pub const SWIFTNESS_POTION_RECIPE: RecipeId = RecipeId(75);
+pub const REGENERATION_POTION_RECIPE: RecipeId = RecipeId(76);
+pub const SHINE_POTION_RECIPE: RecipeId = RecipeId(77);
+pub const WATER_WALKING_POTION_RECIPE: RecipeId = RecipeId(78);
+pub const IRON_CHAIN_RECIPE: RecipeId = RecipeId(79);
+pub const GRAPPLING_HOOK_RECIPE: RecipeId = RecipeId(80);
+pub const CAMPFIRE_RECIPE: RecipeId = RecipeId(81);
+pub const HEART_LANTERN_RECIPE: RecipeId = RecipeId(82);
 
 const fn ing(item: ItemId, count: u32) -> Ingredient {
     Ingredient { item, count }
 }
 
-pub static RECIPES: [Recipe; 72] = [
+pub static RECIPES: [Recipe; 83] = [
     // gameplay spec: 10 Wood -> Work Bench, no station
     Recipe {
         id: WORKBENCH_RECIPE,
@@ -623,6 +639,77 @@ pub static RECIPES: [Recipe; 72] = [
         ingredients: &[ing(SHADOW_SCALE, 15), ing(EBONSTONE_BLOCK, 15)],
         station: Some(DEMON_ALTAR),
     },
+    // Wave 1 Alchemy, Arena & Grapple recipes
+    Recipe {
+        id: HEALING_POTION_RECIPE,
+        output: ing(HEALING_POTION, 2),
+        ingredients: &[ing(LESSER_HEALING_POTION, 2), ing(GLOWING_MUSHROOM, 1)],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: MANA_POTION_RECIPE,
+        output: ing(MANA_POTION, 2),
+        ingredients: &[ing(LESSER_MANA_POTION, 2), ing(GLOWING_MUSHROOM, 1)],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: IRONSKIN_POTION_RECIPE,
+        output: ing(IRONSKIN_POTION, 1),
+        ingredients: &[ing(BOTTLE_ITEM, 1), ing(IRON_ORE, 1), ing(MUSHROOM, 1)],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: SWIFTNESS_POTION_RECIPE,
+        output: ing(SWIFTNESS_POTION, 1),
+        ingredients: &[ing(BOTTLE_ITEM, 1), ing(SAND_BLOCK, 1), ing(MUSHROOM, 1)],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: REGENERATION_POTION_RECIPE,
+        output: ing(REGENERATION_POTION, 1),
+        ingredients: &[
+            ing(BOTTLE_ITEM, 1),
+            ing(MUSHROOM, 1),
+            ing(GLOWING_MUSHROOM, 1),
+        ],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: SHINE_POTION_RECIPE,
+        output: ing(SHINE_POTION, 1),
+        ingredients: &[ing(BOTTLE_ITEM, 1), ing(GLOWING_MUSHROOM, 1), ing(TORCH, 1)],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: WATER_WALKING_POTION_RECIPE,
+        output: ing(WATER_WALKING_POTION, 1),
+        ingredients: &[ing(BOTTLE_ITEM, 1), ing(OBSIDIAN_ITEM, 1), ing(GEL, 1)],
+        station: Some(BOTTLE),
+    },
+    Recipe {
+        id: IRON_CHAIN_RECIPE,
+        output: ing(IRON_CHAIN, 10),
+        ingredients: &[ing(IRON_BAR, 1)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: GRAPPLING_HOOK_RECIPE,
+        output: ing(GRAPPLING_HOOK, 1),
+        ingredients: &[ing(HOOK, 1), ing(IRON_CHAIN, 3)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: CAMPFIRE_RECIPE,
+        output: ing(CAMPFIRE_ITEM, 1),
+        ingredients: &[ing(WOOD, 10), ing(TORCH, 5)],
+        station: None,
+    },
+    Recipe {
+        id: HEART_LANTERN_RECIPE,
+        output: ing(HEART_LANTERN_ITEM, 1),
+        ingredients: &[ing(LIFE_CRYSTAL_ITEM, 1), ing(IRON_CHAIN, 4)],
+        station: None,
+    },
 ];
 
 pub fn recipe(id: RecipeId) -> Option<&'static Recipe> {
@@ -736,6 +823,7 @@ pub fn recipe_station_name(id: RecipeId) -> Option<&'static str> {
         BOTTLE => "Bottle",
         DEMON_ALTAR => "Demon Altar",
         HELLFORGE => "Hellforge",
+        TINKERERS_WORKSHOP => "Tinkerer's Workshop",
         _ => "Station",
     })
 }
@@ -1021,11 +1109,11 @@ mod tests {
 
     #[test]
     fn recipe_lookup_by_id() {
-        for i in 0..72 {
+        for i in 0..83 {
             assert_eq!(recipe(RecipeId(i)).unwrap().id, RecipeId(i));
         }
         assert!(recipe(RecipeId(99)).is_none());
-        assert_eq!(recipes().len(), 72);
+        assert_eq!(recipes().len(), 83);
     }
 
     #[test]
@@ -1242,7 +1330,7 @@ mod tests {
         assert_eq!(r.output, ing(MANA_CRYSTAL, 1));
         assert_eq!(r.ingredients, &[ing(FALLEN_STAR, 5)]);
         assert_eq!(r.station, None);
-        assert_eq!(recipes().len(), 72);
+        assert_eq!(recipes().len(), 83);
     }
 
     #[test]

@@ -112,6 +112,7 @@ impl Player {
             + acc_def
             + armor_set_defense_bonus(&self.armor)
             + self.accessory_prefix_totals().defense
+            + if self.vitals.ironskin_ticks > 0 { 8 } else { 0 }
     }
 
     pub fn effective_mana_max(&self) -> i32 {
@@ -428,6 +429,9 @@ pub fn tick_player_bounded(
     p.i_frames = (p.i_frames - 1).max(0);
     p.vitals.lava_cd = p.vitals.lava_cd.saturating_sub(1);
     p.vitals.tick_obsidian_skin();
+    p.vitals.tick_buffs();
+    p.body.swiftness = p.vitals.swiftness_ticks > 0;
+    p.body.water_walking = p.vitals.water_walking_ticks > 0;
     p.vitals.lava_max = p.lava_max();
     let step = step_body_bounded(q, &mut p.body, input, bounds);
     if !p.god_mode {
@@ -504,7 +508,10 @@ pub fn tick_player_bounded(
                     if b == crate::block::SPIKES {
                         spikes = true;
                     }
-                    if b == crate::block::HELLSTONE || b == crate::block::HELLSTONE_BRICK {
+                    if b == crate::block::HELLSTONE
+                        || b == crate::block::HELLSTONE_BRICK
+                        || b == crate::block::METEORITE_ORE
+                    {
                         hot = true;
                     }
                 }
@@ -556,7 +563,9 @@ pub fn tick_player_bounded(
         2
     } else {
         0
-    };
+    } + if p.vitals.regen_ticks > 0 { 4 } else { 0 }
+        + if p.vitals.campfire_active { 2 } else { 0 }
+        + if p.vitals.heart_lantern_active { 2 } else { 0 };
     p.vitals.regen_life_ext(moving, bonus_regen);
     let eff_mana_max = p.effective_mana_max();
     p.vitals.regen_mana_with_max(moving, eff_mana_max);
@@ -604,6 +613,8 @@ pub struct PlayerBody {
     pub no_knockback: bool,
     pub move_speed_bonus: f32,
     pub melee_speed_bonus: f32,
+    pub swiftness: bool,
+    pub water_walking: bool,
 }
 
 impl PlayerBody {
@@ -626,6 +637,8 @@ impl PlayerBody {
             no_knockback: false,
             move_speed_bonus: 0.0,
             melee_speed_bonus: 0.0,
+            swiftness: false,
+            water_walking: false,
         }
     }
 
@@ -743,7 +756,7 @@ pub fn step_body_bounded(
     if body.has_shadow_set {
         speed_mult *= 1.15;
     }
-    speed_mult *= 1.0 + body.move_speed_bonus;
+    speed_mult *= 1.0 + body.move_speed_bonus + if body.swiftness { 0.25 } else { 0.0 };
     let max_run_speed = consts::MAX_RUN_SPEED * move_scale * speed_mult;
     let (vx, vz) = (body.vel[0], body.vel[2]);
     let snappy = body.on_ground && !on_ice(q, body);
@@ -876,7 +889,8 @@ pub fn step_body_bounded(
     // Collide: y, then x, then z.
     let was_on_ground = body.on_ground;
     let dy = body.vel[1];
-    let blocked_y = collide::move_axis_drop(q, &mut body.pos, 1, dy, input.drop);
+    let blocked_y =
+        collide::move_axis_drop_walk(q, &mut body.pos, 1, dy, input.drop, body.water_walking);
     body.on_ground = blocked_y && dy < 0.0;
     if body.on_ground {
         body.double_jump_ready = true;
@@ -2286,5 +2300,91 @@ mod tests {
         assert!(p.equip(&mut inv, 1));
         assert!((p.body.melee_speed_bonus - 0.04).abs() < 1e-6);
         assert!((p.melee_speed_mult() - 0.96).abs() < 1e-6);
+    }
+
+    #[test]
+    fn water_walking_supports_player_on_water_and_lava() {
+        let water_q = LiquidQ {
+            block_fn: |_, y, _| if y < 0 { STONE } else { AIR },
+            liquid_fn: |_, y, _| {
+                if (0..=4).contains(&y) {
+                    Some(Liquid::water(255))
+                } else {
+                    None
+                }
+            },
+        };
+        let mut b_walk = PlayerBody::new([0.5, 5.0, 0.5]);
+        b_walk.water_walking = true;
+        for _ in 0..30 {
+            step_body(&water_q, &mut b_walk, &PlayerInput::default());
+        }
+        assert!(
+            b_walk.pos[1] >= 4.99 && b_walk.on_ground,
+            "water walking should stand on water surface, got y={} on_ground={}",
+            b_walk.pos[1],
+            b_walk.on_ground
+        );
+
+        let mut b_sink = PlayerBody::new([0.5, 5.0, 0.5]);
+        for _ in 0..30 {
+            step_body(&water_q, &mut b_sink, &PlayerInput::default());
+        }
+        assert!(
+            b_sink.pos[1] < 4.5,
+            "without water walking player should sink, got y={}",
+            b_sink.pos[1]
+        );
+
+        let lava_q = LiquidQ {
+            block_fn: |_, y, _| if y < 0 { STONE } else { AIR },
+            liquid_fn: |_, y, _| {
+                if (0..=4).contains(&y) {
+                    Some(Liquid::lava(255))
+                } else {
+                    None
+                }
+            },
+        };
+        let mut b_lava = PlayerBody::new([0.5, 5.0, 0.5]);
+        b_lava.water_walking = true;
+        for _ in 0..30 {
+            step_body(&lava_q, &mut b_lava, &PlayerInput::default());
+        }
+        assert!(
+            b_lava.pos[1] >= 4.99 && b_lava.on_ground,
+            "water walking should also support standing on lava surface, got y={}",
+            b_lava.pos[1]
+        );
+    }
+
+    #[test]
+    fn ironskin_and_swiftness_buffs_apply() {
+        let mut p = Player::new([0.0, 5.0, 0.0]);
+        let base_def = p.defense();
+        p.vitals.ironskin_ticks = crate::player::consts::IRONSKIN_TICKS;
+        assert_eq!(p.defense(), base_def + 8);
+
+        let flat = LiquidQ {
+            block_fn: |_, y, _| if y < 0 { STONE } else { AIR },
+            liquid_fn: |_, _, _| None,
+        };
+        let mut p_base = Player::new([0.0, 0.0, 0.0]);
+        let mut p_swift = Player::new([0.0, 0.0, 0.0]);
+        p_swift.vitals.swiftness_ticks = crate::player::consts::SWIFTNESS_TICKS;
+        let forward = PlayerInput {
+            forward: 1.0,
+            ..Default::default()
+        };
+        for _ in 0..20 {
+            let _ = tick_player(&flat, &mut p_base, &forward);
+            let _ = tick_player(&flat, &mut p_swift, &forward);
+        }
+        let d_base = (p_base.body.pos[0].powi(2) + p_base.body.pos[2].powi(2)).sqrt();
+        let d_swift = (p_swift.body.pos[0].powi(2) + p_swift.body.pos[2].powi(2)).sqrt();
+        assert!(
+            d_swift > d_base * 1.15,
+            "swiftness should boost speed: base={d_base}, swift={d_swift}",
+        );
     }
 }

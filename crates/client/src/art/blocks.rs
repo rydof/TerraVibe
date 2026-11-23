@@ -6,10 +6,11 @@ use std::path::Path;
 
 use terravibe_assets::RgbaImage;
 use terravibe_sim::{
-    ASH, BLUE_DUNGEON_BRICK, BlockId, COPPER, CORRUPT_GRASS, DEMONITE_ORE, DIRT, EBONSTONE,
-    GLASS_BLOCK, GOLD, GRASS, GREEN_DUNGEON_BRICK, HARDENED_SAND, HELLSTONE, HELLSTONE_BRICK, ICE,
-    IRON, JUNGLE_GRASS, MUD, OBSIDIAN, OBSIDIAN_BRICK, PINK_DUNGEON_BRICK, SAND, SANDSTONE,
-    SHADOW_ORB, SILVER, SNOW, SPIKES, STONE, TRUNK, WOOD_BLOCK,
+    ASH, BLUE_DUNGEON_BRICK, BlockId, CLOUD_BLOCK, COPPER, CORRUPT_GRASS, DEMONITE_ORE, DIRT,
+    EBONSTONE, GLASS_BLOCK, GOLD, GRASS, GREEN_DUNGEON_BRICK, HARDENED_SAND, HELLSTONE,
+    HELLSTONE_BRICK, HIVE_BLOCK, ICE, IRON, JUNGLE_GRASS, METEORITE_ORE, MUD, MUSHROOM_GRASS,
+    OBSIDIAN, OBSIDIAN_BRICK, PINK_DUNGEON_BRICK, SAND, SANDSTONE, SHADOW_ORB, SILVER, SNOW,
+    SPIKES, STONE, SUNPLATE_BLOCK, TRUNK, WOOD_BLOCK,
 };
 
 use super::mesh_data::Face;
@@ -24,7 +25,7 @@ pub const WALL_ID: u16 = 0xFFF0;
 const MAX_VARIANTS: u8 = 4;
 
 /// Every cube-meshed block with its file stem under `assets/blocks`.
-pub const CUBE_BLOCKS: [(BlockId, &str); 30] = [
+pub const CUBE_BLOCKS: [(BlockId, &str); 35] = [
     (DIRT, "dirt"),
     (STONE, "stone"),
     (GRASS, "grass"),
@@ -55,6 +56,11 @@ pub const CUBE_BLOCKS: [(BlockId, &str); 30] = [
     (HELLSTONE, "hellstone"),
     (OBSIDIAN_BRICK, "obsidian_brick"),
     (HELLSTONE_BRICK, "hellstone_brick"),
+    (MUSHROOM_GRASS, "mushroom_grass"),
+    (CLOUD_BLOCK, "cloud"),
+    (SUNPLATE_BLOCK, "sunplate"),
+    (METEORITE_ORE, "meteorite_ore"),
+    (HIVE_BLOCK, "hive"),
 ];
 
 pub struct BlockArt {

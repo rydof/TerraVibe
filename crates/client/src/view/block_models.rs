@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use terravibe_sim::{
-    ANVIL, BOTTLE, BlockId, CHAIR, CHEST, CHUNK_SIZE, Chunk, ChunkPos, DEMON_ALTAR, DOOR_CLOSED,
-    DOOR_OPEN, FURNACE, HELLFORGE, LIFE_CRYSTAL, MOSS, MUSHROOM_PLANT, PLATFORM, POT,
-    SHELF_MUSHROOM, SMALL_ROCK, STALACTITE, TABLE, TORCH, TRUNK, WORKBENCH,
+    ANVIL, BOTTLE, BlockId, CAMPFIRE, CHAIR, CHEST, CHUNK_SIZE, Chunk, ChunkPos, DEMON_ALTAR,
+    DOOR_CLOSED, DOOR_OPEN, FURNACE, GLOWING_MUSHROOM_PLANT, HEART_LANTERN, HELLFORGE,
+    LIFE_CRYSTAL, MOSS, MUSHROOM_PLANT, PLATFORM, POT, SHELF_MUSHROOM, SMALL_ROCK, STALACTITE,
+    TABLE, TINKERERS_WORKSHOP, TORCH, TRUNK, WORKBENCH,
 };
 
 use crate::art::mesh_data::MeshData;
@@ -45,6 +46,10 @@ pub fn model_file(id: BlockId) -> Option<&'static str> {
         MOSS => "moss.vox",
         SMALL_ROCK => "small_rock.vox",
         SHELF_MUSHROOM => "shelf_mushroom.vox",
+        HEART_LANTERN => "heart_lantern.vox",
+        GLOWING_MUSHROOM_PLANT => "glowing_mushroom.vox",
+        TINKERERS_WORKSHOP => "tinkerers_workshop.vox",
+        CAMPFIRE => "campfire.vox",
         _ => return None,
     })
 }

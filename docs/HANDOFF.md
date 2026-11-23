@@ -1,7 +1,41 @@
 # TerraVibe — Start here
 
-Updated 2026-11-21. This is the single source of truth for what is done, what is next, and
+Updated 2026-11-22. This is the single source of truth for what is done, what is next, and
 the rules. Everything older lives in `docs/HANDOFF.md` and is history only.
+
+## Current State & Resume Guide (2026-11-22)
+
+### 1. Branch & Pushed Baseline
+- **Active branch**: `dev` (latest pushed commits: `origin/dev` `b7ead5f`, `origin/master` `9296d03`).
+- **Landed & pushed since `4e4177d`**:
+  - Terraria-accurate vertical depth bands (Surface `y≈280..320`, Underground `y≈180..279`, Cavern `y≈64..179`, Underworld `y≈0..63`, deep lava `y<=90`, Underworld ruins `y=26..56`).
+  - Guide Crafting slot (`SlotRef::Guide`, `GuideSlotShift`, `CloseGuideCrafting`, `ServerMsg::GuideSlot`, live recipe lookup UI) and fixed Welcome toast reappearing.
+  - Animated molten lava & rippling water (`chunk_light.wesl`, step/bottom liquid faces, embers) and liquid physics (`is_solid()` flow, Underworld lava basins, chunk-load wake, buckets, `urgent_liquid` re-mesh & smart relighting).
+  - Pre-allocated weather meshes and cave/roof rain occlusion (`SkyRoofCache` + underground rain/audio suppression).
+  - Verified at `1,438` tests, `116.5 avg_fps`, `8/8` QA scenarios.
+
+### 2. Active Effort: Full Pre-Hardmode Parity Sweep (up to Wall of Flesh) on `dev` in 5 Staged Waves
+- **Wave 1 (Implemented, currently being test-verified & committed by `integrator` -> `qa-verifier`)**:
+  - **9 new blocks**: `METEORITE_ORE(37)`, `HEART_LANTERN(42)`, `MUSHROOM_GRASS(70)`, `GLOWING_MUSHROOM_PLANT(72)`, `TINKERERS_WORKSHOP(114)`, `CLOUD_BLOCK(189)`, `SUNPLATE_BLOCK(202)`, `CAMPFIRE(215)`, `HIVE_BLOCK(225)`, plus 7 new textures, 4 block `.vox`, and 5 item `.vox` (`tools/art/blocks/prehardmode.py`, `tools/art/models/prehardmode.py`; `check_art.py` passing).
+  - **24 new items (`ITEMS` = `172`)**: `STARFURY`, `GRAPPLING_HOOK`, `IRON_CHAIN`, `LESSER_MANA_POTION`, `METEORITE_ITEM`, `BOMB`, `DYNAMITE`, `GRENADE`, `GLOWING_MUSHROOM`, `HEALING_POTION`, `MANA_POTION`, `HOOK`, `REGENERATION_POTION`, `SWIFTNESS_POTION`, `IRONSKIN_POTION`, `SHINE_POTION`, `WATER_WALKING_POTION`, `TINKERERS_WORKSHOP_ITEM`, `CLOUD_ITEM`, `SUNPLATE_ITEM`, `CAMPFIRE_ITEM`, `HIVE_ITEM`, `HEART_LANTERN_ITEM`, `RECALL_POTION`.
+  - **11 new recipes (`RECIPES` = `83`)**: Merchant `LESSER_MANA_POTION`, 8-slot HUD buffs, Ironskin/Swiftness/Regen/Shine (`ShineLight`)/Water Walking (`move_axis_drop_walk`), Campfire & Heart Lantern proximity aura, Recall Potion, Bomb/Dynamite/Grenade explosions (tile break + Shadow Orb trigger + liquid wake, preserving chests/altars/dungeon/hellstone/obsidian), Grappling Hook latch/pull/jump-detach + `Option<Gizmos>` chain, Starfury falling stars.
+  - **Worldgen**: Floating Islands (`sky_island.rs`, Cloud + Sunplate house + `Band::Skyware` chest) and Glowing Mushroom Biome (`mushroom_biome.rs`, coarse 3x3x3 + exposure-first pass).
+  - **If interrupted before commit**: check `git log -1` on `dev`, run `cargo test --workspace -- --test-threads=1`, `./tools/bench-headless.sh`, sequential `./tools/qa-headless.sh` (`first_hour`, `combat_feedback`, `held_items`, `tooltips_economy`), and commit Wave 1 on `dev`.
+- **Wave 2 (Not Started)**: Iconic Pre-Hardmode Weapons, Class Armor Sets, Meteorite Crash Event, Shadow Chest Weapons, Tinkerer's Workshop Combined Accessories (`Night's Edge`, `Blade of Grass`, `Thorn Chakram`, `Amazon`, Jungle materials & Shrines; Meteorite crash crater + `Meteorite Bar` + `Meteor Armor` 0-mana `Space Gun` + `Phaseblade` + `Star Cannon`; `Water Bolt`, `Sunfury`, `Dark Lance`, `Flamelash`, `Flower of Fire`; `Necro`/`Jungle`/`Bee` Armor; `Rocket Boots`, `Spectre Boots`, `Obsidian Shield`, `Cloud in a Balloon`, `Lightning Boots`, `Aglet`, `Anklet of the Wind`, `Feral Claws`, `Shark Tooth Necklace`).
+- **Wave 3 (Not Started)**: Town NPCs & Economy (`Nurse` healing/debuff clear, `Demolitionist`, `Dryad` + Corruption % report, `Goblin Tinkerer` + Reforge UI tab & `ClientMsg::ReforgeItem`/`ServerMsg::ReforgeResult`).
+- **Wave 4 (Not Started)**: Missing Bosses & Structures (`King Slime` + `Slime Crown` + `Slime Rain` + `Ninja Armor`/`Slime Hook`/`Slimy Saddle`; Jungle **Bee Hives** + `LiquidKind::Honey` regen + `Bee Larva` + `Abeemination` + **Queen Bee** + `Beenades`/`Bee Gun`/`Bee Keeper`/`Honey Comb`/`Bee Wax`).
+- **Wave 5 (Not Started)**: Events & Biome Enemies (`Blood Moon` + `Blood Zombie`/`Drippler`/`Money Trough`; `Goblin Army` + `Goblin Battle Standard` + 5 Goblin enemies + `Harpoon`/`Spiky Balls`; `Antlion`, `Vulture`, `Ice Slime`, `Snow Flinx`, `Jungle Slime`, `Hornet`, `Man Eater`, `Harpy`, `Shark`, `Crab`, `Piranha`), final docs update, full verification, merge `dev` -> `master` (`--no-ff`), push `origin dev master`.
+
+### 3. Resume Commands & Critical Invariants
+- **Resume**: check `git status` and `git log -n 5 --oneline`, verify Wave 1 commit on `dev`, then execute Waves 2–5 sequentially or via `/swarm` `share` worktrees (always spawning `share` worktrees AFTER the previous wave commits!).
+- **Invariants**:
+  - `ITEMS.len()` tests in `item/mod.rs`, `contact_sheet.rs`, `tooltip.rs`, `avatar.rs`.
+  - Nonzero sell values for non-coin items (`shop.rs`).
+  - 3D `.vox`/block visual for every item; `python3 -I tools/art/check_art.py`.
+  - `Option<Gizmos>` for Bevy systems in unit tests.
+  - Never run concurrent Sway/Vulkan bench or QA runs; never open windows on `DP-1`.
+  - Never commit `tools/token-audit.py`, `prompt.txt`, `metrics.json`, `run.log`, `bench_effects_*.png`, `assets/terraria-pack/`.
+  - Zero copyrighted assets, decompile refs, or local absolute user paths.
 
 ## The project in one paragraph
 
