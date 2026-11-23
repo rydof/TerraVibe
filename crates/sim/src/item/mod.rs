@@ -285,6 +285,12 @@ pub const BEE_GUN: ItemId = ItemId(1121);
 pub const BEE_KEEPER: ItemId = ItemId(1123);
 pub const HONEY_COMB: ItemId = ItemId(1132);
 
+// Pre-Hardmode Wave 5 items (Events)
+pub const GOBLIN_BATTLE_STANDARD: ItemId = ItemId(361);
+pub const HARPOON: ItemId = ItemId(160);
+pub const SPIKY_BALL: ItemId = ItemId(161);
+pub const MONEY_TROUGH: ItemId = ItemId(3213);
+
 pub fn is_coin(id: ItemId) -> bool {
     [COPPER_COIN, SILVER_COIN, GOLD_COIN, PLATINUM_COIN].contains(&id)
 }
@@ -681,7 +687,7 @@ const fn bucket(name: &'static str, max_stack: u32) -> ItemData {
 
 // Names: Terraria.Localization.Content.en-US.Items.json, ItemName.
 // TODO(localization): hand table limited to the items in play.
-static ITEMS: [(ItemId, ItemData); 221] = [
+static ITEMS: [(ItemId, ItemData); 225] = [
     (
         COPPER_HELMET,
         armor("Copper Helmet", ArmorSlot::Head, 1)
@@ -2997,6 +3003,52 @@ static ITEMS: [(ItemId, ItemData); 221] = [
         .with_rarity(Rarity::Green)
         .with_tooltip("Releases bees when damaged"),
     ),
+    // Pre-Hardmode Wave 5 items
+    (
+        GOBLIN_BATTLE_STANDARD,
+        ItemData {
+            ..consumable("Goblin Battle Standard", 20, 30)
+        }
+        .with_value(100)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Summons a Goblin Army"),
+    ),
+    (
+        HARPOON,
+        ItemData {
+            shoot_speed: 14.0,
+            auto_reuse: true,
+            ..sword("Harpoon", 25, 6.0, 25)
+        }
+        .with_value(25000)
+        .with_rarity(Rarity::Blue)
+        .with_tooltip("Fires a chained harpoon that retracts quickly"),
+    ),
+    (
+        SPIKY_BALL,
+        ItemData {
+            class: ItemClass::Consumable,
+            max_stack: 999,
+            damage: 15,
+            knock_back: 1.0,
+            use_time: 15,
+            use_animation: 15,
+            shoot_speed: 6.0,
+            ..material("Spiky Ball", 999)
+        }
+        .with_value(160)
+        .with_rarity(Rarity::White)
+        .with_tooltip("Throws spiky balls that damage walking enemies"),
+    ),
+    (
+        MONEY_TROUGH,
+        ItemData {
+            ..accessory("Money Trough")
+        }
+        .with_value(10000)
+        .with_rarity(Rarity::Green)
+        .with_tooltip("Blood Moon treasure from Blood Zombies and Dripplers"),
+    ),
 ];
 
 static UNKNOWN: ItemData = ItemData {
@@ -3135,7 +3187,7 @@ mod tests {
     #[test]
     fn all_item_ids_includes_new_loot() {
         let ids: Vec<_> = all_item_ids().collect();
-        assert_eq!(ids.len(), 221);
+        assert_eq!(ids.len(), 225);
         for id in [
             BUG_NET,
             BUNNY_ITEM,

@@ -881,7 +881,10 @@ pub fn tick_use_with_mana(
                         st.time = use_time;
                     }
                 }
-            } else if matches!(s.id, BOMB | DYNAMITE | GRENADE | crate::item::BEENADE) {
+            } else if matches!(
+                s.id,
+                BOMB | DYNAMITE | GRENADE | crate::item::BEENADE | crate::item::SPIKY_BALL
+            ) {
                 inv.take_one_selected();
                 ev.push(UseEvent::Throw {
                     item: s.id,

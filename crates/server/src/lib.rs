@@ -591,6 +591,10 @@ pub struct Server {
     pub facts: WorldFacts,
     /// Authoritative weather state.
     pub weather: WeatherState,
+    /// Active Blood Moon night event.
+    pub blood_moon: bool,
+    /// Remaining Goblin Army enemies to defeat.
+    pub goblin_army_remaining: u32,
 }
 
 pub(crate) fn is_pos_in_corruption(
@@ -746,6 +750,8 @@ impl Server {
             dead_town_npcs: HashSet::new(),
             facts,
             weather,
+            blood_moon: false,
+            goblin_army_remaining: 0,
         }
     }
 
@@ -1294,6 +1300,7 @@ impl Server {
         let mut grapples: Vec<(PlayerId, [f32; 3], [f32; 3])> = Vec::new();
         let mut melee_combat_hits: Vec<ServerMsg> = Vec::new();
         let mut summons: Vec<[f32; 3]> = Vec::new();
+        let mut start_goblin_army = false;
         let mut boss_summons: Vec<(EnemyKind, [f32; 3])> = Vec::new();
         let mut eater_summons: Vec<[f32; 3]> = Vec::new();
         let mut critter_spawns: Vec<(EnemyKind, [f32; 3])> = Vec::new();
@@ -1417,6 +1424,16 @@ impl Server {
                             {
                                 c.inv.take_one_selected();
                                 eater_summons.push(p.body.pos);
+                            }
+                        }
+                        UseEvent::Consume { item }
+                            if item == terravibe_sim::item::GOBLIN_BATTLE_STANDARD =>
+                        {
+                            if self.goblin_army_remaining == 0
+                                && c.inv.selected_stack().is_some_and(|s| s.id == item)
+                            {
+                                c.inv.take_one_selected();
+                                start_goblin_army = true;
                             }
                         }
                         UseEvent::Consume { item } if item == terravibe_sim::item::SLIME_CROWN => {
@@ -2012,6 +2029,9 @@ impl Server {
                     .is_err();
                 c.sent_facts = Some(current_facts);
             }
+        }
+        if start_goblin_army && self.goblin_army_remaining == 0 {
+            self.goblin_army_remaining = 80;
         }
         for (kind, pos) in boss_summons {
             if !self.enemies.iter().any(|e| e.kind == kind) {
@@ -2851,11 +2871,16 @@ impl Server {
         if self.cfg.natural_spawns {
             if self.was_day && !day {
                 self.star_boost = night_setup(&mut self.rng);
+                self.blood_moon =
+                    players.iter().any(|&(_, lm, _)| lm > 100) && self.rng.below(9) == 0;
                 self.eye_pending = !self.facts.downed_eye
                     && !self.any_boss_alive()
                     && players.iter().any(|&(_, lm, def)| {
                         boss::natural_spawn_roll_full(lm, def, town_npcs, &mut self.rng)
                     });
+            }
+            if !self.was_day && day {
+                self.blood_moon = false;
             }
             let night_tick = self
                 .clock
@@ -4154,6 +4179,89 @@ impl Server {
                     self.add_drop(stack, pos);
                 }
             }
+            // Wave 5 event & biome drops
+            match kind {
+                EnemyKind::Hornet if self.rng.below(2) == 0 => {
+                    self.add_drop(
+                        ItemStack {
+                            id: terravibe_sim::item::STINGER,
+                            count: 1,
+                            prefix: Prefix(0),
+                        },
+                        pos,
+                    );
+                }
+                EnemyKind::ManEater if self.rng.below(2) == 0 => {
+                    self.add_drop(
+                        ItemStack {
+                            id: terravibe_sim::item::VINE,
+                            count: 1,
+                            prefix: Prefix(0),
+                        },
+                        pos,
+                    );
+                }
+                EnemyKind::BloodZombie | EnemyKind::Drippler => {
+                    if self.rng.below(20) == 0 {
+                        self.add_drop(
+                            ItemStack {
+                                id: terravibe_sim::item::MONEY_TROUGH,
+                                count: 1,
+                                prefix: Prefix(0),
+                            },
+                            pos,
+                        );
+                    } else if self.rng.below(20) == 0 {
+                        self.add_drop(
+                            ItemStack {
+                                id: terravibe_sim::item::SHARK_TOOTH_NECKLACE,
+                                count: 1,
+                                prefix: Prefix(0),
+                            },
+                            pos,
+                        );
+                    }
+                }
+                EnemyKind::Shark if self.rng.below(10) == 0 => {
+                    self.add_drop(
+                        ItemStack {
+                            id: terravibe_sim::item::SHARK_TOOTH_NECKLACE,
+                            count: 1,
+                            prefix: Prefix(0),
+                        },
+                        pos,
+                    );
+                }
+                EnemyKind::GoblinPeon
+                | EnemyKind::GoblinThief
+                | EnemyKind::GoblinWarrior
+                | EnemyKind::GoblinSorcerer
+                | EnemyKind::GoblinArcher => {
+                    self.goblin_army_remaining = self.goblin_army_remaining.saturating_sub(1);
+                    if self.rng.below(3) == 0 {
+                        let count = 1 + self.rng.below(5);
+                        self.add_drop(
+                            ItemStack {
+                                id: terravibe_sim::item::SPIKY_BALL,
+                                count,
+                                prefix: Prefix(0),
+                            },
+                            pos,
+                        );
+                    }
+                    if self.rng.below(20) == 0 {
+                        self.add_drop(
+                            ItemStack {
+                                id: terravibe_sim::item::HARPOON,
+                                count: 1,
+                                prefix: Prefix(0),
+                            },
+                            pos,
+                        );
+                    }
+                }
+                _ => {}
+            }
         }
         self.enemies.retain(|e| e.hp > 0);
         if had_eow && !self.has_eater_of_worlds() {
@@ -4289,6 +4397,73 @@ impl Server {
                             } else {
                                 EnemyKind::DemonEye
                             };
+                        }
+                        if self.goblin_army_remaining > 0 && !is_cave {
+                            kind = match self.rng.below(5) {
+                                0 => EnemyKind::GoblinPeon,
+                                1 => EnemyKind::GoblinThief,
+                                2 => EnemyKind::GoblinWarrior,
+                                3 => EnemyKind::GoblinSorcerer,
+                                _ => EnemyKind::GoblinArcher,
+                            };
+                        } else if self.blood_moon
+                            && !self.clock.is_day()
+                            && !is_cave
+                            && self.rng.below(2) == 0
+                        {
+                            kind = if self.rng.below(2) == 0 {
+                                EnemyKind::BloodZombie
+                            } else {
+                                EnemyKind::Drippler
+                            };
+                        } else if p_y >= 310 {
+                            kind = EnemyKind::Harpy;
+                        } else if self.bounds.edge_distance(px, pz)
+                            < terravibe_sim::world_bounds::OCEAN_WIDTH
+                            && !is_cave
+                        {
+                            kind = if self.rng.below(2) == 0 {
+                                EnemyKind::Shark
+                            } else {
+                                EnemyKind::Crab
+                            };
+                        } else if !is_corrupt {
+                            let biome = terravibe_sim::worldgen::biome::dominant(
+                                &terravibe_sim::worldgen::biome::biome_weights_for_size(
+                                    self.seed,
+                                    px,
+                                    pz,
+                                    self.bounds.size(),
+                                ),
+                            );
+                            match biome {
+                                terravibe_sim::worldgen::biome::Biome::Desert if !is_cave => {
+                                    kind = if self.rng.below(2) == 0 {
+                                        EnemyKind::Antlion
+                                    } else {
+                                        EnemyKind::Vulture
+                                    };
+                                }
+                                terravibe_sim::worldgen::biome::Biome::Snow => {
+                                    if is_cave && self.rng.below(2) == 0 {
+                                        kind = EnemyKind::SnowFlinx;
+                                    } else if !is_cave && self.clock.is_day() {
+                                        kind = EnemyKind::IceSlime;
+                                    }
+                                }
+                                terravibe_sim::worldgen::biome::Biome::Jungle => {
+                                    if is_cave {
+                                        kind = match self.rng.below(3) {
+                                            0 => EnemyKind::Hornet,
+                                            1 => EnemyKind::ManEater,
+                                            _ => EnemyKind::Piranha,
+                                        };
+                                    } else if self.clock.is_day() {
+                                        kind = EnemyKind::JungleSlime;
+                                    }
+                                }
+                                _ => {}
+                            }
                         }
                     }
                 }

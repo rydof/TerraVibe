@@ -13,8 +13,8 @@ use crate::item::{
     COPPER_BROADSWORD, COPPER_CHAINMAIL, COPPER_GREAVES, COPPER_HELMET, COPPER_ORE, COPPER_PICKAXE,
     DEMON_BOW, DEMONITE_BAR, DEMONITE_ORE_ITEM, EBONSTONE_BLOCK, EMPTY_BUCKET, ENCHANTED_BOOMERANG,
     FALLEN_STAR, FIERY_GREATSWORD, FLAMARANG, FLAMING_ARROW, FURNACE_ITEM, GEL, GLASS,
-    GLOWING_MUSHROOM, GOLD_AXE, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_GREAVES,
-    GOLD_HELMET, GOLD_ORE, GOLD_PICKAXE, GRAPPLING_HOOK, HANDGUN, HEALING_POTION,
+    GLOWING_MUSHROOM, GOBLIN_BATTLE_STANDARD, GOLD_AXE, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL,
+    GOLD_GREAVES, GOLD_HELMET, GOLD_ORE, GOLD_PICKAXE, GRAPPLING_HOOK, HANDGUN, HEALING_POTION,
     HEART_LANTERN_ITEM, HELLSTONE_BAR, HELLSTONE_BRICK_ITEM, HELLSTONE_ITEM, HERMES_BOOTS,
     HIVE_ITEM, HOOK, IRON_AXE, IRON_BAR, IRON_BROADSWORD, IRON_CHAIN, IRON_CHAINMAIL, IRON_GREAVES,
     IRON_HELMET, IRON_ORE, IRON_PICKAXE, IRONSKIN_POTION, ItemId, JUNGLE_HAT, JUNGLE_PANTS,
@@ -163,12 +163,13 @@ pub const CLOUD_IN_A_BALLOON_RECIPE: RecipeId = RecipeId(105);
 pub const LIGHTNING_BOOTS_RECIPE: RecipeId = RecipeId(106);
 pub const SLIME_CROWN_RECIPE: RecipeId = RecipeId(107);
 pub const ABEEMINATION_RECIPE: RecipeId = RecipeId(108);
+pub const GOBLIN_BATTLE_STANDARD_RECIPE: RecipeId = RecipeId(109);
 
 const fn ing(item: ItemId, count: u32) -> Ingredient {
     Ingredient { item, count }
 }
 
-pub static RECIPES: [Recipe; 109] = [
+pub static RECIPES: [Recipe; 110] = [
     // gameplay spec: 10 Wood -> Work Bench, no station
     Recipe {
         id: WORKBENCH_RECIPE,
@@ -917,6 +918,12 @@ pub static RECIPES: [Recipe; 109] = [
         ingredients: &[ing(HIVE_ITEM, 5), ing(STINGER, 2), ing(BOTTLE_ITEM, 1)],
         station: None,
     },
+    Recipe {
+        id: GOBLIN_BATTLE_STANDARD_RECIPE,
+        output: ing(GOBLIN_BATTLE_STANDARD, 1),
+        ingredients: &[ing(WOOD, 10), ing(IRON_BAR, 5)],
+        station: Some(WORKBENCH),
+    },
 ];
 
 pub fn recipe(id: RecipeId) -> Option<&'static Recipe> {
@@ -1316,11 +1323,11 @@ mod tests {
 
     #[test]
     fn recipe_lookup_by_id() {
-        for i in 0..109 {
+        for i in 0..110 {
             assert_eq!(recipe(RecipeId(i)).unwrap().id, RecipeId(i));
         }
         assert!(recipe(RecipeId(999)).is_none());
-        assert_eq!(recipes().len(), 109);
+        assert_eq!(recipes().len(), 110);
     }
 
     #[test]
@@ -1537,7 +1544,7 @@ mod tests {
         assert_eq!(r.output, ing(MANA_CRYSTAL, 1));
         assert_eq!(r.ingredients, &[ing(FALLEN_STAR, 5)]);
         assert_eq!(r.station, None);
-        assert_eq!(recipes().len(), 109);
+        assert_eq!(recipes().len(), 110);
     }
 
     #[test]

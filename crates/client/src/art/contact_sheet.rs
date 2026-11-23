@@ -19,6 +19,6 @@ mod tests {
     #[test]
     fn audit_covers_all_items() {
         let audit = build_held_items_audit();
-        assert_eq!(audit.len(), 221);
+        assert_eq!(audit.len(), 225);
     }
 }
