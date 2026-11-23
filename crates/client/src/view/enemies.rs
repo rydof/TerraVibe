@@ -29,7 +29,7 @@ const TURN_MIN: f32 = 0.005;
 /// Travel between snapshots (blocks) that counts as moving.
 const MOVE_MIN: f32 = 0.02;
 
-pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 38] = [
+pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 42] = [
     EnemyKind::Slime,
     EnemyKind::DemonEye,
     EnemyKind::EaterOfSouls,
@@ -39,6 +39,10 @@ pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 38] = [
     EnemyKind::Guide,
     EnemyKind::Merchant,
     EnemyKind::ArmsDealer,
+    EnemyKind::Nurse,
+    EnemyKind::Demolitionist,
+    EnemyKind::Dryad,
+    EnemyKind::GoblinTinkerer,
     EnemyKind::Skeleton,
     EnemyKind::CaveBat,
     EnemyKind::GiantWorm,
@@ -70,7 +74,7 @@ pub(crate) const ALL_ENEMY_KINDS: [EnemyKind; 38] = [
     EnemyKind::Leech,
 ];
 
-pub(crate) const KINDS: [EnemyKind; 38] = ALL_ENEMY_KINDS;
+pub(crate) const KINDS: [EnemyKind; 42] = ALL_ENEMY_KINDS;
 
 /// Whether `kind` is rendered with a bespoke multi-part procedural 3D rig
 /// rather than a `.vox` rig directory.
@@ -86,6 +90,10 @@ pub(crate) fn has_procedural_rig(kind: EnemyKind) -> bool {
             | EnemyKind::Guide
             | EnemyKind::Merchant
             | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer
     )
 }
 
@@ -97,9 +105,9 @@ pub fn model_dir(kind: EnemyKind) -> &'static str {
         EnemyKind::EaterOfSouls => "eater_of_souls",
         EnemyKind::Zombie => "zombie",
         EnemyKind::EyeOfCthulhu => "eye_of_cthulhu",
-        EnemyKind::Guide => "guide",
-        EnemyKind::Merchant => "merchant",
-        EnemyKind::ArmsDealer => "arms_dealer",
+        EnemyKind::Guide | EnemyKind::Dryad => "guide",
+        EnemyKind::Merchant | EnemyKind::Nurse | EnemyKind::GoblinTinkerer => "merchant",
+        EnemyKind::ArmsDealer | EnemyKind::Demolitionist => "arms_dealer",
         _ => "procedural",
     }
 }
@@ -111,6 +119,10 @@ pub(crate) fn model_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::Guide
         | EnemyKind::Merchant
         | EnemyKind::ArmsDealer
+        | EnemyKind::Nurse
+        | EnemyKind::Demolitionist
+        | EnemyKind::Dryad
+        | EnemyKind::GoblinTinkerer
         | EnemyKind::Skeleton
         | EnemyKind::OldMan
         | EnemyKind::AngryBones
@@ -191,6 +203,10 @@ pub(crate) fn anim_for(kind: EnemyKind, moving: bool) -> &'static str {
             | EnemyKind::Guide
             | EnemyKind::Merchant
             | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer
             | EnemyKind::Skeleton
             | EnemyKind::OldMan
             | EnemyKind::AngryBones
@@ -241,6 +257,10 @@ pub(crate) fn is_contact_enemy(kind: EnemyKind) -> bool {
         EnemyKind::Guide
             | EnemyKind::Merchant
             | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer
             | EnemyKind::OldMan
             | EnemyKind::FireImp
             | EnemyKind::DarkCaster

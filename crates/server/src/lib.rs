@@ -1222,7 +1222,9 @@ impl Server {
                         | ClientMsg::ShopBuy { .. }
                         | ClientMsg::ShopSell { .. }
                         | ClientMsg::GuideAdvice
-                        | ClientMsg::AssignHousing { .. }),
+                        | ClientMsg::AssignHousing { .. }
+                        | ClientMsg::HealAtNurse { .. }
+                        | ClientMsg::ReforgeItem { .. }),
                     )) => c.town_reqs.push(m),
                     Ok(Some(ClientMsg::UseTile { pos })) => c.tile_uses.push(pos),
                     Ok(Some(ClientMsg::BreakWall { pos })) => c.wall_breaks.push(pos),
@@ -2778,7 +2780,13 @@ impl Server {
                 e.hp > 0
                     && matches!(
                         e.kind,
-                        EnemyKind::Guide | EnemyKind::Merchant | EnemyKind::ArmsDealer
+                        EnemyKind::Guide
+                            | EnemyKind::Merchant
+                            | EnemyKind::ArmsDealer
+                            | EnemyKind::Nurse
+                            | EnemyKind::Demolitionist
+                            | EnemyKind::Dryad
+                            | EnemyKind::GoblinTinkerer
                     )
             })
             .count();
@@ -4501,11 +4509,47 @@ impl Server {
                                         biome,
                                         facts: self.facts,
                                     };
-                                    let text = format!(
-                                        "{}: {}",
-                                        tk.name(),
-                                        terravibe_sim::shop::town_dialogue(tk, &dctx, &mut c.rng)
-                                    );
+                                    let text = if tk == TownKind::Dryad {
+                                        let mut corrupt = 0u32;
+                                        let mut total = 0u32;
+                                        let half = self.bounds.half;
+                                        let step = (half * 2 / 32).max(8);
+                                        let mut x = -half;
+                                        while x <= half {
+                                            let mut z = -half;
+                                            while z <= half {
+                                                total += 1;
+                                                if terravibe_sim::worldgen::corruption::corruption_at_for_size(
+                                                    self.seed,
+                                                    x,
+                                                    z,
+                                                    self.cfg.size,
+                                                ) > 0.0
+                                                {
+                                                    corrupt += 1;
+                                                }
+                                                z += step;
+                                            }
+                                            x += step;
+                                        }
+                                        let pct = (corrupt * 100) / total.max(1);
+                                        format!(
+                                            "{}: {} Your world is {}% corrupt.",
+                                            tk.name(),
+                                            terravibe_sim::shop::town_dialogue(
+                                                tk, &dctx, &mut c.rng
+                                            ),
+                                            pct
+                                        )
+                                    } else {
+                                        format!(
+                                            "{}: {}",
+                                            tk.name(),
+                                            terravibe_sim::shop::town_dialogue(
+                                                tk, &dctx, &mut c.rng
+                                            )
+                                        )
+                                    };
                                     let mut v = vec![ServerMsg::Dialogue { npc: id, text }];
                                     c.shop_npc = None;
                                     if !terravibe_sim::shop::shop_stock(tk).is_empty() {
@@ -4522,6 +4566,81 @@ impl Server {
                                 None => Vec::new(),
                             },
                             None => Vec::new(),
+                        }
+                    }
+                    ClientMsg::HealAtNurse { npc } => {
+                        if near(c, npc) == Some(EnemyKind::Nurse)
+                            && let Some(p) = c.player.as_mut()
+                        {
+                            let missing = (p.vitals.life_max - p.vitals.life).max(0);
+                            let debuffs = u32::from(p.vitals.burn_ticks > 0);
+                            let cost = terravibe_sim::shop::nurse_heal_cost(missing, debuffs);
+                            if cost > 0 && terravibe_sim::coin::pay(&mut c.inv, cost) {
+                                p.vitals.life = p.vitals.life_max;
+                                p.vitals.extinguish();
+                                vec![
+                                    ServerMsg::NurseHealed {
+                                        ok: true,
+                                        healed: missing,
+                                        cost_copper: cost,
+                                    },
+                                    ServerMsg::Inventory(c.inv.clone()),
+                                    ServerMsg::PlayerState {
+                                        ack: 0,
+                                        body: p.body.clone(),
+                                        vitals: p.vitals.clone(),
+                                        dead: p.dead,
+                                        respawn_ticks: p.respawn_ticks,
+                                    },
+                                ]
+                            } else {
+                                vec![ServerMsg::NurseHealed {
+                                    ok: false,
+                                    healed: 0,
+                                    cost_copper: cost,
+                                }]
+                            }
+                        } else {
+                            vec![ServerMsg::NurseHealed {
+                                ok: false,
+                                healed: 0,
+                                cost_copper: 0,
+                            }]
+                        }
+                    }
+                    ClientMsg::ReforgeItem { npc, slot } => {
+                        if near(c, npc) == Some(EnemyKind::GoblinTinkerer) {
+                            if let Some((new_prefix, cost_copper)) =
+                                terravibe_sim::shop::reforge_slot(
+                                    &mut c.inv,
+                                    slot as usize,
+                                    &mut c.rng,
+                                )
+                            {
+                                vec![
+                                    ServerMsg::ReforgeResult {
+                                        ok: true,
+                                        slot,
+                                        new_prefix,
+                                        cost_copper,
+                                    },
+                                    ServerMsg::Inventory(c.inv.clone()),
+                                ]
+                            } else {
+                                vec![ServerMsg::ReforgeResult {
+                                    ok: false,
+                                    slot,
+                                    new_prefix: Prefix(0),
+                                    cost_copper: 0,
+                                }]
+                            }
+                        } else {
+                            vec![ServerMsg::ReforgeResult {
+                                ok: false,
+                                slot,
+                                new_prefix: Prefix(0),
+                                cost_copper: 0,
+                            }]
                         }
                     }
                     ClientMsg::ShopBuy { npc, index, count } => {
@@ -4934,6 +5053,86 @@ impl Server {
                 h.home[2] as f32 + 0.5,
             ];
             self.spawn_town(TownKind::ArmsDealer, pos);
+            return;
+        }
+        let merchant_alive = self.town_alive(TownKind::Merchant);
+        let any_life_gt_100 = self
+            .conns
+            .iter()
+            .filter_map(|c| c.player.as_ref())
+            .any(|p| p.vitals.life_max > 100);
+        if town_npc::nurse_may_spawn(
+            any_life_gt_100,
+            merchant_alive,
+            self.town_alive(TownKind::Nurse),
+            vacant.is_some(),
+        ) && let Some(h) = vacant
+        {
+            let pos = [
+                h.home[0] as f32 + 0.5,
+                h.home[1] as f32,
+                h.home[2] as f32 + 0.5,
+            ];
+            self.spawn_town(TownKind::Nurse, pos);
+            return;
+        }
+        let is_explosive = |id: ItemId| {
+            matches!(
+                id,
+                terravibe_sim::item::BOMB
+                    | terravibe_sim::item::DYNAMITE
+                    | terravibe_sim::item::GRENADE
+            )
+        };
+        let has_explosive = self.conns.iter().any(|c| {
+            c.inv.slots.iter().flatten().any(|st| is_explosive(st.id))
+                || c.held.0.is_some_and(|st| is_explosive(st.id))
+        });
+        if town_npc::demolitionist_may_spawn(
+            has_explosive,
+            merchant_alive,
+            self.town_alive(TownKind::Demolitionist),
+            vacant.is_some(),
+        ) && let Some(h) = vacant
+        {
+            let pos = [
+                h.home[0] as f32 + 0.5,
+                h.home[1] as f32,
+                h.home[2] as f32 + 0.5,
+            ];
+            self.spawn_town(TownKind::Demolitionist, pos);
+            return;
+        }
+        let any_boss_downed =
+            self.facts.downed_eye || self.facts.downed_eow || self.facts.downed_skeletron;
+        if town_npc::dryad_may_spawn(
+            any_boss_downed,
+            self.town_alive(TownKind::Dryad),
+            vacant.is_some(),
+        ) && let Some(h) = vacant
+        {
+            let pos = [
+                h.home[0] as f32 + 0.5,
+                h.home[1] as f32,
+                h.home[2] as f32 + 0.5,
+            ];
+            self.spawn_town(TownKind::Dryad, pos);
+            return;
+        }
+        let goblin_unlocked =
+            self.facts.shadow_orbs_broken > 0 || self.facts.downed_eye || self.facts.downed_eow;
+        if town_npc::goblin_tinkerer_may_spawn(
+            goblin_unlocked,
+            self.town_alive(TownKind::GoblinTinkerer),
+            vacant.is_some(),
+        ) && let Some(h) = vacant
+        {
+            let pos = [
+                h.home[0] as f32 + 0.5,
+                h.home[1] as f32,
+                h.home[2] as f32 + 0.5,
+            ];
+            self.spawn_town(TownKind::GoblinTinkerer, pos);
         }
     }
 

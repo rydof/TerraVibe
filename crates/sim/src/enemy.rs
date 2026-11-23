@@ -19,6 +19,10 @@ pub enum EnemyKind {
     Guide,
     Merchant,
     ArmsDealer,
+    Nurse,
+    Demolitionist,
+    Dryad,
+    GoblinTinkerer,
     Skeleton,
     CaveBat,
     GiantWorm,
@@ -80,6 +84,10 @@ impl EnemyKind {
             EnemyKind::Guide => 22,             // NPCID.Guide (gameplay spec)
             EnemyKind::Merchant => 17,          // NPCID.Merchant (gameplay spec)
             EnemyKind::ArmsDealer => 19,        // NPCID.ArmsDealer (gameplay spec)
+            EnemyKind::Nurse => 18,             // NPCID.Nurse
+            EnemyKind::Demolitionist => 38,     // NPCID.Demolitionist
+            EnemyKind::Dryad => 20,             // NPCID.Dryad
+            EnemyKind::GoblinTinkerer => 107,   // NPCID.GoblinTinkerer
             EnemyKind::Skeleton => 21,          // NPCID.Skeleton
             EnemyKind::CaveBat => 49,           // NPCID.CaveBat
             EnemyKind::GiantWorm => 10,         // NPCID.GiantWormHead
@@ -125,7 +133,14 @@ impl EnemyKind {
     pub fn is_friendly(self) -> bool {
         matches!(
             self,
-            EnemyKind::Guide | EnemyKind::Merchant | EnemyKind::ArmsDealer | EnemyKind::OldMan
+            EnemyKind::Guide
+                | EnemyKind::Merchant
+                | EnemyKind::ArmsDealer
+                | EnemyKind::Nurse
+                | EnemyKind::Demolitionist
+                | EnemyKind::Dryad
+                | EnemyKind::GoblinTinkerer
+                | EnemyKind::OldMan
         )
     }
 
@@ -213,7 +228,12 @@ impl EnemyKind {
                 half: [9.0 * PX, 20.0 * PX],
             },
             // NPC.item defaults type 17 / 19 (gameplay spec): 18x40, defense 15, lifeMax 250.
-            EnemyKind::Merchant | EnemyKind::ArmsDealer => EnemyStats {
+            EnemyKind::Merchant
+            | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer => EnemyStats {
                 hp: 250,
                 damage: 0,
                 defense: 15,
@@ -808,7 +828,11 @@ pub fn tick_enemy(q: &impl BlockQuery, e: &mut Enemy, target: [f32; 3]) {
             EnemyKind::EyeOfCthulhu
             | EnemyKind::Guide
             | EnemyKind::Merchant
-            | EnemyKind::ArmsDealer => {}
+            | EnemyKind::ArmsDealer
+            | EnemyKind::Nurse
+            | EnemyKind::Demolitionist
+            | EnemyKind::Dryad
+            | EnemyKind::GoblinTinkerer => {}
             EnemyKind::Skeleton => {
                 let d = dir_xz(e.pos, target);
                 e.vel[0] += ZOMBIE_ACCEL * d[0];

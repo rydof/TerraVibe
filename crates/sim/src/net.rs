@@ -187,6 +187,15 @@ pub enum ClientMsg {
     GuideSlotShift {
         slot: u8,
     },
+    /// Request full heal + debuff clear from the Nurse (reach & funds checked).
+    HealAtNurse {
+        npc: EnemyId,
+    },
+    /// Reforge an eligible item in bag `slot` at the Goblin Tinkerer (reach & funds checked).
+    ReforgeItem {
+        npc: EnemyId,
+        slot: u8,
+    },
     Bye,
 }
 
@@ -398,6 +407,19 @@ pub enum ServerMsg {
     GodMode(bool),
     /// Current item placed in the Guide's crafting lookup slot.
     GuideSlot(Option<ItemStack>),
+    /// Outcome of `HealAtNurse`.
+    NurseHealed {
+        ok: bool,
+        healed: i32,
+        cost_copper: u32,
+    },
+    /// Outcome of `ReforgeItem`.
+    ReforgeResult {
+        ok: bool,
+        slot: u8,
+        new_prefix: Prefix,
+        cost_copper: u32,
+    },
 }
 
 /// The other end of a transport has been dropped.

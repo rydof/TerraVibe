@@ -136,11 +136,7 @@ pub const VANITY_ACC0: usize = VANITY_ARMOR0 + 3;
 pub const TRASH_CELL: usize = VANITY_ACC0 + 5;
 pub const CELLS: usize = TRASH_CELL + 1;
 
-const HOUSING_NPCS: [terravibe_sim::town_npc::TownKind; 3] = [
-    terravibe_sim::town_npc::TownKind::Guide,
-    terravibe_sim::town_npc::TownKind::Merchant,
-    terravibe_sim::town_npc::TownKind::ArmsDealer,
-];
+const HOUSING_NPCS: [terravibe_sim::town_npc::TownKind; 7] = terravibe_sim::town_npc::TownKind::ALL;
 
 pub const CAROUSEL_POS: [f32; 2] = [40.0, 420.0];
 pub const CAROUSEL_SLOT_SIZE: f32 = 44.0;
@@ -302,9 +298,9 @@ pub fn housing_npc_rect(idx: usize, win: [f32; 2]) -> [f32; 4] {
     let [cx, cy, cw, _] = equip_card_rect(win);
     [
         cx + 12.0 * s,
-        cy + (160.0 + idx as f32 * 40.0) * s,
+        cy + (154.0 + idx as f32 * 28.0) * s,
         cw - 24.0 * s,
-        34.0 * s,
+        24.0 * s,
     ]
 }
 
@@ -336,6 +332,10 @@ fn housing_npc_swatch_color(npc: terravibe_sim::town_npc::TownKind) -> Color {
         terravibe_sim::town_npc::TownKind::Guide => Color::srgb(0.32, 0.68, 0.42),
         terravibe_sim::town_npc::TownKind::Merchant => Color::srgb(0.28, 0.52, 0.88),
         terravibe_sim::town_npc::TownKind::ArmsDealer => Color::srgb(0.76, 0.30, 0.28),
+        terravibe_sim::town_npc::TownKind::Nurse => Color::srgb(0.92, 0.45, 0.58),
+        terravibe_sim::town_npc::TownKind::Demolitionist => Color::srgb(0.82, 0.48, 0.22),
+        terravibe_sim::town_npc::TownKind::Dryad => Color::srgb(0.38, 0.82, 0.45),
+        terravibe_sim::town_npc::TownKind::GoblinTinkerer => Color::srgb(0.42, 0.72, 0.62),
     }
 }
 

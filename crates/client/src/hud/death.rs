@@ -73,6 +73,10 @@ pub fn cause_text(cause: DeathCause) -> String {
             EnemyKind::Guide => "Slain by Guide.".into(),
             EnemyKind::Merchant => "Slain by Merchant.".into(),
             EnemyKind::ArmsDealer => "Slain by Arms Dealer.".into(),
+            EnemyKind::Nurse => "Slain by Nurse.".into(),
+            EnemyKind::Demolitionist => "Slain by Demolitionist.".into(),
+            EnemyKind::Dryad => "Slain by Dryad.".into(),
+            EnemyKind::GoblinTinkerer => "Slain by Goblin Tinkerer.".into(),
             EnemyKind::OldMan => "Slain by Old Man.".into(),
             EnemyKind::Bunny | EnemyKind::Squirrel | EnemyKind::Bird | EnemyKind::CaveCritter => {
                 "Slain by critter.".into()

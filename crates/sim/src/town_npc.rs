@@ -11,15 +11,33 @@ pub enum TownKind {
     Guide,
     Merchant,
     ArmsDealer,
+    Nurse,
+    Demolitionist,
+    Dryad,
+    GoblinTinkerer,
 }
 
 impl TownKind {
+    pub const ALL: [TownKind; 7] = [
+        TownKind::Guide,
+        TownKind::Merchant,
+        TownKind::ArmsDealer,
+        TownKind::Nurse,
+        TownKind::Demolitionist,
+        TownKind::Dryad,
+        TownKind::GoblinTinkerer,
+    ];
+
     /// Terraria NPC type id (gameplay spec Guide, `:11105` Merchant, `:11109` Arms Dealer).
     pub fn npc_id(self) -> i32 {
         match self {
             TownKind::Guide => 22,
             TownKind::Merchant => 17,
             TownKind::ArmsDealer => 19,
+            TownKind::Nurse => 18,
+            TownKind::Demolitionist => 38,
+            TownKind::Dryad => 20,
+            TownKind::GoblinTinkerer => 107,
         }
     }
     pub fn enemy_kind(self) -> EnemyKind {
@@ -27,6 +45,10 @@ impl TownKind {
             TownKind::Guide => EnemyKind::Guide,
             TownKind::Merchant => EnemyKind::Merchant,
             TownKind::ArmsDealer => EnemyKind::ArmsDealer,
+            TownKind::Nurse => EnemyKind::Nurse,
+            TownKind::Demolitionist => EnemyKind::Demolitionist,
+            TownKind::Dryad => EnemyKind::Dryad,
+            TownKind::GoblinTinkerer => EnemyKind::GoblinTinkerer,
         }
     }
     pub fn from_enemy(k: EnemyKind) -> Option<TownKind> {
@@ -34,6 +56,10 @@ impl TownKind {
             EnemyKind::Guide => Some(TownKind::Guide),
             EnemyKind::Merchant => Some(TownKind::Merchant),
             EnemyKind::ArmsDealer => Some(TownKind::ArmsDealer),
+            EnemyKind::Nurse => Some(TownKind::Nurse),
+            EnemyKind::Demolitionist => Some(TownKind::Demolitionist),
+            EnemyKind::Dryad => Some(TownKind::Dryad),
+            EnemyKind::GoblinTinkerer => Some(TownKind::GoblinTinkerer),
             _ => None,
         }
     }
@@ -42,6 +68,10 @@ impl TownKind {
             TownKind::Guide => "Guide",
             TownKind::Merchant => "Merchant",
             TownKind::ArmsDealer => "Arms Dealer",
+            TownKind::Nurse => "Nurse",
+            TownKind::Demolitionist => "Demolitionist",
+            TownKind::Dryad => "Dryad",
+            TownKind::GoblinTinkerer => "Goblin Tinkerer",
         }
     }
     pub fn to_u8(self) -> u8 {
@@ -52,6 +82,10 @@ impl TownKind {
             0 => Some(TownKind::Guide),
             1 => Some(TownKind::Merchant),
             2 => Some(TownKind::ArmsDealer),
+            3 => Some(TownKind::Nurse),
+            4 => Some(TownKind::Demolitionist),
+            5 => Some(TownKind::Dryad),
+            6 => Some(TownKind::GoblinTinkerer),
             _ => None,
         }
     }
@@ -119,6 +153,36 @@ pub fn merchant_may_spawn(
 /// a vacant valid house exists, and none is currently alive.
 pub fn arms_dealer_may_spawn(has_gun_or_bullet: bool, alive: bool, free_house: bool) -> bool {
     has_gun_or_bullet && !alive && free_house
+}
+
+/// Nurse arrival: any player has > 100 max life, Merchant is alive, free house exists.
+pub fn nurse_may_spawn(
+    any_life_gt_100: bool,
+    merchant_alive: bool,
+    alive: bool,
+    free_house: bool,
+) -> bool {
+    any_life_gt_100 && merchant_alive && !alive && free_house
+}
+
+/// Demolitionist arrival: any player carries an explosive, Merchant is alive, free house exists.
+pub fn demolitionist_may_spawn(
+    has_explosive: bool,
+    merchant_alive: bool,
+    alive: bool,
+    free_house: bool,
+) -> bool {
+    has_explosive && merchant_alive && !alive && free_house
+}
+
+/// Dryad arrival: Eye of Cthulhu, Eater of Worlds, or Skeletron defeated, and free house exists.
+pub fn dryad_may_spawn(any_boss_downed: bool, alive: bool, free_house: bool) -> bool {
+    any_boss_downed && !alive && free_house
+}
+
+/// Goblin Tinkerer arrival: Shadow Orb broken or boss defeated, and free house exists.
+pub fn goblin_tinkerer_may_spawn(unlocked: bool, alive: bool, free_house: bool) -> bool {
+    unlocked && !alive && free_house
 }
 
 // ---- wander AI ---------------------------------------------------------------
