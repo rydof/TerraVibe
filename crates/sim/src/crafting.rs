@@ -7,24 +7,30 @@ use crate::chunk::BlockQuery;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::Prefix;
 use crate::item::{
-    ANVIL_ITEM, BOTTLE_ITEM, CAMPFIRE_ITEM, CHEST_ITEM, COPPER_AXE, COPPER_BAR, COPPER_BROADSWORD,
-    COPPER_CHAINMAIL, COPPER_GREAVES, COPPER_HELMET, COPPER_ORE, COPPER_PICKAXE, DEMON_BOW,
-    DEMONITE_BAR, DEMONITE_ORE_ITEM, EBONSTONE_BLOCK, EMPTY_BUCKET, ENCHANTED_BOOMERANG,
+    AGLET, AMAZON, ANKLET_OF_THE_WIND, ANVIL_ITEM, BEE_BREASTPLATE, BEE_GREAVES, BEE_HEADGEAR,
+    BLADE_OF_GRASS, BLUE_PHASEBLADE, BONE, BOTTLE_ITEM, CAMPFIRE_ITEM, CHEST_ITEM,
+    CLOUD_IN_A_BALLOON, CLOUD_IN_A_BOTTLE, COBALT_SHIELD, COPPER_AXE, COPPER_BAR,
+    COPPER_BROADSWORD, COPPER_CHAINMAIL, COPPER_GREAVES, COPPER_HELMET, COPPER_ORE, COPPER_PICKAXE,
+    DEMON_BOW, DEMONITE_BAR, DEMONITE_ORE_ITEM, EBONSTONE_BLOCK, EMPTY_BUCKET, ENCHANTED_BOOMERANG,
     FALLEN_STAR, FIERY_GREATSWORD, FLAMARANG, FLAMING_ARROW, FURNACE_ITEM, GEL, GLASS,
     GLOWING_MUSHROOM, GOLD_AXE, GOLD_BAR, GOLD_BROADSWORD, GOLD_CHAINMAIL, GOLD_GREAVES,
     GOLD_HELMET, GOLD_ORE, GOLD_PICKAXE, GRAPPLING_HOOK, HANDGUN, HEALING_POTION,
-    HEART_LANTERN_ITEM, HELLSTONE_BAR, HELLSTONE_BRICK_ITEM, HELLSTONE_ITEM, HOOK, IRON_AXE,
-    IRON_BAR, IRON_BROADSWORD, IRON_CHAIN, IRON_CHAINMAIL, IRON_GREAVES, IRON_HELMET, IRON_ORE,
-    IRON_PICKAXE, IRONSKIN_POTION, ItemId, LENS, LESSER_HEALING_POTION, LESSER_MANA_POTION,
-    LIFE_CRYSTAL_ITEM, LIGHTS_BANE, MANA_CRYSTAL, MANA_POTION, MOLTEN_BREASTPLATE, MOLTEN_FURY,
-    MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MUSHROOM, NIGHTMARE_PICKAXE,
-    OBSIDIAN_BRICK_ITEM, OBSIDIAN_ITEM, OBSIDIAN_SKULL, PHOENIX_BLASTER, REGENERATION_POTION,
-    SAND_BLOCK, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALE, SHADOW_SCALEMAIL, SHINE_POTION,
-    SILVER_AXE, SILVER_BAR, SILVER_BROADSWORD, SILVER_CHAINMAIL, SILVER_GREAVES, SILVER_HELMET,
-    SILVER_ORE, SILVER_PICKAXE, STONE_BLOCK, SUSPICIOUS_LOOKING_EYE, SWIFTNESS_POTION, THE_BREAKER,
-    TORCH, WAR_AXE_OF_THE_NIGHT, WATER_WALKING_POTION, WOOD, WOOD_PLATFORM, WOOD_WALL,
-    WOODEN_ARROW, WOODEN_BOW, WOODEN_CHAIR, WOODEN_DOOR, WOODEN_HAMMER, WOODEN_SWORD, WOODEN_TABLE,
-    WORKBENCH_ITEM, WORM_FOOD,
+    HEART_LANTERN_ITEM, HELLSTONE_BAR, HELLSTONE_BRICK_ITEM, HELLSTONE_ITEM, HERMES_BOOTS,
+    HIVE_ITEM, HOOK, IRON_AXE, IRON_BAR, IRON_BROADSWORD, IRON_CHAIN, IRON_CHAINMAIL, IRON_GREAVES,
+    IRON_HELMET, IRON_ORE, IRON_PICKAXE, IRONSKIN_POTION, ItemId, JUNGLE_HAT, JUNGLE_PANTS,
+    JUNGLE_SHIRT, JUNGLE_SPORES, LENS, LESSER_HEALING_POTION, LESSER_MANA_POTION,
+    LIFE_CRYSTAL_ITEM, LIGHTNING_BOOTS, LIGHTS_BANE, MANA_CRYSTAL, MANA_POTION, METEOR_HELMET,
+    METEOR_LEGGINGS, METEOR_SUIT, METEORITE_BAR, METEORITE_ITEM, MINISHARK, MOLTEN_BREASTPLATE,
+    MOLTEN_FURY, MOLTEN_GREAVES, MOLTEN_HAMAXE, MOLTEN_HELMET, MOLTEN_PICKAXE, MURAMASA, MUSHROOM,
+    NECRO_BREASTPLATE, NECRO_GREAVES, NECRO_HELMET, NIGHTMARE_PICKAXE, NIGHTS_EDGE,
+    OBSIDIAN_BRICK_ITEM, OBSIDIAN_ITEM, OBSIDIAN_SHIELD, OBSIDIAN_SKULL, PHOENIX_BLASTER,
+    REGENERATION_POTION, ROCKET_BOOTS, SAND_BLOCK, SHADOW_GREAVES, SHADOW_HELMET, SHADOW_SCALE,
+    SHADOW_SCALEMAIL, SHINE_POTION, SHINY_RED_BALLOON, SILVER_AXE, SILVER_BAR, SILVER_BROADSWORD,
+    SILVER_CHAINMAIL, SILVER_GREAVES, SILVER_HELMET, SILVER_ORE, SILVER_PICKAXE, SPACE_GUN,
+    SPECTRE_BOOTS, STAR_CANNON, STINGER, STONE_BLOCK, SUSPICIOUS_LOOKING_EYE, SWIFTNESS_POTION,
+    THE_BREAKER, THORN_CHAKRAM, TORCH, VINE, WAR_AXE_OF_THE_NIGHT, WATER_WALKING_POTION, WOOD,
+    WOOD_PLATFORM, WOOD_WALL, WOODEN_ARROW, WOODEN_BOW, WOODEN_CHAIR, WOODEN_DOOR, WOODEN_HAMMER,
+    WOODEN_SWORD, WOODEN_TABLE, WORKBENCH_ITEM, WORM_FOOD,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -131,12 +137,36 @@ pub const IRON_CHAIN_RECIPE: RecipeId = RecipeId(79);
 pub const GRAPPLING_HOOK_RECIPE: RecipeId = RecipeId(80);
 pub const CAMPFIRE_RECIPE: RecipeId = RecipeId(81);
 pub const HEART_LANTERN_RECIPE: RecipeId = RecipeId(82);
+pub const BLADE_OF_GRASS_RECIPE: RecipeId = RecipeId(83);
+pub const THORN_CHAKRAM_RECIPE: RecipeId = RecipeId(84);
+pub const AMAZON_RECIPE: RecipeId = RecipeId(85);
+pub const NIGHTS_EDGE_RECIPE: RecipeId = RecipeId(86);
+pub const METEORITE_BAR_RECIPE: RecipeId = RecipeId(87);
+pub const METEOR_HELMET_RECIPE: RecipeId = RecipeId(88);
+pub const METEOR_SUIT_RECIPE: RecipeId = RecipeId(89);
+pub const METEOR_LEGGINGS_RECIPE: RecipeId = RecipeId(90);
+pub const SPACE_GUN_RECIPE: RecipeId = RecipeId(91);
+pub const BLUE_PHASEBLADE_RECIPE: RecipeId = RecipeId(92);
+pub const STAR_CANNON_RECIPE: RecipeId = RecipeId(93);
+pub const NECRO_HELMET_RECIPE: RecipeId = RecipeId(94);
+pub const NECRO_BREASTPLATE_RECIPE: RecipeId = RecipeId(95);
+pub const NECRO_GREAVES_RECIPE: RecipeId = RecipeId(96);
+pub const JUNGLE_HAT_RECIPE: RecipeId = RecipeId(97);
+pub const JUNGLE_SHIRT_RECIPE: RecipeId = RecipeId(98);
+pub const JUNGLE_PANTS_RECIPE: RecipeId = RecipeId(99);
+pub const BEE_HEADGEAR_RECIPE: RecipeId = RecipeId(100);
+pub const BEE_BREASTPLATE_RECIPE: RecipeId = RecipeId(101);
+pub const BEE_GREAVES_RECIPE: RecipeId = RecipeId(102);
+pub const SPECTRE_BOOTS_RECIPE: RecipeId = RecipeId(103);
+pub const OBSIDIAN_SHIELD_RECIPE: RecipeId = RecipeId(104);
+pub const CLOUD_IN_A_BALLOON_RECIPE: RecipeId = RecipeId(105);
+pub const LIGHTNING_BOOTS_RECIPE: RecipeId = RecipeId(106);
 
 const fn ing(item: ItemId, count: u32) -> Ingredient {
     Ingredient { item, count }
 }
 
-pub static RECIPES: [Recipe; 83] = [
+pub static RECIPES: [Recipe; 107] = [
     // gameplay spec: 10 Wood -> Work Bench, no station
     Recipe {
         id: WORKBENCH_RECIPE,
@@ -710,6 +740,169 @@ pub static RECIPES: [Recipe; 83] = [
         ingredients: &[ing(LIFE_CRYSTAL_ITEM, 1), ing(IRON_CHAIN, 4)],
         station: None,
     },
+    // Wave 2: Jungle, Night's Edge, Meteorite, Class Armor, Tinkerer's Workshop
+    Recipe {
+        id: BLADE_OF_GRASS_RECIPE,
+        output: ing(BLADE_OF_GRASS, 1),
+        ingredients: &[ing(JUNGLE_SPORES, 12), ing(STINGER, 12), ing(VINE, 3)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: THORN_CHAKRAM_RECIPE,
+        output: ing(THORN_CHAKRAM, 1),
+        ingredients: &[ing(JUNGLE_SPORES, 6), ing(STINGER, 9)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: AMAZON_RECIPE,
+        output: ing(AMAZON, 1),
+        ingredients: &[
+            ing(WOOD, 8),
+            ing(JUNGLE_SPORES, 12),
+            ing(STINGER, 3),
+            ing(VINE, 1),
+        ],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: NIGHTS_EDGE_RECIPE,
+        output: ing(NIGHTS_EDGE, 1),
+        ingredients: &[
+            ing(LIGHTS_BANE, 1),
+            ing(MURAMASA, 1),
+            ing(BLADE_OF_GRASS, 1),
+            ing(FIERY_GREATSWORD, 1),
+        ],
+        station: Some(DEMON_ALTAR),
+    },
+    Recipe {
+        id: METEORITE_BAR_RECIPE,
+        output: ing(METEORITE_BAR, 1),
+        ingredients: &[ing(METEORITE_ITEM, 3)],
+        station: Some(FURNACE),
+    },
+    Recipe {
+        id: METEOR_HELMET_RECIPE,
+        output: ing(METEOR_HELMET, 1),
+        ingredients: &[ing(METEORITE_BAR, 10)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: METEOR_SUIT_RECIPE,
+        output: ing(METEOR_SUIT, 1),
+        ingredients: &[ing(METEORITE_BAR, 20)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: METEOR_LEGGINGS_RECIPE,
+        output: ing(METEOR_LEGGINGS, 1),
+        ingredients: &[ing(METEORITE_BAR, 15)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: SPACE_GUN_RECIPE,
+        output: ing(SPACE_GUN, 1),
+        ingredients: &[ing(METEORITE_BAR, 20)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: BLUE_PHASEBLADE_RECIPE,
+        output: ing(BLUE_PHASEBLADE, 1),
+        ingredients: &[ing(METEORITE_BAR, 15)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: STAR_CANNON_RECIPE,
+        output: ing(STAR_CANNON, 1),
+        ingredients: &[
+            ing(MINISHARK, 1),
+            ing(METEORITE_BAR, 20),
+            ing(FALLEN_STAR, 5),
+        ],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: NECRO_HELMET_RECIPE,
+        output: ing(NECRO_HELMET, 1),
+        ingredients: &[ing(BONE, 40)],
+        station: Some(WORKBENCH),
+    },
+    Recipe {
+        id: NECRO_BREASTPLATE_RECIPE,
+        output: ing(NECRO_BREASTPLATE, 1),
+        ingredients: &[ing(BONE, 50)],
+        station: Some(WORKBENCH),
+    },
+    Recipe {
+        id: NECRO_GREAVES_RECIPE,
+        output: ing(NECRO_GREAVES, 1),
+        ingredients: &[ing(BONE, 45)],
+        station: Some(WORKBENCH),
+    },
+    Recipe {
+        id: JUNGLE_HAT_RECIPE,
+        output: ing(JUNGLE_HAT, 1),
+        ingredients: &[ing(JUNGLE_SPORES, 8)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: JUNGLE_SHIRT_RECIPE,
+        output: ing(JUNGLE_SHIRT, 1),
+        ingredients: &[ing(JUNGLE_SPORES, 16), ing(STINGER, 10)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: JUNGLE_PANTS_RECIPE,
+        output: ing(JUNGLE_PANTS, 1),
+        ingredients: &[ing(JUNGLE_SPORES, 8), ing(VINE, 2)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: BEE_HEADGEAR_RECIPE,
+        output: ing(BEE_HEADGEAR, 1),
+        ingredients: &[ing(HIVE_ITEM, 8), ing(STINGER, 4)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: BEE_BREASTPLATE_RECIPE,
+        output: ing(BEE_BREASTPLATE, 1),
+        ingredients: &[ing(HIVE_ITEM, 12), ing(STINGER, 6)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: BEE_GREAVES_RECIPE,
+        output: ing(BEE_GREAVES, 1),
+        ingredients: &[ing(HIVE_ITEM, 10), ing(STINGER, 4)],
+        station: Some(ANVIL),
+    },
+    Recipe {
+        id: SPECTRE_BOOTS_RECIPE,
+        output: ing(SPECTRE_BOOTS, 1),
+        ingredients: &[ing(HERMES_BOOTS, 1), ing(ROCKET_BOOTS, 1)],
+        station: Some(TINKERERS_WORKSHOP),
+    },
+    Recipe {
+        id: OBSIDIAN_SHIELD_RECIPE,
+        output: ing(OBSIDIAN_SHIELD, 1),
+        ingredients: &[ing(COBALT_SHIELD, 1), ing(OBSIDIAN_SKULL, 1)],
+        station: Some(TINKERERS_WORKSHOP),
+    },
+    Recipe {
+        id: CLOUD_IN_A_BALLOON_RECIPE,
+        output: ing(CLOUD_IN_A_BALLOON, 1),
+        ingredients: &[ing(CLOUD_IN_A_BOTTLE, 1), ing(SHINY_RED_BALLOON, 1)],
+        station: Some(TINKERERS_WORKSHOP),
+    },
+    Recipe {
+        id: LIGHTNING_BOOTS_RECIPE,
+        output: ing(LIGHTNING_BOOTS, 1),
+        ingredients: &[
+            ing(SPECTRE_BOOTS, 1),
+            ing(AGLET, 1),
+            ing(ANKLET_OF_THE_WIND, 1),
+        ],
+        station: Some(TINKERERS_WORKSHOP),
+    },
 ];
 
 pub fn recipe(id: RecipeId) -> Option<&'static Recipe> {
@@ -1098,7 +1291,7 @@ mod tests {
     fn craft_rejects_unknown_and_zero() {
         let mut inv = Inventory::empty();
         assert_eq!(
-            craft(&mut inv, RecipeId(99), 1),
+            craft(&mut inv, RecipeId(999), 1),
             Err(CraftError::UnknownRecipe)
         );
         assert_eq!(
@@ -1109,11 +1302,11 @@ mod tests {
 
     #[test]
     fn recipe_lookup_by_id() {
-        for i in 0..83 {
+        for i in 0..107 {
             assert_eq!(recipe(RecipeId(i)).unwrap().id, RecipeId(i));
         }
-        assert!(recipe(RecipeId(99)).is_none());
-        assert_eq!(recipes().len(), 83);
+        assert!(recipe(RecipeId(999)).is_none());
+        assert_eq!(recipes().len(), 107);
     }
 
     #[test]
@@ -1330,7 +1523,7 @@ mod tests {
         assert_eq!(r.output, ing(MANA_CRYSTAL, 1));
         assert_eq!(r.ingredients, &[ing(FALLEN_STAR, 5)]);
         assert_eq!(r.station, None);
-        assert_eq!(recipes().len(), 83);
+        assert_eq!(recipes().len(), 107);
     }
 
     #[test]

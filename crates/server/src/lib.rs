@@ -765,6 +765,65 @@ impl Server {
         if self.shadow_orbs_broken % 3 == 0 {
             self.spawn_eater_of_worlds(drop_pos);
         }
+        if !self.facts.meteorite_crashed && (self.shadow_orbs_broken == 1 || self.rng.below(2) == 0)
+        {
+            self.crash_meteorite();
+        }
+    }
+
+    /// Carves a surface meteorite crater away from spawn and oceans, placing `METEORITE_ORE`.
+    pub fn crash_meteorite(&mut self) -> Option<[i32; 3]> {
+        use terravibe_sim::world_bounds::{BEACH_WIDTH, OCEAN_WIDTH, WorldBounds};
+        use terravibe_sim::worldgen::terrain::surface_height_for_size;
+
+        let bounds = WorldBounds::new(self.cfg.size);
+        let max_r = (bounds.half - OCEAN_WIDTH - BEACH_WIDTH - 20).max(110);
+        let mut center = None;
+        for _ in 0..24 {
+            let angle = (self.rng.next_u32() as f64 / u32::MAX as f64) * std::f64::consts::TAU;
+            let dist = 90.0
+                + (self.rng.next_u32() as f64 / u32::MAX as f64) * (max_r as f64 - 90.0).max(20.0);
+            let cx = (angle.cos() * dist).round() as i32;
+            let cz = (angle.sin() * dist).round() as i32;
+            if !self.is_corrupt_at(cx, cz) {
+                let cy = surface_height_for_size(self.seed, cx, cz, self.cfg.size);
+                center = Some([cx, cy, cz]);
+                break;
+            }
+        }
+        let [cx, cy, cz] = center?;
+        self.facts.meteorite_crashed = true;
+        let radius = 6i32;
+        for dz in -radius..=radius {
+            for dx in -radius..=radius {
+                for dy in -radius..=radius {
+                    let d2 = dx * dx + dy * dy + dz * dz;
+                    let (wx, wy, wz) = (cx + dx, cy + dy, cz + dz);
+                    let pos = ChunkPos::of_block(wx, wy, wz);
+                    self.world.entry(pos).or_insert_with(|| {
+                        Arc::new(terravibe_sim::worldgen::terrain::generate_chunk_sized(
+                            self.seed,
+                            pos,
+                            self.cfg.size,
+                        ))
+                    });
+                    if d2 <= 14 && wy >= cy - 2 {
+                        self.set_block([wx, wy, wz], terravibe_sim::block::AIR);
+                    } else if d2 <= radius * radius && wy <= cy + 1 {
+                        self.set_block([wx, wy, wz], terravibe_sim::block::METEORITE_ORE);
+                    }
+                }
+            }
+        }
+        for c in &self.conns {
+            if c.player.is_some() {
+                let _ = c.io.send(ServerMsg::SyncFacts {
+                    world: self.facts,
+                    character: c.character_facts,
+                });
+            }
+        }
+        Some([cx, cy, cz])
     }
 
     pub fn handle_pot_broken(&mut self, pos: [i32; 3]) {
@@ -1226,6 +1285,7 @@ impl Server {
             [f32; 3],
             f32,
             i32,
+            i32,
         )> = Vec::new();
         let mut casts: Vec<(PlayerId, ItemId, Prefix, [f32; 3], [f32; 3])> = Vec::new();
         let mut throws: Vec<(PlayerId, ItemId, [f32; 3], [f32; 3])> = Vec::new();
@@ -1272,6 +1332,15 @@ impl Server {
                     wall_log: &mut self.wall_edits,
                     liquid_log: &mut liquid_edits,
                 };
+                let mana_avail = if p.has_meteor_set()
+                    && c.inv
+                        .selected_stack()
+                        .is_some_and(|s| s.id == terravibe_sim::item::SPACE_GUN)
+                {
+                    Some(i32::MAX)
+                } else {
+                    Some(p.vitals.mana)
+                };
                 let used = tick_use_with_mana(
                     &mut w,
                     &p.body,
@@ -1279,7 +1348,7 @@ impl Server {
                     &mut c.use_state,
                     input,
                     &mut c.rng,
-                    Some(p.vitals.mana),
+                    mana_avail,
                 );
                 for u in &used {
                     if let UseEvent::Swing { item, prefix } = u {
@@ -1303,7 +1372,8 @@ impl Server {
                             origin,
                             dir,
                             p.ranged_damage_mult(),
-                            p.accessory_crit_bonus(),
+                            p.ranged_crit_bonus(),
+                            p.armor_penetration(),
                         )),
                         UseEvent::Cast {
                             wand,
@@ -1391,6 +1461,32 @@ impl Server {
                         UseEvent::TileBroken { pos, tile } => {
                             if tile == terravibe_sim::block::POT {
                                 broken_pots.push(pos);
+                            } else if matches!(
+                                tile,
+                                terravibe_sim::block::MUD | terravibe_sim::block::JUNGLE_GRASS
+                            ) && pos[1] < 245
+                                && terravibe_sim::worldgen::biome::dominant(
+                                    &terravibe_sim::worldgen::biome::biome_weights_for_size(
+                                        self.seed,
+                                        pos[0],
+                                        pos[2],
+                                        self.cfg.size,
+                                    ),
+                                ) == terravibe_sim::worldgen::biome::Biome::Jungle
+                                && self.rng.below(8) == 0
+                            {
+                                new_drops.push((
+                                    ItemStack {
+                                        id: terravibe_sim::item::JUNGLE_SPORES,
+                                        count: 1,
+                                        prefix: Prefix(0),
+                                    },
+                                    [
+                                        pos[0] as f32 + 0.5,
+                                        pos[1] as f32 + 0.5,
+                                        pos[2] as f32 + 0.5,
+                                    ],
+                                ));
                             }
                             uses.push(UseEvent::TileBroken { pos, tile });
                         }
@@ -1484,12 +1580,19 @@ impl Server {
                 }
                 // Both boomerangs spawn a returning projectile; the Flamarang
                 // (Molten tier) shares the flight but pierces enemies.
-                if item == ENCHANTED_BOOMERANG || item == FLAMARANG {
+                if matches!(
+                    item,
+                    ENCHANTED_BOOMERANG | FLAMARANG | terravibe_sim::item::THORN_CHAKRAM
+                ) {
                     if self.projectiles.len() < MAX_PROJECTILES
                         && !self.projectiles.iter().any(|pr| {
                             pr.owner == c.id
-                                && (pr.kind == ProjKind::Boomerang
-                                    || pr.kind == ProjKind::Flamarang)
+                                && matches!(
+                                    pr.kind,
+                                    ProjKind::Boomerang
+                                        | ProjKind::Flamarang
+                                        | ProjKind::ThornChakram
+                                )
                         })
                     {
                         let (sy, cy) = yaw.sin_cos();
@@ -1502,6 +1605,7 @@ impl Server {
                                 .round_ties_even() as i32;
                             proj.knock_back *= ps.knock_back;
                             proj.crit += ps.crit + p.melee_crit_bonus();
+                            proj.armor_penetration = p.armor_penetration();
                             for v in &mut proj.vel {
                                 *v *= ps.velocity;
                             }
@@ -1511,7 +1615,7 @@ impl Server {
                     }
                     continue;
                 }
-                if item == SPEAR {
+                if item == SPEAR || item == terravibe_sim::item::DARK_LANCE {
                     if self.projectiles.len() < MAX_PROJECTILES
                         && !self
                             .projectiles
@@ -1528,6 +1632,7 @@ impl Server {
                                 .round_ties_even() as i32;
                             proj.knock_back *= ps.knock_back;
                             proj.crit += ps.crit + p.melee_crit_bonus();
+                            proj.armor_penetration = p.armor_penetration();
                             self.next_proj_id = self.next_proj_id.wrapping_add(1);
                             self.projectiles.push(proj);
                         }
@@ -1538,7 +1643,9 @@ impl Server {
                     item,
                     terravibe_sim::item::BALL_O_HURT
                         | terravibe_sim::item::BLUE_MOON
+                        | terravibe_sim::item::SUNFURY
                         | terravibe_sim::item::VALOR
+                        | terravibe_sim::item::AMAZON
                 ) {
                     if self.projectiles.len() < MAX_PROJECTILES
                         && !self.projectiles.iter().any(|pr| {
@@ -1555,6 +1662,7 @@ impl Server {
                                 .round_ties_even() as i32;
                             proj.knock_back *= ps.knock_back;
                             proj.crit += ps.crit + p.melee_crit_bonus();
+                            proj.armor_penetration = p.armor_penetration();
                             for v in &mut proj.vel {
                                 *v *= ps.velocity;
                             }
@@ -1609,12 +1717,19 @@ impl Server {
                     let Some(e) = self.enemies.iter_mut().find(|e| e.id == id) else {
                         continue;
                     };
+                    let e_def = e.kind.stats().defense;
+                    let pen = p.armor_penetration();
+                    let pen_bonus = if pen > 0 {
+                        e_def / 2 - (e_def - pen).max(0) / 2
+                    } else {
+                        0
+                    };
                     let swing_dmg = if item == terravibe_sim::item::BREAKER_BLADE
                         && e.hp * 10 >= e.kind.stats().hp * 9
                     {
-                        (melee_damage as f32 * 2.5).round_ties_even() as i32
+                        (melee_damage as f32 * 2.5).round_ties_even() as i32 + pen_bonus
                     } else {
-                        melee_damage
+                        melee_damage + pen_bonus
                     };
                     let Some(hit) = apply_hit(
                         e,
@@ -1628,6 +1743,7 @@ impl Server {
                     };
                     let burn_chance = match item {
                         FIERY_GREATSWORD | terravibe_sim::item::FIRECRACKER => 50,
+                        terravibe_sim::item::BLADE_OF_GRASS => 25,
                         terravibe_sim::item::MOLTEN_HAMAXE => 20,
                         terravibe_sim::item::MOLTEN_PICKAXE => 10,
                         _ => 0,
@@ -1917,12 +2033,13 @@ impl Server {
         for pos in broken_pots {
             self.handle_pot_broken(pos);
         }
-        for (owner, bow, ammo, prefix, origin, dir, ranged_mult, ranged_crit) in shots {
+        for (owner, bow, ammo, prefix, origin, dir, ranged_mult, ranged_crit, armor_pen) in shots {
             if self.projectiles.len() < MAX_PROJECTILES {
                 let id = self.next_proj_id;
                 if let Some(mut p) = Projectile::fire(id, owner, bow, ammo, prefix, origin, dir) {
                     p.damage = (p.damage as f32 * ranged_mult).round_ties_even() as i32;
                     p.crit += ranged_crit;
+                    p.armor_penetration = armor_pen;
                     self.next_proj_id = self.next_proj_id.wrapping_add(1);
                     self.projectiles.push(p);
                 }
@@ -1934,7 +2051,14 @@ impl Server {
                 if let Some(conn) = self.conns.iter_mut().find(|c| c.id == owner) {
                     if let Some(player) = conn.player.as_mut() {
                         let magic_mult = player.magic_damage_mult();
-                        let magic_crit = player.accessory_crit_bonus();
+                        let magic_crit = player.magic_crit_bonus();
+                        let armor_pen = player.armor_penetration();
+                        let base_eff = player.effective_mana_cost(wand);
+                        let eff_mana = if base_eff == 0 {
+                            0
+                        } else {
+                            terravibe_sim::item::mana_cost(base_eff, prefix)
+                        };
                         let proj = if wand == terravibe_sim::item::VILETHORN {
                             Projectile::cast_vilethorn(
                                 id,
@@ -1975,6 +2099,50 @@ impl Server {
                                 dir,
                                 &mut player.vitals,
                             )
+                        } else if wand == terravibe_sim::item::WATER_BOLT {
+                            Projectile::cast_water_bolt(
+                                id,
+                                owner,
+                                wand,
+                                prefix,
+                                origin,
+                                dir,
+                                &mut player.vitals,
+                                Some(eff_mana),
+                            )
+                        } else if wand == terravibe_sim::item::SPACE_GUN {
+                            Projectile::cast_space_gun(
+                                id,
+                                owner,
+                                wand,
+                                prefix,
+                                origin,
+                                dir,
+                                &mut player.vitals,
+                                Some(eff_mana),
+                            )
+                        } else if wand == terravibe_sim::item::FLAMELASH {
+                            Projectile::cast_flamelash(
+                                id,
+                                owner,
+                                wand,
+                                prefix,
+                                origin,
+                                dir,
+                                &mut player.vitals,
+                                Some(eff_mana),
+                            )
+                        } else if wand == terravibe_sim::item::FLOWER_OF_FIRE {
+                            Projectile::cast_flower_of_fire(
+                                id,
+                                owner,
+                                wand,
+                                prefix,
+                                origin,
+                                dir,
+                                &mut player.vitals,
+                                Some(eff_mana),
+                            )
                         } else {
                             Projectile::cast_spark(
                                 id,
@@ -1989,6 +2157,7 @@ impl Server {
                         if let Some(mut p) = proj {
                             p.damage = (p.damage as f32 * magic_mult).round_ties_even() as i32;
                             p.crit += magic_crit;
+                            p.armor_penetration = armor_pen;
                             self.next_proj_id = self.next_proj_id.wrapping_add(1);
                             self.projectiles.push(p);
                         }
@@ -2827,6 +2996,7 @@ impl Server {
                                 ai0: 0,
                                 pierced: 0,
                                 origin,
+                                armor_penetration: 0,
                             });
                         }
                     }
@@ -3381,16 +3551,22 @@ impl Server {
             } else {
                 let hits = hit_enemies_detailed(p, enemies, rng);
                 let damage_kind = match p.kind {
-                    ProjKind::Arrow | ProjKind::FlamingArrow | ProjKind::Bullet => {
-                        DamageKind::Ranged
-                    }
+                    ProjKind::Arrow
+                    | ProjKind::FlamingArrow
+                    | ProjKind::Bullet
+                    | ProjKind::FallenStarShot => DamageKind::Ranged,
                     ProjKind::Spark
                     | ProjKind::Vilethorn
                     | ProjKind::MagicMissile
+                    | ProjKind::Flamelash
                     | ProjKind::WaterStream
-                    | ProjKind::Laser => DamageKind::Magic,
+                    | ProjKind::WaterBolt
+                    | ProjKind::Laser
+                    | ProjKind::SpaceLaser
+                    | ProjKind::FlowerOfFire => DamageKind::Magic,
                     ProjKind::Boomerang
                     | ProjKind::Flamarang
+                    | ProjKind::ThornChakram
                     | ProjKind::Spear
                     | ProjKind::Flail
                     | ProjKind::Yoyo
@@ -3432,7 +3608,7 @@ impl Server {
                     }
                 }
             }
-            if p.kind == ProjKind::MagicMissile
+            if matches!(p.kind, ProjKind::MagicMissile | ProjKind::Flamelash)
                 && let Some((eye, dir, true)) = conns
                     .iter()
                     .find(|c| c.id == p.owner)
@@ -4095,6 +4271,7 @@ impl Server {
                         ai0: 0,
                         pierced: 0,
                         origin: [pos[0], pos[1] + 1.0, pos[2]],
+                        armor_penetration: 0,
                     });
                     if let Some(e) = self.enemies.iter_mut().find(|e| e.id == id) {
                         e.ai[1] = 0;
@@ -6428,7 +6605,7 @@ mod tests {
         // Missing ingredients, unknown recipe, zero count.
         for (id, n, e) in [
             (TORCH_RECIPE, 1, CraftError::MissingIngredients),
-            (RecipeId(99), 1, CraftError::UnknownRecipe),
+            (RecipeId(999), 1, CraftError::UnknownRecipe),
             (TORCH_RECIPE, 0, CraftError::InvalidCount),
         ] {
             drain(&c, &mut got);
@@ -12204,6 +12381,7 @@ mod tests {
                     ai0: 0,
                     pierced: 0,
                     origin: [sp[0], sp[1] + 20.0, sp[2]],
+                    armor_penetration: 0,
                 });
             }
             s.enemies

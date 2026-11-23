@@ -116,12 +116,27 @@ impl Player {
     }
 
     pub fn effective_mana_max(&self) -> i32 {
+        let jungle_mana =
+            if self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::JUNGLE_HAT) {
+                40
+            } else {
+                0
+            } + if self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::JUNGLE_SHIRT) {
+                20
+            } else {
+                0
+            } + if self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::JUNGLE_PANTS) {
+                20
+            } else {
+                0
+            };
         self.vitals.mana_max
             + if self.has_accessory(crate::item::BAND_OF_STARPOWER) {
                 20
             } else {
                 0
             }
+            + jungle_mana
             + self.accessory_prefix_totals().mana
     }
 
@@ -162,6 +177,7 @@ impl Player {
 
     pub fn fire_walk(&self) -> bool {
         self.has_accessory(crate::item::OBSIDIAN_SKULL)
+            || self.has_accessory(crate::item::OBSIDIAN_SHIELD)
             || self.vitals.obsidian_skin_ticks > 0
             || self.has_molten_set()
     }
@@ -187,12 +203,83 @@ impl Player {
             && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::MOLTEN_GREAVES)
     }
 
-    /// Total melee damage multiplier (Molten Breastplate +7%, Molten full set +10% extra = +17%, Warrior Emblem +15%, accessory prefixes).
+    /// Full set bonus for Meteor Armor: Space Gun costs 0 mana.
+    pub fn has_meteor_set(&self) -> bool {
+        self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::METEOR_HELMET)
+            && self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::METEOR_SUIT)
+            && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::METEOR_LEGGINGS)
+    }
+
+    /// Full set bonus for Necro Armor: +10% ranged crit.
+    pub fn has_necro_set(&self) -> bool {
+        self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::NECRO_HELMET)
+            && self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::NECRO_BREASTPLATE)
+            && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::NECRO_GREAVES)
+    }
+
+    /// Full set bonus for Jungle Armor: 16% reduced mana cost.
+    pub fn has_jungle_set(&self) -> bool {
+        self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::JUNGLE_HAT)
+            && self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::JUNGLE_SHIRT)
+            && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::JUNGLE_PANTS)
+    }
+
+    /// Full set bonus for Bee Armor: +10% damage and +10% movement speed.
+    pub fn has_bee_set(&self) -> bool {
+        self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::BEE_HEADGEAR)
+            && self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::BEE_BREASTPLATE)
+            && self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::BEE_GREAVES)
+    }
+
+    fn bee_piece_damage_bonus(&self) -> f32 {
+        let mut pct = 0.0;
+        if self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::BEE_HEADGEAR) {
+            pct += 0.04;
+        }
+        if self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::BEE_BREASTPLATE) {
+            pct += 0.04;
+        }
+        if self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::BEE_GREAVES) {
+            pct += 0.05;
+        }
+        if self.has_bee_set() {
+            pct += 0.10;
+        }
+        pct
+    }
+
+    /// Effective mana cost for a weapon after Meteor Armor (Space Gun = 0) and Jungle Armor (-16%).
+    pub fn effective_mana_cost(&self, weapon: ItemId) -> i32 {
+        let base = crate::item::item_data(weapon).mana;
+        if base <= 0 {
+            return 0;
+        }
+        if weapon == crate::item::SPACE_GUN && self.has_meteor_set() {
+            return 0;
+        }
+        if self.has_jungle_set() {
+            ((base as f32 * 0.84).round() as i32).max(1)
+        } else {
+            base
+        }
+    }
+
+    /// Armor penetration from Shark Tooth Necklace (+5).
+    pub fn armor_penetration(&self) -> i32 {
+        if self.has_accessory(crate::item::SHARK_TOOTH_NECKLACE) {
+            5
+        } else {
+            0
+        }
+    }
+
+    /// Total melee damage multiplier (Molten Breastplate +7%, Molten full set +10% extra = +17%, Bee Armor, Warrior Emblem +15%, accessory prefixes).
     pub fn melee_damage_mult(&self) -> f32 {
         let molten_chest =
             self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::MOLTEN_BREASTPLATE);
         1.0 + if molten_chest { 0.07 } else { 0.0 }
             + if self.has_molten_set() { 0.10 } else { 0.0 }
+            + self.bee_piece_damage_bonus()
             + if self.has_accessory(crate::item::WARRIOR_EMBLEM) {
                 0.15
             } else {
@@ -201,22 +288,73 @@ impl Player {
             + self.accessory_prefix_totals().damage_pct as f32 / 100.0
     }
 
-    /// Total ranged damage multiplier (Ranger Emblem +15%, accessory prefixes).
+    /// Total ranged damage multiplier (Necro Armor +5% per piece, Bee Armor, Ranger Emblem +15%, accessory prefixes).
     pub fn ranged_damage_mult(&self) -> f32 {
-        1.0 + if self.has_accessory(crate::item::RANGER_EMBLEM) {
-            0.15
-        } else {
-            0.0
-        } + self.accessory_prefix_totals().damage_pct as f32 / 100.0
+        let necro = [
+            (ArmorSlot::Head, crate::item::NECRO_HELMET),
+            (ArmorSlot::Body, crate::item::NECRO_BREASTPLATE),
+            (ArmorSlot::Legs, crate::item::NECRO_GREAVES),
+        ]
+        .into_iter()
+        .filter(|&(slot, id)| self.armor[armor_index(slot)] == Some(id))
+        .count() as f32
+            * 0.05;
+        1.0 + necro
+            + self.bee_piece_damage_bonus()
+            + if self.has_accessory(crate::item::RANGER_EMBLEM) {
+                0.15
+            } else {
+                0.0
+            }
+            + self.accessory_prefix_totals().damage_pct as f32 / 100.0
     }
 
-    /// Total magic damage multiplier (Sorcerer Emblem +15%, accessory prefixes).
+    /// Total magic damage multiplier (Meteor Armor +9%/piece, Jungle Shirt +6%, Bee Armor, Sorcerer Emblem +15%, accessory prefixes).
     pub fn magic_damage_mult(&self) -> f32 {
-        1.0 + if self.has_accessory(crate::item::SORCERER_EMBLEM) {
-            0.15
+        let meteor = [
+            (ArmorSlot::Head, crate::item::METEOR_HELMET),
+            (ArmorSlot::Body, crate::item::METEOR_SUIT),
+            (ArmorSlot::Legs, crate::item::METEOR_LEGGINGS),
+        ]
+        .into_iter()
+        .filter(|&(slot, id)| self.armor[armor_index(slot)] == Some(id))
+        .count() as f32
+            * 0.09;
+        let jungle_shirt =
+            if self.armor[armor_index(ArmorSlot::Body)] == Some(crate::item::JUNGLE_SHIRT) {
+                0.06
+            } else {
+                0.0
+            };
+        1.0 + meteor
+            + jungle_shirt
+            + self.bee_piece_damage_bonus()
+            + if self.has_accessory(crate::item::SORCERER_EMBLEM) {
+                0.15
+            } else {
+                0.0
+            }
+            + self.accessory_prefix_totals().damage_pct as f32 / 100.0
+    }
+
+    /// Ranged critical strike chance bonus (Necro set +10% + accessories).
+    pub fn ranged_crit_bonus(&self) -> i32 {
+        (if self.has_necro_set() { 10 } else { 0 }) + self.accessory_crit_bonus()
+    }
+
+    /// Magic critical strike chance bonus (Jungle Hat +6%, Jungle Pants +6% + accessories).
+    pub fn magic_crit_bonus(&self) -> i32 {
+        let hat = if self.armor[armor_index(ArmorSlot::Head)] == Some(crate::item::JUNGLE_HAT) {
+            6
         } else {
-            0.0
-        } + self.accessory_prefix_totals().damage_pct as f32 / 100.0
+            0
+        };
+        let pants = if self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::JUNGLE_PANTS) {
+            6
+        } else {
+            0
+        };
+        hat + pants + self.accessory_crit_bonus()
     }
 
     /// Critical strike chance bonus from equipped accessory prefixes (`Precise`/`Lucky`).
@@ -254,16 +392,42 @@ impl Player {
                 self.accessory_prefixes[i] = Prefix(0);
             }
         }
-        self.body.has_hermes_boots = self.has_accessory(crate::item::HERMES_BOOTS);
-        self.body.has_cloud_in_a_bottle = self.has_accessory(crate::item::CLOUD_IN_A_BOTTLE);
-        self.body.has_shiny_red_balloon = self.has_accessory(crate::item::SHINY_RED_BALLOON);
+        self.body.has_hermes_boots = self.has_accessory(crate::item::HERMES_BOOTS)
+            || self.has_accessory(crate::item::SPECTRE_BOOTS)
+            || self.has_accessory(crate::item::LIGHTNING_BOOTS);
+        self.body.has_rocket_boots = self.has_accessory(crate::item::ROCKET_BOOTS)
+            || self.has_accessory(crate::item::SPECTRE_BOOTS)
+            || self.has_accessory(crate::item::LIGHTNING_BOOTS);
+        self.body.has_cloud_in_a_bottle = self.has_accessory(crate::item::CLOUD_IN_A_BOTTLE)
+            || self.has_accessory(crate::item::CLOUD_IN_A_BALLOON);
+        self.body.has_shiny_red_balloon = self.has_accessory(crate::item::SHINY_RED_BALLOON)
+            || self.has_accessory(crate::item::CLOUD_IN_A_BALLOON);
         self.body.has_shadow_set = self.has_shadow_set();
         self.body.has_molten_set =
             self.armor[armor_index(ArmorSlot::Legs)] == Some(crate::item::MOLTEN_GREAVES);
-        self.body.no_knockback = self.has_accessory(crate::item::COBALT_SHIELD);
+        self.body.no_knockback = self.has_accessory(crate::item::COBALT_SHIELD)
+            || self.has_accessory(crate::item::OBSIDIAN_SHIELD);
         let b = self.accessory_prefix_totals();
-        self.body.move_speed_bonus = b.move_speed_pct as f32 / 100.0;
-        self.body.melee_speed_bonus = b.melee_speed_pct as f32 / 100.0;
+        let extra_move = (if self.has_accessory(crate::item::AGLET) {
+            0.05
+        } else {
+            0.0
+        }) + (if self.has_accessory(crate::item::ANKLET_OF_THE_WIND) {
+            0.10
+        } else {
+            0.0
+        }) + (if self.has_accessory(crate::item::LIGHTNING_BOOTS) {
+            0.08
+        } else {
+            0.0
+        }) + (if self.has_bee_set() { 0.10 } else { 0.0 });
+        self.body.move_speed_bonus = b.move_speed_pct as f32 / 100.0 + extra_move;
+        let extra_melee = if self.has_accessory(crate::item::FERAL_CLAWS) {
+            0.12
+        } else {
+            0.0
+        };
+        self.body.melee_speed_bonus = b.melee_speed_pct as f32 / 100.0 + extra_melee;
         self.vitals.mana = self.vitals.mana.min(self.effective_mana_max());
     }
 
@@ -606,6 +770,8 @@ pub struct PlayerBody {
     pub run_ticks: u32,
     pub double_jump_ready: bool,
     pub has_hermes_boots: bool,
+    pub has_rocket_boots: bool,
+    pub rocket_fuel_ticks: i32,
     pub has_cloud_in_a_bottle: bool,
     pub has_shiny_red_balloon: bool,
     pub has_shadow_set: bool,
@@ -630,6 +796,8 @@ impl PlayerBody {
             run_ticks: 0,
             double_jump_ready: true,
             has_hermes_boots: false,
+            has_rocket_boots: false,
+            rocket_fuel_ticks: 0,
             has_cloud_in_a_bottle: false,
             has_shiny_red_balloon: false,
             has_shadow_set: false,
@@ -881,6 +1049,10 @@ pub fn step_body_bounded(
         body.fall_peak_y = body.pos[1];
         body.vel[1] = jump_speed;
         body.jump_ticks = ((jump_height_ticks as f32) * 0.75).round() as i32;
+    } else if input.jump && !body.on_ground && body.has_rocket_boots && body.rocket_fuel_ticks > 0 {
+        body.rocket_fuel_ticks -= 1;
+        body.fall_peak_y = body.pos[1];
+        body.vel[1] = (body.vel[1] + consts::GRAVITY * 2.2).min(jump_speed * 0.9);
     } else {
         body.vel[1] = (body.vel[1] - consts::GRAVITY).max(-consts::MAX_FALL_SPEED);
     }
@@ -894,6 +1066,7 @@ pub fn step_body_bounded(
     body.on_ground = blocked_y && dy < 0.0;
     if body.on_ground {
         body.double_jump_ready = true;
+        body.rocket_fuel_ticks = 70;
     }
     if blocked_y {
         body.vel[1] = 0.0;
@@ -2386,5 +2559,56 @@ mod tests {
             d_swift > d_base * 1.15,
             "swiftness should boost speed: base={d_base}, swift={d_swift}",
         );
+    }
+
+    #[test]
+    fn wave2_armor_sets_and_accessories_work() {
+        use crate::item::*;
+        let mut p = Player::new([0.0, 5.0, 0.0]);
+        // Meteor Armor: 0-mana Space Gun + 27% magic damage
+        p.armor = [
+            Some(METEOR_HELMET),
+            Some(METEOR_SUIT),
+            Some(METEOR_LEGGINGS),
+        ];
+        assert!(p.has_meteor_set());
+        assert_eq!(p.effective_mana_cost(SPACE_GUN), 0);
+        assert!((p.magic_damage_mult() - 1.27).abs() < 1e-4);
+
+        // Jungle Armor: +80 max mana, -16% mana cost
+        p.armor = [Some(JUNGLE_HAT), Some(JUNGLE_SHIRT), Some(JUNGLE_PANTS)];
+        assert!(p.has_jungle_set());
+        assert_eq!(p.effective_mana_max(), 20 + 80);
+        assert_eq!(p.magic_crit_bonus(), 12);
+        assert!(p.effective_mana_cost(WATER_BOLT) < item_data(WATER_BOLT).mana);
+
+        // Necro Armor: +15% ranged damage, +10% ranged crit
+        p.armor = [
+            Some(NECRO_HELMET),
+            Some(NECRO_BREASTPLATE),
+            Some(NECRO_GREAVES),
+        ];
+        assert!(p.has_necro_set());
+        assert!((p.ranged_damage_mult() - 1.15).abs() < 1e-4);
+        assert_eq!(p.ranged_crit_bonus(), 10);
+
+        // Obsidian Shield + Lightning Boots + Shark Tooth Necklace + Feral Claws
+        p.accessories = [
+            Some(OBSIDIAN_SHIELD),
+            Some(LIGHTNING_BOOTS),
+            Some(SHARK_TOOTH_NECKLACE),
+            Some(FERAL_CLAWS),
+            Some(CLOUD_IN_A_BALLOON),
+        ];
+        p.sync_accessories();
+        assert!(p.fire_walk());
+        assert!(p.no_knockback());
+        assert_eq!(p.armor_penetration(), 5);
+        assert!(p.body.has_rocket_boots);
+        assert!(p.body.has_hermes_boots);
+        assert!(p.body.has_cloud_in_a_bottle);
+        assert!(p.body.has_shiny_red_balloon);
+        assert!((p.body.move_speed_bonus - 0.08).abs() < 1e-4);
+        assert!((p.body.melee_speed_bonus - 0.12).abs() < 1e-4);
     }
 }

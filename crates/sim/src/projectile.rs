@@ -5,8 +5,8 @@ use crate::chunk::BlockQuery;
 use crate::combat::{Hit, apply_hit, apply_hit_with_immunity};
 use crate::enemy::{Enemy, EnemyId};
 use crate::item::{
-    FLAMARANG, FLAMING_ARROW, ItemId, MAGIC_MISSILE, MOLTEN_FURY, Prefix, Rng, VALOR, WOODEN_ARROW,
-    WOODEN_BOW, item_data, prefix_stats,
+    AMAZON, FALLEN_STAR, FLAMARANG, FLAMING_ARROW, ItemId, MAGIC_MISSILE, MOLTEN_FURY, Prefix, Rng,
+    THORN_CHAKRAM, VALOR, WOODEN_ARROW, WOODEN_BOW, item_data, prefix_stats,
 };
 use crate::player::consts::PX_TO_BLOCKS as PX;
 
@@ -66,6 +66,12 @@ pub enum ProjKind {
     Dynamite,
     GrappleHook,
     StarfuryStar,
+    ThornChakram,
+    WaterBolt,
+    SpaceLaser,
+    FallenStarShot,
+    FlowerOfFire,
+    Flamelash,
 }
 
 impl ProjKind {
@@ -75,6 +81,7 @@ impl ProjKind {
             WOODEN_ARROW => Some(ProjKind::Arrow),
             FLAMING_ARROW => Some(ProjKind::FlamingArrow),
             crate::item::MUSKET_BALL => Some(ProjKind::Bullet),
+            FALLEN_STAR => Some(ProjKind::FallenStarShot),
             _ => None,
         }
     }
@@ -86,13 +93,16 @@ impl ProjKind {
     pub fn pierce_cap(self) -> Option<u32> {
         match self {
             ProjKind::Spark | ProjKind::StarfuryStar => Some(2),
-            ProjKind::Laser => Some(3),
+            ProjKind::Laser | ProjKind::SpaceLaser => Some(3),
             ProjKind::WaterStream => Some(5),
+            ProjKind::FallenStarShot => Some(6),
+            ProjKind::WaterBolt => Some(10),
             ProjKind::Spear
             | ProjKind::Vilethorn
             | ProjKind::Flail
             | ProjKind::Yoyo
             | ProjKind::Flamarang
+            | ProjKind::ThornChakram
             | ProjKind::Bomb
             | ProjKind::Dynamite
             | ProjKind::GrappleHook => None,
@@ -101,7 +111,9 @@ impl ProjKind {
             | ProjKind::Boomerang
             | ProjKind::Bullet
             | ProjKind::MagicMissile
+            | ProjKind::Flamelash
             | ProjKind::Fireball
+            | ProjKind::FlowerOfFire
             | ProjKind::DemonScythe
             | ProjKind::EyeLaser
             | ProjKind::Grenade => Some(1),
@@ -130,6 +142,8 @@ pub struct Projectile {
     pub pierced: u32,
     /// Spawn origin point.
     pub origin: [f32; 3],
+    /// Armor penetration (e.g. Shark Tooth Necklace +5).
+    pub armor_penetration: i32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -166,6 +180,8 @@ impl Projectile {
         let speed = (b.shoot_speed * ps.velocity + a.shoot_speed) * PX;
         let ttl = if kind == ProjKind::Bullet {
             BULLET_TIME_LEFT
+        } else if kind == ProjKind::FallenStarShot {
+            240
         } else {
             ARROW_TIME_LEFT
         };
@@ -182,6 +198,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         })
     }
 
@@ -207,9 +224,27 @@ impl Projectile {
         kind: ProjKind,
         ttl: i32,
     ) -> Option<Projectile> {
+        Self::cast_magic_proj_with_mana(
+            id, owner, wand, prefix, origin, dir, vitals, kind, ttl, None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn cast_magic_proj_with_mana(
+        id: u32,
+        owner: u32,
+        wand: ItemId,
+        prefix: Prefix,
+        origin: [f32; 3],
+        dir: [f32; 3],
+        vitals: &mut crate::player::Vitals,
+        kind: ProjKind,
+        ttl: i32,
+        mana_override: Option<i32>,
+    ) -> Option<Projectile> {
         let data = item_data(wand);
         let ps = prefix_stats(prefix);
-        let mana = crate::item::mana_cost(data.mana, prefix);
+        let mana = mana_override.unwrap_or_else(|| crate::item::mana_cost(data.mana, prefix));
         if data.class != crate::item::ItemClass::Magic || !vitals.spend_mana(mana) {
             return None;
         }
@@ -233,6 +268,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         })
     }
 
@@ -275,6 +311,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         }
     }
 
@@ -301,6 +338,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         }
     }
 
@@ -326,6 +364,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin: target_pos,
+            armor_penetration: 0,
         }
     }
 
@@ -429,6 +468,110 @@ impl Projectile {
         Some(p)
     }
 
+    /// Cast a Water Bolt projectile: bounces off solid walls up to 5 times.
+    pub fn cast_water_bolt(
+        id: u32,
+        owner: u32,
+        wand: ItemId,
+        prefix: Prefix,
+        origin: [f32; 3],
+        dir: [f32; 3],
+        vitals: &mut crate::player::Vitals,
+        mana_override: Option<i32>,
+    ) -> Option<Projectile> {
+        Self::cast_magic_proj_with_mana(
+            id,
+            owner,
+            wand,
+            prefix,
+            origin,
+            dir,
+            vitals,
+            ProjKind::WaterBolt,
+            600,
+            mana_override,
+        )
+    }
+
+    /// Cast a Space Gun laser projectile.
+    pub fn cast_space_gun(
+        id: u32,
+        owner: u32,
+        wand: ItemId,
+        prefix: Prefix,
+        origin: [f32; 3],
+        dir: [f32; 3],
+        vitals: &mut crate::player::Vitals,
+        mana_override: Option<i32>,
+    ) -> Option<Projectile> {
+        let mut p = Self::cast_magic_proj_with_mana(
+            id,
+            owner,
+            wand,
+            prefix,
+            origin,
+            dir,
+            vitals,
+            ProjKind::SpaceLaser,
+            180,
+            mana_override,
+        )?;
+        for v in &mut p.vel {
+            *v *= 2.0;
+        }
+        Some(p)
+    }
+
+    /// Cast a Flamelash controllable fire missile.
+    pub fn cast_flamelash(
+        id: u32,
+        owner: u32,
+        wand: ItemId,
+        prefix: Prefix,
+        origin: [f32; 3],
+        dir: [f32; 3],
+        vitals: &mut crate::player::Vitals,
+        mana_override: Option<i32>,
+    ) -> Option<Projectile> {
+        Self::cast_magic_proj_with_mana(
+            id,
+            owner,
+            wand,
+            prefix,
+            origin,
+            dir,
+            vitals,
+            ProjKind::Flamelash,
+            300,
+            mana_override,
+        )
+    }
+
+    /// Cast a Flower of Fire bouncing fireball.
+    pub fn cast_flower_of_fire(
+        id: u32,
+        owner: u32,
+        wand: ItemId,
+        prefix: Prefix,
+        origin: [f32; 3],
+        dir: [f32; 3],
+        vitals: &mut crate::player::Vitals,
+        mana_override: Option<i32>,
+    ) -> Option<Projectile> {
+        Self::cast_magic_proj_with_mana(
+            id,
+            owner,
+            wand,
+            prefix,
+            origin,
+            dir,
+            vitals,
+            ProjKind::FlowerOfFire,
+            300,
+            mana_override,
+        )
+    }
+
     /// Throws an enchanted boomerang.
     pub fn throw_boomerang(
         id: u32,
@@ -454,6 +597,8 @@ impl Projectile {
             vel: [norm[0] * speed, norm[1] * speed, norm[2] * speed],
             kind: if item == FLAMARANG {
                 ProjKind::Flamarang
+            } else if item == THORN_CHAKRAM {
+                ProjKind::ThornChakram
             } else {
                 ProjKind::Boomerang
             },
@@ -465,6 +610,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         })
     }
 
@@ -500,10 +646,11 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         })
     }
 
-    /// Throws a flail (Ball O' Hurt, Blue Moon) or the Valor yoyo.
+    /// Throws a flail (Ball O' Hurt, Blue Moon, Sunfury) or yoyo (Valor, Amazon).
     pub fn throw_flail(
         id: u32,
         owner: u32,
@@ -526,7 +673,7 @@ impl Projectile {
             id,
             pos: origin,
             vel: [norm[0] * speed, norm[1] * speed, norm[2] * speed],
-            kind: if item == VALOR {
+            kind: if item == VALOR || item == AMAZON {
                 ProjKind::Yoyo
             } else {
                 ProjKind::Flail
@@ -539,6 +686,7 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         })
     }
 
@@ -578,13 +726,14 @@ impl Projectile {
             ai0: 0,
             pierced: 0,
             origin,
+            armor_penetration: 0,
         })
     }
 }
 
-/// Steers a `MagicMissile` smoothly toward `aim_point` while preserving its speed.
+/// Steers a `MagicMissile` or `Flamelash` smoothly toward `aim_point` while preserving its speed.
 pub fn steer_magic_missile(p: &mut Projectile, aim_point: [f32; 3]) {
-    if p.kind != ProjKind::MagicMissile {
+    if !matches!(p.kind, ProjKind::MagicMissile | ProjKind::Flamelash) {
         return;
     }
     let dx = aim_point[0] - p.pos[0];
@@ -648,7 +797,7 @@ pub fn step_with_target(q: &impl BlockQuery, p: &mut Projectile, target: [f32; 3
             ];
             Step::Flying
         }
-        ProjKind::Boomerang | ProjKind::Flamarang => {
+        ProjKind::Boomerang | ProjKind::Flamarang | ProjKind::ThornChakram => {
             let dx = p.pos[0] - target[0];
             let dy = p.pos[1] - target[1];
             let dz = p.pos[2] - target[2];
@@ -884,15 +1033,70 @@ pub fn step_with_target(q: &impl BlockQuery, p: &mut Projectile, target: [f32; 3
             }
             Step::Flying
         }
+        ProjKind::WaterBolt | ProjKind::FlowerOfFire => {
+            if p.kind == ProjKind::FlowerOfFire {
+                p.vel[1] = (p.vel[1] - 0.65 * ARROW_GRAVITY).max(-ARROW_MAX_FALL);
+            }
+            let len = p.vel.iter().map(|v| v * v).sum::<f32>().sqrt();
+            let n = (len / 0.2).ceil().max(1.0) as i32;
+            for _ in 0..n {
+                let step_v = [
+                    p.vel[0] / n as f32,
+                    p.vel[1] / n as f32,
+                    p.vel[2] / n as f32,
+                ];
+                let next = [
+                    p.pos[0] + step_v[0],
+                    p.pos[1] + step_v[1],
+                    p.pos[2] + step_v[2],
+                ];
+                if q.block(
+                    next[0].floor() as i32,
+                    next[1].floor() as i32,
+                    next[2].floor() as i32,
+                )
+                .is_solid()
+                {
+                    if p.ai0 >= 5 {
+                        return Step::HitBlock;
+                    }
+                    p.ai0 += 1;
+                    let cx = p.pos[0].floor() as i32;
+                    let cy = p.pos[1].floor() as i32;
+                    let cz = p.pos[2].floor() as i32;
+                    if q.block((p.pos[0] + step_v[0]).floor() as i32, cy, cz)
+                        .is_solid()
+                    {
+                        p.vel[0] = -p.vel[0];
+                    }
+                    if q.block(cx, (p.pos[1] + step_v[1]).floor() as i32, cz)
+                        .is_solid()
+                    {
+                        p.vel[1] = -p.vel[1];
+                    }
+                    if q.block(cx, cy, (p.pos[2] + step_v[2]).floor() as i32)
+                        .is_solid()
+                    {
+                        p.vel[2] = -p.vel[2];
+                    }
+                    break;
+                }
+                p.pos = next;
+            }
+            Step::Flying
+        }
         ProjKind::Arrow
         | ProjKind::FlamingArrow
         | ProjKind::Spark
         | ProjKind::Bullet
         | ProjKind::MagicMissile
+        | ProjKind::Flamelash
         | ProjKind::WaterStream
         | ProjKind::Fireball
         | ProjKind::DemonScythe
         | ProjKind::Laser
+        | ProjKind::SpaceLaser
+        | ProjKind::FallenStarShot
         | ProjKind::EyeLaser => {
             if p.kind == ProjKind::DemonScythe {
                 let speed = p.vel.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -913,10 +1117,13 @@ pub fn step_with_target(q: &impl BlockQuery, p: &mut Projectile, target: [f32; 3
                 p.kind,
                 ProjKind::Bullet
                     | ProjKind::MagicMissile
+                    | ProjKind::Flamelash
                     | ProjKind::WaterStream
                     | ProjKind::Fireball
                     | ProjKind::DemonScythe
                     | ProjKind::Laser
+                    | ProjKind::SpaceLaser
+                    | ProjKind::FallenStarShot
                     | ProjKind::EyeLaser
             ) {
                 p.ai0 += 1;
@@ -1010,10 +1217,17 @@ pub fn hit_enemies_detailed(
             touches(p, e)
         };
         if touched {
+            let e_def = e.kind.stats().defense;
+            let eff_damage = p.damage
+                + if p.armor_penetration > 0 {
+                    e_def / 2 - (e_def - p.armor_penetration).max(0) / 2
+                } else {
+                    0
+                };
             if let Some(hit) = apply_hit_with_immunity(
                 e,
                 p.pos,
-                p.damage,
+                eff_damage,
                 p.knock_back,
                 p.crit,
                 rng,
@@ -1021,12 +1235,13 @@ pub fn hit_enemies_detailed(
             ) {
                 hits.push(ProjHit { id: e.id, hit });
                 p.pierced += 1;
-                if p.kind == ProjKind::FlamingArrow {
+                if matches!(
+                    p.kind,
+                    ProjKind::FlamingArrow | ProjKind::Flamelash | ProjKind::FlowerOfFire
+                ) {
                     e.apply_on_fire(crate::combat::ON_FIRE_TICKS);
-                } else if p.kind == ProjKind::Flamarang {
-                    // The first outward hit turns it around and bounces; the return trip
-                    // pierces. Each hit rolls a 50% On Fire chance.
-                    if rng.below(100) < 50 {
+                } else if matches!(p.kind, ProjKind::Flamarang | ProjKind::ThornChakram) {
+                    if p.kind == ProjKind::Flamarang && rng.below(100) < 50 {
                         e.apply_on_fire(crate::combat::ON_FIRE_TICKS);
                     }
                     if p.ai0 == 0 {
@@ -1630,6 +1845,7 @@ mod tests {
             ai0: 0,
             pierced: 0,
             origin: [0.0, 5.0, 0.0],
+            armor_penetration: 0,
         };
         let empty = Wall(None);
         assert_eq!(step(&empty, &mut scythe), Step::Flying);
@@ -1867,5 +2083,33 @@ mod tests {
             assert!(saw_bounce, "{item:?} should bounce off floor");
             assert!(expired, "{item:?} should expire at end of fuse");
         }
+    }
+
+    #[test]
+    fn water_bolt_bounces_off_walls() {
+        let wall = Wall(Some(3));
+        let mut vitals = crate::player::Vitals::new();
+        vitals.mana = 50;
+        let mut wb = Projectile::cast_water_bolt(
+            1,
+            0,
+            crate::item::WATER_BOLT,
+            Prefix(0),
+            [1.0, 5.0, 0.5],
+            [1.0, 0.0, 0.0],
+            &mut vitals,
+            None,
+        )
+        .expect("water bolt should cast");
+        assert_eq!(wb.kind, ProjKind::WaterBolt);
+        for _ in 0..20 {
+            let st = step(&wall, &mut wb);
+            assert_eq!(st, Step::Flying);
+            if wb.ai0 > 0 {
+                break;
+            }
+        }
+        assert!(wb.ai0 >= 1, "water bolt should bounce off wall");
+        assert!(wb.vel[0] < 0.0, "x velocity should reverse on bounce");
     }
 }

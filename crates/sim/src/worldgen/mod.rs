@@ -6,6 +6,7 @@ pub mod corruption;
 pub mod crystal;
 pub mod dressing;
 pub mod dungeon;
+pub mod jungle_shrine;
 pub mod liquid;
 pub mod mushroom;
 pub mod mushroom_biome;

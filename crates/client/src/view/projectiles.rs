@@ -197,44 +197,50 @@ fn setup(
 
 fn projectile_scale_and_axis(kind: ProjKind) -> (f32, Vec3) {
     match kind {
-        ProjKind::Fireball => (1.5, MODEL_AXIS.normalize()),
+        ProjKind::Fireball | ProjKind::FlowerOfFire => (1.5, MODEL_AXIS.normalize()),
         ProjKind::DemonScythe => (1.6, Vec3::Y),
-        ProjKind::Laser | ProjKind::EyeLaser => (1.0, Vec3::Z),
-        ProjKind::WaterStream => (1.0, Vec3::Z),
+        ProjKind::Laser | ProjKind::EyeLaser | ProjKind::SpaceLaser => (1.0, Vec3::Z),
+        ProjKind::WaterStream | ProjKind::WaterBolt => (1.0, Vec3::Z),
         ProjKind::Bullet => (0.24, MODEL_AXIS.normalize()),
         ProjKind::Flail => (0.38, MODEL_AXIS.normalize()),
         ProjKind::Yoyo => (0.34, Vec3::Z),
         ProjKind::Vilethorn => (0.34, MODEL_AXIS.normalize()),
-        ProjKind::MagicMissile => (0.32, MODEL_AXIS.normalize()),
+        ProjKind::MagicMissile | ProjKind::Flamelash => (0.32, MODEL_AXIS.normalize()),
         ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => (0.45, Vec3::Y),
         ProjKind::GrappleHook => (0.42, MODEL_AXIS.normalize()),
-        ProjKind::StarfuryStar => (1.0, Vec3::Y),
+        ProjKind::StarfuryStar | ProjKind::FallenStarShot => (1.0, Vec3::Y),
         ProjKind::Arrow
         | ProjKind::FlamingArrow
         | ProjKind::Spark
         | ProjKind::Boomerang
         | ProjKind::Flamarang
+        | ProjKind::ThornChakram
         | ProjKind::Spear => (ARROW_SCALE, MODEL_AXIS.normalize()),
     }
 }
 
 fn projectile_trail_color(kind: ProjKind) -> Color {
     match kind {
-        ProjKind::FlamingArrow | ProjKind::Flamarang | ProjKind::Spark | ProjKind::Fireball => {
-            Color::srgb(1.0, 0.55, 0.15)
-        }
+        ProjKind::FlamingArrow
+        | ProjKind::Flamarang
+        | ProjKind::Spark
+        | ProjKind::Fireball
+        | ProjKind::FlowerOfFire
+        | ProjKind::Flamelash => Color::srgb(1.0, 0.55, 0.15),
         ProjKind::DemonScythe => Color::srgb(0.68, 0.22, 0.95),
         ProjKind::Laser => Color::srgb(0.85, 0.30, 1.0),
+        ProjKind::SpaceLaser => Color::srgb(0.25, 0.98, 0.35),
         ProjKind::EyeLaser => Color::srgb(1.0, 0.20, 0.22),
         ProjKind::MagicMissile => Color::srgb(0.35, 0.85, 1.0),
-        ProjKind::WaterStream => Color::srgb(0.18, 0.72, 1.0),
+        ProjKind::WaterStream | ProjKind::WaterBolt => Color::srgb(0.18, 0.72, 1.0),
         ProjKind::Vilethorn => Color::srgb(0.58, 0.28, 0.82),
+        ProjKind::ThornChakram => Color::srgb(0.32, 0.85, 0.32),
         ProjKind::Bullet => Color::srgb(0.95, 0.86, 0.45),
         ProjKind::Flail => Color::srgb(0.55, 0.52, 0.68),
         ProjKind::Yoyo => Color::srgb(0.30, 0.62, 0.98),
         ProjKind::Bomb | ProjKind::Dynamite | ProjKind::Grenade => Color::srgb(1.0, 0.55, 0.15),
         ProjKind::GrappleHook => Color::srgb(0.70, 0.74, 0.80),
-        ProjKind::StarfuryStar => Color::srgb(1.0, 0.65, 0.92),
+        ProjKind::StarfuryStar | ProjKind::FallenStarShot => Color::srgb(1.0, 0.65, 0.92),
         ProjKind::Arrow | ProjKind::Boomerang | ProjKind::Spear => Color::srgb(0.85, 0.85, 0.88),
     }
 }
@@ -247,11 +253,13 @@ fn projectile_visual_pair(
         ProjKind::Arrow => (vis.wood.clone(), vis.mesh.clone()),
         ProjKind::FlamingArrow => (vis.fire.clone(), vis.mesh.clone()),
         ProjKind::Spark => (vis.spark.clone(), vis.spark_mesh.clone()),
-        ProjKind::Fireball => (vis.fire.clone(), vis.spark_mesh.clone()),
+        ProjKind::Fireball | ProjKind::FlowerOfFire => (vis.fire.clone(), vis.spark_mesh.clone()),
         ProjKind::DemonScythe => (vis.magic_missile.clone(), vis.flamarang_mesh.clone()),
-        ProjKind::Laser => (vis.laser.clone(), vis.laser_mesh.clone()),
+        ProjKind::Laser | ProjKind::SpaceLaser => (vis.laser.clone(), vis.laser_mesh.clone()),
         ProjKind::EyeLaser => (vis.eye_laser.clone(), vis.laser_mesh.clone()),
-        ProjKind::Boomerang => (vis.wood.clone(), vis.boomerang_mesh.clone()),
+        ProjKind::Boomerang | ProjKind::ThornChakram => {
+            (vis.wood.clone(), vis.boomerang_mesh.clone())
+        }
         ProjKind::Flamarang => (vis.fire.clone(), vis.flamarang_mesh.clone()),
         ProjKind::Spear => (vis.wood.clone(), vis.spear_mesh.clone()),
         ProjKind::Bullet => (vis.bullet.clone(), vis.bullet_mesh.clone()),
@@ -259,12 +267,17 @@ fn projectile_visual_pair(
         ProjKind::Yoyo => (vis.yoyo.clone(), vis.yoyo_mesh.clone()),
         ProjKind::Vilethorn => (vis.vilethorn.clone(), vis.vilethorn_mesh.clone()),
         ProjKind::MagicMissile => (vis.magic_missile.clone(), vis.magic_missile_mesh.clone()),
-        ProjKind::WaterStream => (vis.water_stream.clone(), vis.water_stream_mesh.clone()),
+        ProjKind::Flamelash => (vis.fire.clone(), vis.magic_missile_mesh.clone()),
+        ProjKind::WaterStream | ProjKind::WaterBolt => {
+            (vis.water_stream.clone(), vis.water_stream_mesh.clone())
+        }
         ProjKind::Bomb => (vis.explosive_mat.clone(), vis.bomb_mesh.clone()),
         ProjKind::Dynamite => (vis.explosive_mat.clone(), vis.dynamite_mesh.clone()),
         ProjKind::Grenade => (vis.explosive_mat.clone(), vis.grenade_mesh.clone()),
         ProjKind::GrappleHook => (vis.explosive_mat.clone(), vis.grapple_mesh.clone()),
-        ProjKind::StarfuryStar => (vis.star_mat.clone(), vis.star_mesh.clone()),
+        ProjKind::StarfuryStar | ProjKind::FallenStarShot => {
+            (vis.star_mat.clone(), vis.star_mesh.clone())
+        }
     }
 }
 
@@ -422,6 +435,7 @@ mod tests {
             ai0: 0,
             pierced: 0,
             origin: [1.0, 2.0, 3.0],
+            armor_penetration: 0,
         };
         app.world_mut()
             .write_message(ProjectilesMsg(vec![fireball]));
