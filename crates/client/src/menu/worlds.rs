@@ -16,8 +16,8 @@ use super::style::{
     RADIUS_PANEL, spawn_button_ext, spawn_button_sized, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
-use super::{Action, MenuFocus, Screen};
-use crate::session::{AppState, MenuScreen, SaveRoot, SelectedWorld};
+use super::{Action, MenuFlow, MenuFocus, Screen};
+use crate::session::{AppState, MenuScreen, SaveRoot, SelectedWorld, SessionMode};
 
 /// Catalogue rows currently known to the client.
 #[derive(Resource, Default, Debug)]
@@ -549,16 +549,20 @@ pub fn setup_worlds_screen(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_worlds_actions(
     mut commands: Commands,
     current_screen: Option<Res<State<MenuScreen>>>,
     actions: Option<MessageReader<Action>>,
     save_root: Option<Res<SaveRoot>>,
     selected_char: Option<Res<crate::session::SelectedCharacter>>,
+    menu_flow: Option<Res<MenuFlow>>,
+    mut session_mode: Option<ResMut<SessionMode>>,
     mut worlds_list: ResMut<WorldsList>,
     mut delete_modal: ResMut<DeleteModal>,
     mut selected_world: Option<ResMut<SelectedWorld>>,
     mut next_app_state: Option<ResMut<NextState<AppState>>>,
+    mut next_menu_screen: Option<ResMut<NextState<MenuScreen>>>,
     mut focus: ResMut<MenuFocus>,
     mut rebuild: ResMut<WorldsRebuildRequested>,
     existing_roots: Query<Entity, With<WorldsScreenRoot>>,
@@ -572,6 +576,7 @@ pub fn handle_worlds_actions(
         return;
     };
 
+    let flow = menu_flow.as_deref().copied().unwrap_or_default();
     let mut should_rebuild = false;
 
     for action in actions.read() {
@@ -591,8 +596,20 @@ pub fn handle_worlds_actions(
                             sel.size = size;
                             sel.persist = true;
                         }
-                        if let Some(ref mut next) = next_app_state {
-                            next.set(AppState::InGame);
+                        match flow {
+                            MenuFlow::Host => {
+                                if let Some(ref mut next_screen) = next_menu_screen {
+                                    next_screen.set(MenuScreen::HostSetup);
+                                }
+                            }
+                            MenuFlow::SinglePlayer | MenuFlow::Join => {
+                                if let Some(ref mut mode) = session_mode {
+                                    **mode = SessionMode::SinglePlayer;
+                                }
+                                if let Some(ref mut next) = next_app_state {
+                                    next.set(AppState::InGame);
+                                }
+                            }
                         }
                     } else {
                         worlds_list.error = Some(if worlds_list.backups.contains(name) {
@@ -618,8 +635,20 @@ pub fn handle_worlds_actions(
                                 sel.size = snap.size;
                                 sel.persist = true;
                             }
-                            if let Some(ref mut next) = next_app_state {
-                                next.set(AppState::InGame);
+                            match flow {
+                                MenuFlow::Host => {
+                                    if let Some(ref mut next_screen) = next_menu_screen {
+                                        next_screen.set(MenuScreen::HostSetup);
+                                    }
+                                }
+                                MenuFlow::SinglePlayer | MenuFlow::Join => {
+                                    if let Some(ref mut mode) = session_mode {
+                                        **mode = SessionMode::SinglePlayer;
+                                    }
+                                    if let Some(ref mut next) = next_app_state {
+                                        next.set(AppState::InGame);
+                                    }
+                                }
                             }
                         }
                         Err(e) => {

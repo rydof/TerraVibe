@@ -13,7 +13,7 @@ use super::style::{
     spawn_button_ext, spawn_button_sized, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
-use super::{Action, MenuFocus, Screen};
+use super::{Action, MenuFlow, MenuFocus, Screen};
 use crate::session::{MenuScreen, SaveRoot, SelectedCharacter};
 
 #[derive(Resource, Default, Debug)]
@@ -420,12 +420,14 @@ pub fn setup_characters(
 
 pub fn handle_character_actions(
     mut actions: MessageReader<Action>,
+    menu_flow: Option<Res<MenuFlow>>,
     mut next_screen: Option<ResMut<NextState<MenuScreen>>>,
     mut selected_char: Option<ResMut<SelectedCharacter>>,
     mut delete_modal: Option<ResMut<DeleteCharModal>>,
     mut rebuild: Option<ResMut<CharactersRebuildRequested>>,
 ) {
     let root = characters_dir();
+    let flow = menu_flow.as_deref().copied().unwrap_or_default();
     for action in actions.read() {
         match action {
             Action::PlayCharacter(name) => {
@@ -434,8 +436,22 @@ pub fn handle_character_actions(
                         sc.0 = Some(c);
                     }
                     if let Some(ref mut ns) = next_screen {
-                        ns.set(MenuScreen::Worlds);
+                        match flow {
+                            MenuFlow::SinglePlayer | MenuFlow::Host => {
+                                ns.set(MenuScreen::Worlds);
+                            }
+                            MenuFlow::Join => {
+                                ns.set(MenuScreen::JoinBrowser);
+                            }
+                        }
                     }
+                }
+            }
+            Action::Back => {
+                if flow != MenuFlow::SinglePlayer
+                    && let Some(ref mut ns) = next_screen
+                {
+                    ns.set(MenuScreen::Multiplayer);
                 }
             }
             Action::DeleteCharacter(name) => {

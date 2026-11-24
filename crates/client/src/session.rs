@@ -40,6 +40,8 @@ pub enum MenuScreen {
     CreateWorld,
     Options,
     Multiplayer,
+    HostSetup,
+    JoinBrowser,
 }
 
 /// Currently chosen character and decoded Character data.

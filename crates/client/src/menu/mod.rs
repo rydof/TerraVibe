@@ -6,6 +6,8 @@ pub mod create_character;
 pub mod creative;
 pub mod diorama;
 pub mod game;
+pub mod host_setup;
+pub mod join_browser;
 pub mod multiplayer;
 pub mod nav;
 pub mod options;
@@ -23,6 +25,15 @@ pub use sounds::{MenuAudio, MenuSounds};
 pub use style::{BUTTON_HEIGHT, BUTTON_WIDTH, spawn_button, spawn_button_ext, spawn_button_sized};
 pub use text::MenuText;
 
+/// Tracks whether the player is navigating through single-player, host, or join flows.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum MenuFlow {
+    #[default]
+    SinglePlayer,
+    Host,
+    Join,
+}
+
 /// Sub-screens accessible from the menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Screen {
@@ -32,6 +43,8 @@ pub enum Screen {
     CreateWorld,
     Options,
     Multiplayer,
+    HostSetup,
+    JoinBrowser,
 }
 
 impl Screen {
@@ -43,6 +56,8 @@ impl Screen {
             Screen::CreateWorld => MenuScreen::CreateWorld,
             Screen::Options => MenuScreen::Options,
             Screen::Multiplayer => MenuScreen::Multiplayer,
+            Screen::HostSetup => MenuScreen::HostSetup,
+            Screen::JoinBrowser => MenuScreen::JoinBrowser,
         }
     }
 }
@@ -122,6 +137,16 @@ pub enum Action {
     CancelQuit,
     DismissError,
     RetryConnection,
+    StartHostFlow,
+    StartJoinFlow,
+    HostMaxPlayersDelta(i32),
+    HostTogglePublic,
+    HostLaunch,
+    JoinByCode,
+    RefreshServers,
+    JoinRoom(usize),
+    ConfirmRoomPassword,
+    CancelRoomPassword,
 }
 
 /// A button in the menu UI with navigation rank and action.
@@ -143,27 +168,38 @@ pub struct MenuPlugin {
     pub sounds: MenuSounds,
 }
 
+fn reset_menu_flow_on_title(mut flow: ResMut<MenuFlow>) {
+    *flow = MenuFlow::SinglePlayer;
+}
+
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Action>();
-        app.init_resource::<MenuFocus>().add_plugins((
-            style::StylePlugin,
-            nav::NavPlugin,
-            text::TextPlugin,
-            sounds::SoundsPlugin {
-                sounds: self.sounds.clone(),
-            },
-            title::TitlePlugin,
-            characters::CharactersPlugin,
-            create_character::CreateCharacterPlugin,
-            multiplayer::MultiplayerPlugin,
-            worlds::WorldsPlugin,
-            create::CreatePlugin,
-            options::OptionsPlugin,
-            diorama::DioramaPlugin,
-            game::GameMenuPlugin,
-            creative::CreativePlugin,
-        ));
+        app.init_resource::<MenuFocus>()
+            .init_resource::<MenuFlow>()
+            .add_systems(OnEnter(MenuScreen::Title), reset_menu_flow_on_title)
+            .add_plugins((
+                style::StylePlugin,
+                nav::NavPlugin,
+                text::TextPlugin,
+                sounds::SoundsPlugin {
+                    sounds: self.sounds.clone(),
+                },
+                title::TitlePlugin,
+                characters::CharactersPlugin,
+                create_character::CreateCharacterPlugin,
+                multiplayer::MultiplayerPlugin,
+                host_setup::HostSetupPlugin,
+                join_browser::JoinBrowserPlugin,
+            ))
+            .add_plugins((
+                worlds::WorldsPlugin,
+                create::CreatePlugin,
+                options::OptionsPlugin,
+                diorama::DioramaPlugin,
+                game::GameMenuPlugin,
+                creative::CreativePlugin,
+            ));
     }
 }
 
@@ -230,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn multi_screen_has_only_back_enabled() {
+    fn multi_screen_has_host_join_and_back_enabled() {
         let mut app = App::new();
         app.add_plugins(bevy::state::app::StatesPlugin)
             .init_state::<AppState>()
@@ -245,17 +281,33 @@ mod tests {
 
         let mut buttons = app.world_mut().query::<&MenuButton>();
         let list: Vec<MenuButton> = buttons.iter(app.world()).cloned().collect();
-        assert!(!list.is_empty(), "multiplayer screen must spawn buttons");
+        assert_eq!(
+            list.len(),
+            3,
+            "multiplayer screen must spawn Host, Join, and Back buttons"
+        );
+
+        let host_buttons: Vec<_> = list
+            .iter()
+            .filter(|b| b.action == Action::StartHostFlow)
+            .collect();
+        assert_eq!(host_buttons.len(), 1, "exactly one Host button expected");
+        assert!(!host_buttons[0].disabled, "Host button must be enabled");
+
+        let join_buttons: Vec<_> = list
+            .iter()
+            .filter(|b| b.action == Action::StartJoinFlow)
+            .collect();
+        assert_eq!(join_buttons.len(), 1, "exactly one Join button expected");
+        assert!(!join_buttons[0].disabled, "Join button must be enabled");
 
         let back_buttons: Vec<_> = list.iter().filter(|b| b.action == Action::Back).collect();
-        assert_eq!(back_buttons.len(), 1, "exactly one back button expected");
+        assert_eq!(back_buttons.len(), 1, "exactly one Back button expected");
         assert!(!back_buttons[0].disabled, "Back button must be enabled");
 
-        let disabled_buttons: Vec<_> = list.iter().filter(|b| b.disabled).collect();
-        assert_eq!(
-            disabled_buttons.len(),
-            2,
-            "Host & Join buttons must be disabled"
+        assert!(
+            list.iter().all(|b| !b.disabled),
+            "all multiplayer buttons must be enabled"
         );
     }
 
@@ -535,6 +587,8 @@ mod tests {
                 MenuScreen::Worlds,
                 MenuScreen::CreateWorld,
                 MenuScreen::Multiplayer,
+                MenuScreen::HostSetup,
+                MenuScreen::JoinBrowser,
             ] {
                 let mut app = App::new();
                 app.add_plugins(bevy::state::app::StatesPlugin)
@@ -550,6 +604,8 @@ mod tests {
                         worlds::WorldsPlugin,
                         create::CreatePlugin,
                         multiplayer::MultiplayerPlugin,
+                        host_setup::HostSetupPlugin,
+                        join_browser::JoinBrowserPlugin,
                     ));
                 app.world_mut().spawn((
                     Window {

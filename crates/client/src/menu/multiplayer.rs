@@ -1,18 +1,18 @@
-//! Multiplayer screen with honest single-player notice.
+//! Multiplayer menu screen: Host & Play, Join Game, and Back.
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, Window};
 
-use super::Action;
 use super::style::{
     BORDER_W, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
     COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED, RADIUS_PANEL,
     spawn_button_ext, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
+use super::{Action, MenuFlow};
 use crate::session::MenuScreen;
 
-pub const MULTIPLAYER_COPY: &str = "Networked multiplayer is not implemented yet.\nTerraVibe’s single-player worlds already run\non an authoritative server internally.";
+pub const MULTIPLAYER_COPY: &str = "Host a co-op world with a join code or LAN,\nor join a friend's game from the server browser.\nNo port forwarding required.";
 
 pub fn setup_multiplayer(
     mut commands: Commands,
@@ -110,10 +110,10 @@ pub fn setup_multiplayer(
     let b0 = spawn_button_ext(
         &mut commands,
         "Host & Play",
-        Action::Play("Host".into()),
+        Action::StartHostFlow,
         0,
         (btn_x, panel_top + 218.0),
-        true,
+        false,
     );
     commands
         .entity(b0)
@@ -121,11 +121,11 @@ pub fn setup_multiplayer(
 
     let b1 = spawn_button_ext(
         &mut commands,
-        "Join by address",
-        Action::Play("Join".into()),
+        "Join Game",
+        Action::StartJoinFlow,
         1,
         (btn_x, panel_top + 276.0),
-        true,
+        false,
     );
     commands
         .entity(b1)
@@ -144,11 +144,48 @@ pub fn setup_multiplayer(
         .insert((DespawnOnExit(MenuScreen::Multiplayer), GlobalZIndex(1)));
 }
 
+pub fn handle_multiplayer_actions(
+    actions: Option<MessageReader<Action>>,
+    mut flow: Option<ResMut<MenuFlow>>,
+    mut next_screen: Option<ResMut<NextState<MenuScreen>>>,
+) {
+    let Some(mut actions) = actions else {
+        return;
+    };
+    for action in actions.read() {
+        match action {
+            Action::StartHostFlow => {
+                if let Some(ref mut f) = flow {
+                    **f = MenuFlow::Host;
+                }
+                if let Some(ref mut ns) = next_screen {
+                    ns.set(MenuScreen::Characters);
+                }
+            }
+            Action::StartJoinFlow => {
+                if let Some(ref mut f) = flow {
+                    **f = MenuFlow::Join;
+                }
+                if let Some(ref mut ns) = next_screen {
+                    ns.set(MenuScreen::Characters);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 pub struct MultiplayerPlugin;
 
 impl Plugin for MultiplayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(MenuScreen::Multiplayer), setup_multiplayer);
+        app.init_resource::<MenuFlow>()
+            .add_message::<Action>()
+            .add_systems(OnEnter(MenuScreen::Multiplayer), setup_multiplayer)
+            .add_systems(
+                Update,
+                handle_multiplayer_actions.run_if(in_state(MenuScreen::Multiplayer)),
+            );
     }
 }
 
