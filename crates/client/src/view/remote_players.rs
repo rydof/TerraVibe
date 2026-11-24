@@ -264,6 +264,8 @@ fn sync_remote_equipment(
 
 fn drive_remote_players(
     time: Res<Time<Real>>,
+    mut pool: Option<ResMut<super::particles::ParticlePool>>,
+    settings: Option<Res<crate::settings::Settings>>,
     mut remotes: Query<(
         &mut RemotePlayerState,
         &mut Transform,
@@ -302,6 +304,22 @@ fn drive_remote_players(
         *vis = if state.dead {
             Visibility::Hidden
         } else {
+            if let (Some(ref mut p), Some(fx)) = (
+                pool.as_deref_mut(),
+                super::avatar::active_armor_set_fx(state.effective_armor()),
+            ) {
+                let s = settings.as_deref().copied().unwrap_or_default();
+                if !s.reduced_motion && ((time.elapsed_secs() * 10.0) as u32).is_multiple_of(3) {
+                    super::avatar::spawn_armor_set_particles(
+                        p,
+                        fx,
+                        state.current_pos,
+                        state.vel,
+                        time.elapsed_secs(),
+                        &s,
+                    );
+                }
+            }
             Visibility::Inherited
         };
     }
@@ -461,7 +479,10 @@ mod tests {
             let mut q = world.query::<&RigPart>();
             q.iter(world).filter(|p| p.root == root).count()
         };
-        assert!(part_count >= 6, "expected player rig parts, got {part_count}");
+        assert!(
+            part_count >= 6,
+            "expected player rig parts, got {part_count}"
+        );
         let tag_count = {
             let world = app.world_mut();
             let mut q = world.query::<&RemotePlayerNametag>();
@@ -555,7 +576,10 @@ mod tests {
                 "vanity armor must override worn armor"
             );
             assert_eq!(state.held_item, Some(GOLD_BROADSWORD));
-            assert!(!state.armor_dirty, "armor should have been applied to rig parts");
+            assert!(
+                !state.armor_dirty,
+                "armor should have been applied to rig parts"
+            );
         }
 
         // 4. Despawn

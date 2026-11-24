@@ -1076,6 +1076,88 @@ pub(crate) fn active_armor_set_fx(armor: [Option<ItemId>; 3]) -> Option<ArmorSet
     }
 }
 
+pub(crate) fn spawn_armor_set_particles(
+    pool: &mut super::particles::ParticlePool,
+    set_fx: ArmorSetFx,
+    pos: Vec3,
+    vel: Vec3,
+    t: f32,
+    settings: &crate::settings::Settings,
+) {
+    let horiz = Vec2::new(vel.x, vel.z).length();
+    let jitter = Vec3::new(
+        (t * 13.0).sin() * 0.35,
+        0.4 + (t * 17.0).cos() * 0.4,
+        (t * 19.0).sin() * 0.35,
+    );
+    match set_fx {
+        ArmorSetFx::Molten => pool.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 1.4, 0.0),
+            Color::srgb(1.0, 0.50, 0.08),
+            0.10,
+            0.45,
+            -1.2,
+            settings,
+        ),
+        ArmorSetFx::Shadow if horiz > WALK_SPEED => pool.spawn(
+            pos + jitter,
+            Vec3::new(-vel.x * 0.2, 0.6, -vel.z * 0.2),
+            Color::srgb(0.55, 0.20, 0.90),
+            0.11,
+            0.40,
+            -0.5,
+            settings,
+        ),
+        ArmorSetFx::Meteor => pool.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.9, 0.0),
+            Color::srgb(0.25, 0.85, 1.0),
+            0.08,
+            0.35,
+            -0.6,
+            settings,
+        ),
+        ArmorSetFx::Jungle => pool.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.5, 0.0),
+            Color::srgb(0.35, 0.90, 0.40),
+            0.07,
+            0.45,
+            -0.2,
+            settings,
+        ),
+        ArmorSetFx::Bee => pool.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.7, 0.0),
+            Color::srgb(1.0, 0.85, 0.20),
+            0.07,
+            0.35,
+            -0.3,
+            settings,
+        ),
+        ArmorSetFx::Necro => pool.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.6, 0.0),
+            Color::srgb(0.85, 0.85, 0.78),
+            0.07,
+            0.35,
+            -0.2,
+            settings,
+        ),
+        ArmorSetFx::Ninja if horiz > WALK_SPEED => pool.spawn(
+            pos + jitter,
+            Vec3::new(-vel.x * 0.2, 0.4, -vel.z * 0.2),
+            Color::srgb(0.22, 0.25, 0.42),
+            0.10,
+            0.30,
+            -0.4,
+            settings,
+        ),
+        _ => {}
+    }
+}
+
 fn drive_armor_effects(
     time: Res<Time<Real>>,
     av: Res<Avatar>,
