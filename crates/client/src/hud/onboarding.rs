@@ -106,6 +106,40 @@ pub fn format_onboarding_controls(bindings: &crate::input_map::InputBindings) ->
     ]
 }
 
+fn is_boss_active(
+    boss_state: Option<&crate::hud::boss_bar::BossState>,
+    wof_state: Option<&crate::hud::boss_bar::WofBossState>,
+    enemies: &Query<(&ClientEnemy, Option<&EnemyInterp>, Option<&Transform>)>,
+) -> bool {
+    if boss_state.is_some_and(|b| b.0.is_some()) || wof_state.is_some_and(|w| w.0.is_some()) {
+        return true;
+    }
+    enemies.iter().any(|(e, _, _)| {
+        e.hp > 0
+            && (e.kind == EnemyKind::SkeletronHead
+                || terravibe_sim::enemy::is_eater_of_worlds(e.kind))
+    })
+}
+
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct OnboardingVisibilityCtx<'w, 's> {
+    inv_open: Option<Res<'w, crate::hud::inventory::InventoryOpen>>,
+    town_panel: Option<Res<'w, crate::hud::town::TownPanel>>,
+    chest_panel: Option<Res<'w, crate::hud::chest::ChestPanel>>,
+    boss_state: Option<Res<'w, crate::hud::boss_bar::BossState>>,
+    wof_state: Option<Res<'w, crate::hud::boss_bar::WofBossState>>,
+    player: Option<Res<'w, LocalPlayer>>,
+    enemies: Query<
+        'w,
+        's,
+        (
+            &'static ClientEnemy,
+            Option<&'static EnemyInterp>,
+            Option<&'static Transform>,
+        ),
+    >,
+}
+
 /// Syncs the first-spawn onboarding card: visible until dismissed, then persisted.
 #[allow(clippy::too_many_arguments)]
 pub fn sync_onboarding_ui(
@@ -118,9 +152,7 @@ pub fn sync_onboarding_ui(
     mut local_facts: Option<ResMut<crate::net::LocalCharacterFacts>>,
     mut selected_char: Option<ResMut<crate::session::SelectedCharacter>>,
     net: Option<Res<crate::net::Net>>,
-    inv_open: Option<Res<crate::hud::inventory::InventoryOpen>>,
-    town_panel: Option<Res<crate::hud::town::TownPanel>>,
-    chest_panel: Option<Res<crate::hud::chest::ChestPanel>>,
+    ctx: OnboardingVisibilityCtx,
     mut card_q: Query<(Entity, &mut Visibility), With<OnboardingCardUi>>,
     btn_q: Query<(&ComputedNode, &GlobalTransform), With<OnboardingDismissButton>>,
     dismiss_req_q: Query<Entity, With<DismissRequested>>,
@@ -145,9 +177,9 @@ pub fn sync_onboarding_ui(
         return;
     }
 
-    let panel_open = inv_open.as_ref().is_some_and(|i| i.0)
-        || town_panel.as_ref().is_some_and(|t| t.is_open())
-        || chest_panel.as_ref().is_some_and(|c| c.open.is_some());
+    let panel_open = ctx.inv_open.as_ref().is_some_and(|i| i.0)
+        || ctx.town_panel.as_ref().is_some_and(|t| t.is_open())
+        || ctx.chest_panel.as_ref().is_some_and(|c| c.open.is_some());
 
     // Check for dismissal input (only when the card is visible, not hidden behind panels)
     let key_dismiss = !panel_open
@@ -211,7 +243,28 @@ pub fn sync_onboarding_ui(
         return;
     }
 
-    let want_vis = if panel_open {
+    let in_combat = is_boss_active(
+        ctx.boss_state.as_deref(),
+        ctx.wof_state.as_deref(),
+        &ctx.enemies,
+    ) || ctx.player.as_ref().is_some_and(|p| {
+        let ppos = Vec3::from(p.0.body.pos);
+        ctx.enemies.iter().any(|(e, interp, xform)| {
+            if e.hp <= 0 || e.kind.is_friendly() {
+                return false;
+            }
+            let epos = if let Some(i) = interp {
+                i.pos()
+            } else if let Some(x) = xform {
+                x.translation
+            } else {
+                return false;
+            };
+            epos.distance_squared(ppos) <= 16.0 * 16.0
+        })
+    });
+
+    let want_vis = if panel_open || in_combat {
         Visibility::Hidden
     } else {
         Visibility::Inherited
@@ -311,6 +364,7 @@ pub fn sync_onboarding_ui(
 pub struct PromptThrottle {
     last_pos: Option<[f32; 3]>,
     last_held: Option<terravibe_sim::item::ItemId>,
+    last_boss_active: bool,
     timer: f32,
 }
 
@@ -323,11 +377,26 @@ pub fn update_contextual_prompts(
     cam: Option<Single<&Transform, With<FlyCamera>>>,
     inv: Option<Res<crate::net::LocalInventory>>,
     held: Option<Res<crate::net::LocalHeld>>,
+    boss_state: Option<Res<crate::hud::boss_bar::BossState>>,
+    wof_state: Option<Res<crate::hud::boss_bar::WofBossState>>,
     time: Option<Res<Time>>,
     npcs: Query<(&ClientEnemy, Option<&EnemyInterp>, Option<&Transform>)>,
     mut prompt_ui: Query<(&mut Visibility, &mut HudText), With<ContextPromptUi>>,
     mut throttle: Local<PromptThrottle>,
 ) {
+    let boss_active = is_boss_active(boss_state.as_deref(), wof_state.as_deref(), &npcs);
+    if boss_active {
+        throttle.last_boss_active = true;
+        state.current_prompt = None;
+        for (mut vis, mut text) in &mut prompt_ui {
+            *vis = Visibility::Hidden;
+            if !text.text.is_empty() {
+                text.text.clear();
+            }
+        }
+        return;
+    }
+
     let mut prompt: Option<&'static str> = None;
 
     if let Some(player) = player.as_ref() {
@@ -344,10 +413,12 @@ pub fn update_contextual_prompts(
             dx * dx + dy * dy + dz * dz >= 1.0
         });
         let held_changed = cur_held != throttle.last_held;
+        let boss_cleared = throttle.last_boss_active;
         throttle.timer += time.as_ref().map_or(0.25, |t| t.delta_secs());
-        if !moved && !held_changed && throttle.timer < 0.25 {
+        if !moved && !held_changed && !boss_cleared && throttle.timer < 0.25 {
             return;
         }
+        throttle.last_boss_active = false;
         throttle.last_pos = Some(feet);
         throttle.last_held = cur_held;
         throttle.timer = 0.0;
@@ -837,5 +908,103 @@ mod tests {
             ui_text,
             Some("Use at night to summon the Eye of Cthulhu".into())
         );
+    }
+
+    #[test]
+    fn context_prompt_hidden_when_boss_active() {
+        let mut app = test_hud_app();
+        app.init_resource::<crate::hud::boss_bar::BossState>();
+        set_player_pos(&mut app, [100.0, 50.0, 100.0]);
+        spawn_guide_npc(&mut app, [101.0, 50.0, 100.0]);
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<ContextualPromptsState>()
+                .current_prompt,
+            Some("[Right Click] Talk to Guide")
+        );
+
+        app.world_mut()
+            .resource_mut::<crate::hud::boss_bar::BossState>()
+            .set(crate::hud::boss_bar::BossInfo {
+                pos: [0.0; 3],
+                vel: [0.0; 3],
+                life: 2800,
+                life_max: 2800,
+                phase: 1,
+                state: 0,
+                spin: 0.0,
+            });
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<ContextualPromptsState>()
+                .current_prompt,
+            None
+        );
+        let vis = *app
+            .world_mut()
+            .query_filtered::<&Visibility, With<ContextPromptUi>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(vis, Visibility::Hidden);
+    }
+
+    #[test]
+    fn onboarding_card_auto_hides_during_combat_or_boss() {
+        let mut app = test_hud_app();
+        app.init_resource::<crate::hud::boss_bar::BossState>();
+        app.insert_resource(CharacterFacts {
+            onboarding_dismissed: false,
+            ..default()
+        });
+        set_player_pos(&mut app, [50.0, 50.0, 50.0]);
+        app.update();
+
+        let card_vis = |app: &mut App| {
+            *app.world_mut()
+                .query_filtered::<&Visibility, With<OnboardingCardUi>>()
+                .single(app.world())
+                .unwrap()
+        };
+        assert_eq!(card_vis(&mut app), Visibility::Inherited);
+
+        // Nearby hostile enemy hides onboarding card
+        let enemy = app
+            .world_mut()
+            .spawn((
+                ClientEnemy::new(EnemyId(99), EnemyKind::DemonEye),
+                Transform::from_xyz(55.0, 50.0, 50.0),
+                EnemyInterp {
+                    from: Vec3::new(55.0, 50.0, 50.0),
+                    to: Vec3::new(55.0, 50.0, 50.0),
+                    t: 1.0,
+                },
+            ))
+            .id();
+        app.update();
+        assert_eq!(card_vis(&mut app), Visibility::Hidden);
+
+        // Despawn enemy -> card returns
+        app.world_mut().entity_mut(enemy).despawn();
+        app.update();
+        assert_eq!(card_vis(&mut app), Visibility::Inherited);
+
+        // Active boss hides onboarding card
+        app.world_mut()
+            .resource_mut::<crate::hud::boss_bar::BossState>()
+            .set(crate::hud::boss_bar::BossInfo {
+                pos: [0.0; 3],
+                vel: [0.0; 3],
+                life: 2800,
+                life_max: 2800,
+                phase: 1,
+                state: 0,
+                spin: 0.0,
+            });
+        app.update();
+        assert_eq!(card_vis(&mut app), Visibility::Hidden);
     }
 }

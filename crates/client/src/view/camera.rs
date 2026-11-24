@@ -95,6 +95,76 @@ const PULL_IN_GAP: f32 = 0.3;
 /// Scroll lines to blocks of zoom.
 const ZOOM_STEP: f32 = 0.5;
 
+/// Minimum clearance distance (blocks) between the third-person camera lens and hostile enemies.
+const ENEMY_CLIP_RADIUS: f32 = 1.4;
+
+/// Computes how far forward (blocks) to nudge the third-person camera so close-range
+/// flying enemies do not clip inside the camera lens.
+pub fn enemy_clip_pull_forward(
+    cam_pos: Vec3,
+    forward: Vec3,
+    max_pull: f32,
+    enemies: impl IntoIterator<Item = Vec3>,
+) -> f32 {
+    if max_pull <= 0.0 {
+        return 0.0;
+    }
+    let mut best = 0.0f32;
+    for epos in enemies {
+        let diff = epos - cam_pos;
+        let dist = diff.length();
+        if dist < ENEMY_CLIP_RADIUS {
+            let along = diff.dot(forward).max(0.0);
+            let need = (along + (ENEMY_CLIP_RADIUS - dist)).min(max_pull);
+            best = best.max(need);
+        }
+    }
+    best
+}
+
+fn avoid_close_enemy_clip(
+    mode: Res<ControlMode>,
+    cmode: Res<CameraMode>,
+    smoothed_dist: Option<Res<SmoothedOrbitDist>>,
+    mut cam_q: Query<&mut Transform, With<FlyCamera>>,
+    enemies: Query<
+        (
+            &crate::view::enemies::ClientEnemy,
+            Option<&crate::view::enemies::EnemyInterp>,
+            Option<&Transform>,
+        ),
+        Without<FlyCamera>,
+    >,
+) {
+    if *mode != ControlMode::Player || *cmode != CameraMode::Third {
+        return;
+    }
+    let max_pull = (smoothed_dist.as_ref().map_or(DEFAULT_DIST, |d| d.0) - 0.8).max(0.0);
+    if max_pull <= 0.0 {
+        return;
+    }
+    let Ok(mut tf) = cam_q.single_mut() else {
+        return;
+    };
+    let forward = *tf.forward();
+    let pull = enemy_clip_pull_forward(
+        tf.translation,
+        forward,
+        max_pull,
+        enemies.iter().filter_map(|(e, interp, xform)| {
+            if e.hp <= 0 || e.kind.is_friendly() {
+                return None;
+            }
+            interp
+                .map(|i| i.pos() + Vec3::Y * 0.5)
+                .or_else(|| xform.map(|x| x.translation + Vec3::Y * 0.5))
+        }),
+    );
+    if pull > 0.0 {
+        tf.translation += forward * pull;
+    }
+}
+
 /// Exponentially damps third-person orbit distance: fast pull-in on wall obstruction,
 /// smooth ease-out when clearing.
 pub fn damp_pull_in(current: f32, target: f32, dt: f32) -> f32 {
@@ -346,6 +416,13 @@ impl Plugin for FlyCameraPlugin {
                     update_combat_camera_fx,
                     sync_camera_atmosphere_fx,
                 )
+                    .run_if(|b: Res<super::BenchMode>| !b.0)
+                    .run_if(in_state(AppState::InGame)),
+            )
+            .add_systems(
+                PostUpdate,
+                avoid_close_enemy_clip
+                    .before(bevy::transform::TransformSystems::Propagate)
                     .run_if(|b: Res<super::BenchMode>| !b.0)
                     .run_if(in_state(AppState::InGame)),
             )
@@ -1257,5 +1334,19 @@ mod tests {
     fn third_person_pivot_centered_above_head() {
         assert_eq!(SHOULDER_RIGHT, 0.0);
         assert_eq!(SHOULDER_UP, 0.15);
+    }
+
+    #[test]
+    fn enemy_clip_pull_forward_clears_close_flyer() {
+        let cam = Vec3::new(0.0, 10.0, 5.0);
+        let fwd = Vec3::NEG_Z;
+        // Far enemy -> no pull
+        assert_eq!(
+            enemy_clip_pull_forward(cam, fwd, 4.0, [Vec3::new(0.0, 10.0, 0.0)]),
+            0.0
+        );
+        // Flyer right at camera lens -> pulls forward
+        let pull = enemy_clip_pull_forward(cam, fwd, 4.0, [Vec3::new(0.0, 10.0, 4.7)]);
+        assert!(pull > 1.0 && pull <= 4.0, "expected pull > 1.0, got {pull}");
     }
 }
