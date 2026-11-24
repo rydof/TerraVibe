@@ -48,7 +48,7 @@ use crate::net::{ClientVanity, LocalArmor, LocalInventory};
 use crate::session::AppState;
 
 /// Root scale: the player art is 2 * VOXELS_PER_UNIT voxels (2 blocks) tall, the sim's body 1.8.
-const AVATAR_SCALE: f32 = 0.9;
+pub(crate) const AVATAR_SCALE: f32 = 0.9;
 
 #[derive(Resource, Default, Clone)]
 pub struct LocalAppearance(pub Option<Appearance>);
@@ -59,9 +59,9 @@ const HAND_POS: Vec3 = Vec3::new(0.0, -11.0 / VOXELS_PER_UNIT, 0.0);
 /// First-person size of a held model, blocks across its longest side.
 const FP_SIZE: f32 = 0.55;
 /// Horizontal speed (blocks per tick) above which the walk anim plays.
-const WALK_SPEED: f32 = 0.02;
+pub(crate) const WALK_SPEED: f32 = 0.02;
 /// Heading turn rate, 1/s.
-const TURN_RATE: f32 = 12.0;
+pub(crate) const TURN_RATE: f32 = 12.0;
 /// Armor models are padded by one voxel on every side.
 const ARMOR_PAD: f32 = 1.0;
 /// Demo heading offset from facing the camera, radians.
@@ -617,20 +617,29 @@ pub(crate) struct Avatar {
 #[derive(Resource)]
 struct DemoArmor;
 
-fn spawn_avatar(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    cam: Single<&FlyCamera>,
-    app: Option<Res<LocalAppearance>>,
-) {
+/// Spawned 3D player rig state shared by local and remote avatars.
+pub(crate) struct SpawnedPlayerRig {
+    pub(crate) root: Entity,
+    pub(crate) rig: Rig,
+    pub(crate) material: Handle<StandardMaterial>,
+    pub(crate) cache: HashMap<String, Handle<Mesh>>,
+}
+
+/// Spawns a 3D player rig entity tree scaled to [`AVATAR_SCALE`] and pre-warms
+/// any custom [`Appearance`] part meshes in the returned cache.
+pub(crate) fn spawn_player_rig_parts(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    appearance: Option<&Appearance>,
+) -> SpawnedPlayerRig {
     let dir = art_dir().join("models/player");
     let rig = rig::load(&dir);
     let mut rig_cache = rig_view::MeshCache::default();
     let (root, material) = rig_view::spawn_rig_with(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
+        commands,
+        meshes,
+        materials,
         &rig,
         &dir,
         &mut rig_cache,
@@ -639,26 +648,59 @@ fn spawn_avatar(
         Transform::from_scale(Vec3::splat(AVATAR_SCALE)),
         DespawnOnExit(AppState::InGame),
     ));
-    let mut av = Avatar {
+    let mut cache = HashMap::new();
+    if let Some(app) = appearance {
+        for p in &rig.parts {
+            let _ = mesh_for_rig_part(&rig, &mut cache, meshes, &p.name, None, Some(app));
+        }
+    }
+    SpawnedPlayerRig {
         root,
         rig,
+        material,
+        cache,
+    }
+}
+
+/// Resolves effective displayed armor slots, preferring vanity over worn armor.
+pub(crate) fn resolve_effective_armor(
+    armor: [Option<ItemId>; 3],
+    vanity_armor: [Option<ItemId>; 3],
+) -> [Option<ItemId>; 3] {
+    [
+        vanity_armor[0].or(armor[0]),
+        vanity_armor[1].or(armor[1]),
+        vanity_armor[2].or(armor[2]),
+    ]
+}
+
+fn spawn_avatar(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    cam: Single<&FlyCamera>,
+    app: Option<Res<LocalAppearance>>,
+) {
+    let spawned = spawn_player_rig_parts(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        app.as_ref().and_then(|a| a.0.as_ref()),
+    );
+    let av = Avatar {
+        root: spawned.root,
+        rig: spawned.rig,
         heading: cam.yaw + std::f32::consts::PI,
         armor: [None; 3],
         applied_appearance: None,
         held: None,
-        cache: HashMap::new(),
-        material,
+        cache: spawned.cache,
+        material: spawned.material,
     };
-    if let Some(appearance) = app.as_ref().and_then(|a| a.0.as_ref()) {
-        let part_names: Vec<String> = av.rig.parts.iter().map(|p| p.name.clone()).collect();
-        for name in part_names {
-            let _ = mesh_for(&mut av, &mut meshes, &name, None, Some(appearance));
-        }
-    }
     commands.insert_resource(av);
 }
 
-fn wrap_pi(a: f32) -> f32 {
+pub(crate) fn wrap_pi(a: f32) -> f32 {
     (a + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
 }
 
@@ -718,46 +760,80 @@ fn drive_avatar(
     };
 }
 
-fn mesh_for(
-    av: &mut Avatar,
+pub(crate) fn mesh_for_rig_part(
+    rig: &Rig,
+    cache: &mut HashMap<String, Handle<Mesh>>,
     meshes: &mut Assets<Mesh>,
     part: &str,
     armor_file: Option<&str>,
     app: Option<&Appearance>,
 ) -> Option<Handle<Mesh>> {
-    let p = av.rig.parts.iter().find(|p| p.name == part)?;
+    let p = rig.parts.iter().find(|p| p.name == part)?;
     if let Some(f) = armor_file {
         let key = format!("armor/{f}");
-        if let Some(h) = av.cache.get(&key) {
+        if let Some(h) = cache.get(&key) {
             return Some(h.clone());
         }
         let path = art_dir().join("models/armor").join(f);
         let h = load_mesh(meshes, &path, p.pivot.map(|v| v + ARMOR_PAD))?;
-        av.cache.insert(key, h.clone());
+        cache.insert(key, h.clone());
         return Some(h);
     }
     if let Some(app) = app {
         let key = format!("char/{}/{part}", app.hair.to_u8());
-        if let Some(h) = av.cache.get(&key) {
+        if let Some(h) = cache.get(&key) {
             return Some(h.clone());
         }
         let dir = art_dir().join("models/player");
         if let Some(data) = super::player_art::build_player_part_mesh(part, app, &dir) {
             if let Some(m) = crate::view::to_bevy_mesh(data) {
                 let h = meshes.add(m);
-                av.cache.insert(key, h.clone());
+                cache.insert(key, h.clone());
                 return Some(h);
             }
         }
     }
     let key = format!("player/{}", p.file);
-    if let Some(h) = av.cache.get(&key) {
+    if let Some(h) = cache.get(&key) {
         return Some(h.clone());
     }
     let path = art_dir().join("models/player").join(&p.file);
     let h = load_mesh(meshes, &path, p.pivot)?;
-    av.cache.insert(key, h.clone());
+    cache.insert(key, h.clone());
     Some(h)
+}
+
+/// Applies effective armor slots and base [`Appearance`] meshes to every
+/// [`RigPart`] belonging to `root`. Returns `true` if at least one part was
+/// found for `root`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_armor_to_rig(
+    commands: &mut Commands,
+    root: Entity,
+    rig: &Rig,
+    cache: &mut HashMap<String, Handle<Mesh>>,
+    meshes: &mut Assets<Mesh>,
+    effective_armor: [Option<ItemId>; 3],
+    app: Option<&Appearance>,
+    parts: &Query<(Entity, &RigPart)>,
+) -> bool {
+    let worn: Vec<(&str, &str)> = effective_armor
+        .iter()
+        .flatten()
+        .flat_map(|id| armor_parts(*id).iter().copied())
+        .collect();
+    let mut found_any = false;
+    for (e, part) in parts {
+        if part.root != root {
+            continue;
+        }
+        found_any = true;
+        let file = worn.iter().find(|(p, _)| *p == part.name).map(|(_, f)| *f);
+        if let Some(h) = mesh_for_rig_part(rig, cache, meshes, &part.name, file, app) {
+            set_part_model(commands, e, h);
+        }
+    }
+    found_any
 }
 
 /// Swaps part models when the worn armor changes.
@@ -776,7 +852,7 @@ fn sync_armor(
     } else {
         let arm = armor.map_or([None; 3], |a| a.0);
         let van = vanity.map_or([None; 3], |v| v.armor);
-        [van[0].or(arm[0]), van[1].or(arm[1]), van[2].or(arm[2])]
+        resolve_effective_armor(arm, van)
     };
     let cur_app = app.as_ref().and_then(|a| a.0.clone());
     if want == av.armor && cur_app == av.applied_appearance {
@@ -784,26 +860,22 @@ fn sync_armor(
     }
     av.armor = want;
     av.applied_appearance = cur_app.clone();
-    let worn: Vec<(&str, &str)> = want
-        .iter()
-        .flatten()
-        .flat_map(|id| armor_parts(*id).iter().copied())
-        .collect();
-    for (e, part) in &parts {
-        if part.root != av.root {
-            continue;
-        }
-        let file = worn.iter().find(|(p, _)| *p == part.name).map(|(_, f)| *f);
-        if let Some(h) = mesh_for(
-            &mut av,
-            &mut meshes,
-            &part.name,
-            file,
-            app.as_ref().and_then(|a| a.0.as_ref()),
-        ) {
-            set_part_model(&mut commands, e, h);
-        }
-    }
+    let root = av.root;
+    let Avatar {
+        ref rig,
+        ref mut cache,
+        ..
+    } = *av;
+    apply_armor_to_rig(
+        &mut commands,
+        root,
+        rig,
+        cache,
+        &mut meshes,
+        want,
+        cur_app.as_ref(),
+        &parts,
+    );
 }
 
 /// Third-person hand-mount rotation for held items in `arm_r` local space.
@@ -819,37 +891,37 @@ pub(crate) fn tp_held_rotation(upright: bool) -> Quat {
     }
 }
 
-/// Keeps the held item model attached to `arm_r`'s hand.
-fn sync_held(
-    mut commands: Commands,
-    mut av: ResMut<Avatar>,
-    inv: Option<Res<LocalInventory>>,
-    demo: Option<Res<DemoArmor>>,
-    models: Option<Res<ItemModels>>,
-    parts: Query<(Entity, &RigPart)>,
-) {
-    let want = if demo.is_some() {
-        Some(GOLD_BROADSWORD)
-    } else {
-        inv.and_then(|i| i.0.selected_stack().map(|s| s.id))
-    };
-    if want == av.held.map(|(id, _)| id) {
-        return;
+/// Attaches, swaps, or despawns the held item mesh on `root`'s `arm_r` part.
+/// Returns `true` when synced (or cleared / no model exists), or `false` if
+/// `ItemModels` or `arm_r` is not yet ready and the caller should retry.
+pub(crate) fn update_held_item_on_rig(
+    commands: &mut Commands,
+    root: Entity,
+    want: Option<ItemId>,
+    current: &mut Option<(ItemId, Entity)>,
+    models: Option<&ItemModels>,
+    parts: &Query<(Entity, &RigPart)>,
+) -> bool {
+    if want == current.map(|(id, _)| id) {
+        return true;
     }
-    if let Some((_, e)) = av.held.take() {
+    if let Some((_, e)) = current.take() {
         commands.entity(e).despawn();
     }
-    let (Some(id), Some(models)) = (want, models) else {
-        return;
+    let Some(id) = want else {
+        return true;
+    };
+    let Some(models) = models else {
+        return false;
     };
     let Some(m) = models.map.get(&id.0) else {
-        return;
+        return true;
     };
     let Some((arm, _)) = parts
         .iter()
-        .find(|(_, p)| p.root == av.root && p.name == "arm_r")
+        .find(|(_, p)| p.root == root && p.name == "arm_r")
     else {
-        return;
+        return false;
     };
     let rot = tp_held_rotation(m.upright);
     let e = commands
@@ -866,7 +938,33 @@ fn sync_held(
         ))
         .id();
     commands.entity(arm).add_child(e);
-    av.held = Some((id, e));
+    *current = Some((id, e));
+    true
+}
+
+/// Keeps the held item model attached to `arm_r`'s hand.
+fn sync_held(
+    mut commands: Commands,
+    mut av: ResMut<Avatar>,
+    inv: Option<Res<LocalInventory>>,
+    demo: Option<Res<DemoArmor>>,
+    models: Option<Res<ItemModels>>,
+    parts: Query<(Entity, &RigPart)>,
+) {
+    let want = if demo.is_some() {
+        Some(GOLD_BROADSWORD)
+    } else {
+        inv.and_then(|i| i.0.selected_stack().map(|s| s.id))
+    };
+    let root = av.root;
+    update_held_item_on_rig(
+        &mut commands,
+        root,
+        want,
+        &mut av.held,
+        models.as_deref(),
+        &parts,
+    );
 }
 
 /// Applies per-class third-person `arm_r` rotation over the base rig pose
