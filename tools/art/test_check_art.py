@@ -12,6 +12,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "models"))
 
 import _player_base as base  # noqa: E402
+import _rigtools  # noqa: E402
 import check_art  # noqa: E402
 import palette  # noqa: E402
 import png  # noqa: E402
@@ -462,6 +463,45 @@ class ItemsAndFurniture(unittest.TestCase):
                 all(len(zs) <= 2 for zs in edge_cols.values()),
                 f"{name}: cutting edge at x >= 16 must taper to 1-2 voxels thick",
             )
+
+
+class RigTools(Base):
+    def test_write_rig_5_tuple_and_check_rig(self):
+        slab = blob()
+        slab.save(os.path.join(self.dir, "wall_slab.vox"))
+        _rigtools.write_rig(
+            self.dir,
+            [("panel_a", "wall_slab.vox", (0, 0, 0), (0, 0, 0), None)],
+            {"idle": (1.0, True, [_rigtools.key(0.0, "panel_a")])},
+        )
+        ron_path = os.path.join(self.dir, "rig.ron")
+        with open(ron_path) as f:
+            text = f.read()
+        self.assertIn('name: "panel_a", file: "wall_slab.vox"', text)
+        self.assertEqual(check_art.check_rig(ron_path), [])
+
+    def test_write_rig_4_tuple_emits_name_vox(self):
+        body = blob()
+        body.save(os.path.join(self.dir, "body.vox"))
+        _rigtools.write_rig(
+            self.dir,
+            [("body", (0, 0, 0), (0, 0, 0), None)],
+            {"idle": (1.0, True, [_rigtools.key(0.0, "body")])},
+        )
+        with open(os.path.join(self.dir, "rig.ron")) as f:
+            text = f.read()
+        self.assertIn('name: "body", file: "body.vox"', text)
+
+    def test_mirror_x_flips_x_coordinates(self):
+        m = Model(4, 3, 2)
+        m.set(0, 1, 1, palette.DIRT)
+        m.set(1, 2, 0, palette.STONE)
+        mirrored = _rigtools.mirror_x(m)
+        self.assertEqual(mirrored.size, (4, 3, 2))
+        self.assertEqual(mirrored.get(3, 1, 1), palette.DIRT)
+        self.assertEqual(mirrored.get(2, 2, 0), palette.STONE)
+        self.assertIsNone(mirrored.get(0, 1, 1))
+        self.assertIsNone(mirrored.get(1, 2, 0))
 
 
 if __name__ == "__main__":
