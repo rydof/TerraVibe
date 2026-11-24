@@ -34,8 +34,9 @@ use terravibe_sim::liquid::{LiquidSim, LiquidWorld, MAX_CELL_UPDATES_PER_TICK};
 
 pub const LIQUID_DELTA_MAX: usize = 512;
 use terravibe_sim::net::{
-    ClientMsg, CreativeCmd, DamageKind, Disconnected, HitTargetKind, InProcClient, PlayerId,
-    ServerConn, ServerMsg, in_process_pair,
+    ClientMsg, CreativeCmd, DamageKind, Disconnected, HitTargetKind, InProcClient,
+    PROTOCOL_VERSION, PlayerId, RejectReason, ServerConn, ServerMsg, VIEW_RADIUS_BLOCKS,
+    in_process_pair,
 };
 use terravibe_sim::player::consts::{HALF_WIDTH, HEIGHT};
 use terravibe_sim::player::{DeathCause, Player, PlayerEvent, PlayerInput, tick_player_bounded};
@@ -464,6 +465,15 @@ pub struct Conn {
     pub spawn_tick: u32,
     /// Last eye origin, unit look vector, and whether primary use was held (Magic Missile steering).
     pub last_aim: Option<([f32; 3], [f32; 3], bool)>,
+    /// True for the local in-process host connection (exempt from password & max_players).
+    pub is_host: bool,
+    /// Last received look yaw/pitch from `ClientMsg::Input`.
+    pub yaw: f32,
+    pub pitch: f32,
+    /// Last `(armor, vanity_armor, held)` broadcast to other players in `RemotePlayerEquipment`.
+    pub sent_remote_equip: Option<([Option<ItemId>; 3], [Option<ItemId>; 3], Option<ItemId>)>,
+    /// Other players already spawned for this client via `RemotePlayerSpawn`.
+    pub known_remotes: HashSet<PlayerId>,
 }
 
 /// Enemies are streamed to a player within this many blocks and removed
@@ -494,6 +504,10 @@ pub struct ServerCfg {
     pub size: WorldSize,
     /// Persist the world here (`None` = session only, as in tests).
     pub save: Option<SaveCfg>,
+    /// Maximum concurrent players allowed (host + guests). Default: 8.
+    pub max_players: u8,
+    /// Optional server password required from non-host clients on `Hello`.
+    pub password: Option<String>,
 }
 
 impl Default for ServerCfg {
@@ -510,6 +524,8 @@ impl Default for ServerCfg {
             clock_start: 13_500,
             size: WorldSize::Small,
             save: None,
+            max_players: 8,
+            password: None,
         }
     }
 }
@@ -890,6 +906,14 @@ impl Server {
     }
 
     pub fn connect(&mut self, io: Box<dyn ServerConn>) {
+        self.connect_inner(io, false);
+    }
+
+    pub fn connect_host(&mut self, io: Box<dyn ServerConn>) -> PlayerId {
+        self.connect_inner(io, true)
+    }
+
+    fn connect_inner(&mut self, io: Box<dyn ServerConn>, is_host: bool) -> PlayerId {
         let id = self.next_id;
         self.next_id += 1;
         self.conns.push(Conn {
@@ -929,7 +953,17 @@ impl Server {
             shop_npc: None,
             spawn_tick: 0,
             last_aim: None,
+            is_host,
+            yaw: 0.0,
+            pitch: 0.0,
+            sent_remote_equip: None,
+            known_remotes: HashSet::new(),
         });
+        id
+    }
+
+    pub fn has_conn(&self, id: PlayerId) -> bool {
+        self.conns.iter().any(|c| c.id == id && !c.dead)
     }
 
     pub fn connection_count(&self) -> usize {
@@ -1109,12 +1143,54 @@ impl Server {
         let mut respawn_reqs = Vec::new();
         let mut qa_kill_reqs = Vec::new();
         let mut creative_reqs: Vec<(usize, ClientMsg)> = Vec::new();
+        let mut newly_joined: Vec<usize> = Vec::new();
+        let mut chat_msgs: Vec<(usize, String)> = Vec::new();
+        let mut active_players = self
+            .conns
+            .iter()
+            .filter(|c| c.player.is_some() && !c.dead)
+            .count();
         for (cid, c) in self.conns.iter_mut().enumerate() {
             loop {
                 match c.io.try_recv() {
                     Ok(Some(ClientMsg::Hello {
-                        name, character, ..
+                        name,
+                        character,
+                        protocol_version,
+                        password,
+                        ..
                     })) => {
+                        if c.player.is_some() {
+                            continue;
+                        }
+                        if !c.is_host {
+                            if protocol_version != PROTOCOL_VERSION {
+                                let _ = c.io.send(ServerMsg::Rejected {
+                                    reason: RejectReason::ProtocolMismatch,
+                                });
+                                c.dead = true;
+                                break;
+                            }
+                            if active_players >= self.cfg.max_players as usize {
+                                let _ = c.io.send(ServerMsg::Rejected {
+                                    reason: RejectReason::ServerFull,
+                                });
+                                c.dead = true;
+                                break;
+                            }
+                            if let Some(expected) = self.cfg.password.as_deref() {
+                                let ok = password
+                                    .as_deref()
+                                    .is_some_and(|p| ct_eq(p.as_bytes(), expected.as_bytes()));
+                                if !ok {
+                                    let _ = c.io.send(ServerMsg::Rejected {
+                                        reason: RejectReason::BadPassword,
+                                    });
+                                    c.dead = true;
+                                    break;
+                                }
+                            }
+                        }
                         let char_opt =
                             character.and_then(|b| terravibe_sim::Character::from_bytes(&b).ok());
                         let mut pl = Player::new(spawn);
@@ -1186,6 +1262,10 @@ impl Server {
                                 intensity: self.weather.intensity,
                             })
                             .is_err();
+                        if !c.dead {
+                            active_players += 1;
+                            newly_joined.push(cid);
+                        }
                     }
                     Ok(Some(ClientMsg::Input { seq, input })) => c.inputs.push((seq, input)),
                     Ok(Some(ClientMsg::Spectate { pos })) => c.interest.centre = Some(pos),
@@ -1242,7 +1322,9 @@ impl Server {
                     )) => {
                         creative_reqs.push((cid, m));
                     }
-                    Ok(Some(ClientMsg::Chat { .. })) => {}
+                    Ok(Some(ClientMsg::Chat { text })) => {
+                        chat_msgs.push((cid, text));
+                    }
                     Ok(Some(ClientMsg::Bye)) | Err(Disconnected) => {
                         c.dead = true;
                         break;
@@ -1250,6 +1332,29 @@ impl Server {
                     Ok(None) => break,
                 }
             }
+        }
+
+        if !newly_joined.is_empty() {
+            for joined_idx in newly_joined {
+                self.announce_player_joined(joined_idx);
+            }
+            self.broadcast_player_list();
+        }
+
+        for (cid, text) in chat_msgs {
+            let Some(c) = self.conns.get(cid).filter(|c| !c.dead && c.player.is_some()) else {
+                continue;
+            };
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let clamped: String = trimmed.chars().take(200).collect();
+            let sender = Some(c.name.clone());
+            self.broadcast_to_joined(ServerMsg::Chat {
+                sender,
+                text: clamped,
+            });
         }
 
         for cid in respawn_reqs {
@@ -1328,6 +1433,8 @@ impl Server {
                     input,
                     Some(&self.bounds),
                 ));
+                c.yaw = input.yaw;
+                c.pitch = input.pitch;
                 if p.dead {
                     c.last_aim = None;
                     continue;
@@ -2305,6 +2412,7 @@ impl Server {
         self.tick_enemies();
         self.tick_drops();
         self.sync_player_state();
+        self.broadcast_remote_players(tick);
         self.reap();
 
         self.stream_chunks();
@@ -2693,34 +2801,265 @@ impl Server {
         }
     }
 
+    fn broadcast_to_joined(&mut self, msg: ServerMsg) {
+        for c in &mut self.conns {
+            if !c.dead && c.player.is_some() {
+                c.dead |= c.io.send(msg.clone()).is_err();
+            }
+        }
+    }
+
+    fn broadcast_player_list(&mut self) {
+        let players: Vec<(PlayerId, String)> = self
+            .conns
+            .iter()
+            .filter(|c| !c.dead && c.player.is_some())
+            .map(|c| (c.id, c.name.clone()))
+            .collect();
+        self.broadcast_to_joined(ServerMsg::PlayerList { players });
+    }
+
+    fn announce_player_joined(&mut self, joined_idx: usize) {
+        let Some(c) = self
+            .conns
+            .get(joined_idx)
+            .filter(|c| !c.dead && c.player.is_some())
+        else {
+            return;
+        };
+        let p = c.player.as_ref().unwrap();
+        let j_id = c.id;
+        let j_name = c.name.clone();
+        let j_app = c.character.as_ref().map(|ch| ch.appearance).unwrap_or_default();
+        let j_pos = p.body.pos;
+        let j_yaw = c.yaw;
+        let j_armor = p.armor;
+        let j_vanity = p.vanity_armor;
+        let j_held = c.inv.selected_stack().map(|s| s.id);
+
+        self.conns[joined_idx].sent_remote_equip = Some((j_armor, j_vanity, j_held));
+
+        let mut existing: Vec<(
+            PlayerId,
+            String,
+            terravibe_sim::character::Appearance,
+            [f32; 3],
+            f32,
+            [Option<ItemId>; 3],
+            [Option<ItemId>; 3],
+            Option<ItemId>,
+        )> = Vec::new();
+
+        for (i, other) in self.conns.iter_mut().enumerate() {
+            if i == joined_idx || other.dead {
+                continue;
+            }
+            let Some(op) = other.player.as_ref() else {
+                continue;
+            };
+            existing.push((
+                other.id,
+                other.name.clone(),
+                other
+                    .character
+                    .as_ref()
+                    .map(|ch| ch.appearance)
+                    .unwrap_or_default(),
+                op.body.pos,
+                other.yaw,
+                op.armor,
+                op.vanity_armor,
+                other.inv.selected_stack().map(|s| s.id),
+            ));
+            if other.known_remotes.insert(j_id) {
+                other.dead |= other
+                    .io
+                    .send(ServerMsg::RemotePlayerSpawn {
+                        id: j_id,
+                        name: j_name.clone(),
+                        appearance: j_app,
+                        pos: j_pos,
+                        yaw: j_yaw,
+                    })
+                    .is_err();
+                other.dead |= other
+                    .io
+                    .send(ServerMsg::RemotePlayerEquipment {
+                        id: j_id,
+                        armor: j_armor,
+                        vanity_armor: j_vanity,
+                        held: j_held,
+                    })
+                    .is_err();
+            }
+        }
+
+        let joined = &mut self.conns[joined_idx];
+        for (oid, oname, oapp, opos, oyaw, oarmor, ovanity, oheld) in existing {
+            if joined.known_remotes.insert(oid) {
+                joined.dead |= joined
+                    .io
+                    .send(ServerMsg::RemotePlayerSpawn {
+                        id: oid,
+                        name: oname,
+                        appearance: oapp,
+                        pos: opos,
+                        yaw: oyaw,
+                    })
+                    .is_err();
+                joined.dead |= joined
+                    .io
+                    .send(ServerMsg::RemotePlayerEquipment {
+                        id: oid,
+                        armor: oarmor,
+                        vanity_armor: ovanity,
+                        held: oheld,
+                    })
+                    .is_err();
+            }
+        }
+    }
+
+    fn broadcast_remote_players(&mut self, tick: u32) {
+        // Broadcast equipment changes to all other joined players.
+        let mut equip_updates: Vec<(
+            PlayerId,
+            [Option<ItemId>; 3],
+            [Option<ItemId>; 3],
+            Option<ItemId>,
+        )> = Vec::new();
+        for c in &mut self.conns {
+            if c.dead {
+                continue;
+            }
+            let Some(p) = c.player.as_ref() else {
+                continue;
+            };
+            let equip = (p.armor, p.vanity_armor, c.inv.selected_stack().map(|s| s.id));
+            if c.sent_remote_equip != Some(equip) {
+                c.sent_remote_equip = Some(equip);
+                equip_updates.push((c.id, equip.0, equip.1, equip.2));
+            }
+        }
+        for (src_id, armor, vanity_armor, held) in equip_updates {
+            for dst in &mut self.conns {
+                if !dst.dead && dst.player.is_some() && dst.id != src_id {
+                    dst.dead |= dst
+                        .io
+                        .send(ServerMsg::RemotePlayerEquipment {
+                            id: src_id,
+                            armor,
+                            vanity_armor,
+                            held,
+                        })
+                        .is_err();
+                }
+            }
+        }
+
+        // 20 Hz (every 3 ticks) RemotePlayerState scoped to VIEW_RADIUS_BLOCKS.
+        if tick % 3 == 0 {
+            let states: Vec<(PlayerId, [f32; 3], [f32; 3], f32, f32, bool, bool)> = self
+                .conns
+                .iter()
+                .filter(|c| !c.dead)
+                .filter_map(|c| {
+                    let p = c.player.as_ref()?;
+                    Some((
+                        c.id,
+                        p.body.pos,
+                        p.body.vel,
+                        c.yaw,
+                        c.pitch,
+                        c.use_state.anim > 0,
+                        p.dead,
+                    ))
+                })
+                .collect();
+            let max_dist2 = VIEW_RADIUS_BLOCKS * VIEW_RADIUS_BLOCKS;
+            for (src_id, pos, vel, yaw, pitch, swinging, dead) in states {
+                for dst in &mut self.conns {
+                    if dst.dead || dst.id == src_id {
+                        continue;
+                    }
+                    let Some(dst_p) = dst.player.as_ref() else {
+                        continue;
+                    };
+                    let dx = dst_p.body.pos[0] - pos[0];
+                    let dz = dst_p.body.pos[2] - pos[2];
+                    if dx * dx + dz * dz <= max_dist2 {
+                        dst.dead |= dst
+                            .io
+                            .send(ServerMsg::RemotePlayerState {
+                                id: src_id,
+                                pos,
+                                vel,
+                                yaw,
+                                pitch,
+                                swinging,
+                                dead,
+                            })
+                            .is_err();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Gracefully shuts down a hosted session: flushes `CharacterState` to all remaining
+    /// clients, broadcasts `RejectReason::HostClosing` to guests, and snapshots players.
+    pub fn shutdown_host(&mut self) {
+        self.return_all_held(false);
+        for c in &mut self.conns {
+            flush_character_state(c);
+            if !c.is_host {
+                let _ = c.io.send(ServerMsg::Rejected {
+                    reason: RejectReason::HostClosing,
+                });
+            }
+            if let Some(ps) = player_save(c) {
+                self.saved_players.insert(c.name.clone(), ps);
+            }
+        }
+        self.conns.clear();
+    }
+
     /// Drops dead connections, persisting their players.
     fn reap(&mut self) {
         self.return_all_held(true);
         let mut gone = Vec::new();
+        let mut left_players: Vec<(PlayerId, String)> = Vec::new();
         for c in self.conns.iter_mut().filter(|c| c.dead) {
-            if let (Some(char_data), Some(pl)) = (&mut c.character, &c.player) {
-                char_data.inventory = c.inv.clone();
-                char_data.armor = pl.armor;
-                char_data.accessories = pl.accessories;
-                char_data.accessory_prefixes = pl.accessory_prefixes;
-                char_data.vanity_armor = pl.vanity_armor;
-                char_data.vanity_accessories = pl.vanity_accessories;
-                char_data.vanity_accessory_prefixes = pl.vanity_accessory_prefixes;
-                char_data.life_max = pl.vitals.life_max;
-                char_data.life = pl.vitals.life;
-                char_data.mana_max = pl.vitals.mana_max;
-                char_data.mana = pl.vitals.mana;
-                char_data.potion_delay = pl.vitals.potion_delay_ticks as i32;
-                char_data.obsidian_skin_ticks = pl.vitals.obsidian_skin_ticks;
-                char_data.facts = c.character_facts;
-                let bytes = char_data.to_bytes();
-                let _ = c.io.send(ServerMsg::CharacterState(bytes));
+            flush_character_state(c);
+            if c.player.is_some() {
+                left_players.push((c.id, c.name.clone()));
             }
             if let Some(ps) = player_save(c) {
                 gone.push((c.name.clone(), ps));
             }
         }
         self.conns.retain(|c| !c.dead);
+        if !left_players.is_empty() {
+            for (left_id, left_name) in left_players {
+                for c in &mut self.conns {
+                    if !c.dead && c.player.is_some() {
+                        c.known_remotes.remove(&left_id);
+                        c.dead |= c
+                            .io
+                            .send(ServerMsg::RemotePlayerDespawn { id: left_id })
+                            .is_err();
+                        c.dead |= c
+                            .io
+                            .send(ServerMsg::Chat {
+                                sender: None,
+                                text: format!("{left_name} left the game."),
+                            })
+                            .is_err();
+                    }
+                }
+            }
+            self.broadcast_player_list();
+        }
         for (name, ps) in gone {
             if let Some(a) = &self.saver {
                 // One small file; written off the tick thread.
@@ -4578,12 +4917,25 @@ impl Server {
                 }
             }
         }
-        if let Some(&target) = players.first() {
-            let has_eow = self
+        if !players.is_empty() {
+            let nearest_to = |pos: [f32; 3]| -> [f32; 3] {
+                *players
+                    .iter()
+                    .min_by(|a, b| dist2(**a, pos).total_cmp(&dist2(**b, pos)))
+                    .unwrap()
+            };
+            let eow_head = self
                 .enemies
                 .iter()
-                .any(|e| terravibe_sim::enemy::is_eater_of_worlds(e.kind));
-            if has_eow {
+                .find(|e| e.kind == EnemyKind::EaterOfWorldsHead)
+                .or_else(|| {
+                    self.enemies
+                        .iter()
+                        .find(|e| terravibe_sim::enemy::is_eater_of_worlds(e.kind))
+                })
+                .map(|e| e.pos);
+            if let Some(head_pos) = eow_head {
+                let target = nearest_to(head_pos);
                 let any_corrupt = players
                     .iter()
                     .any(|p| is_pos_in_corruption(&self.world, self.seed, self.cfg.size, *p));
@@ -4604,8 +4956,31 @@ impl Server {
             } else {
                 self.eow_out_of_biome_ticks = 0;
             }
-            terravibe_sim::enemy::tick_bone_serpent(&mut self.enemies, target);
-            terravibe_sim::enemy::tick_skeletron_with_day(&mut self.enemies, target, is_day);
+            if let Some(bs_pos) = self
+                .enemies
+                .iter()
+                .find(|e| e.kind == EnemyKind::BoneSerpentHead)
+                .or_else(|| {
+                    self.enemies
+                        .iter()
+                        .find(|e| terravibe_sim::enemy::is_bone_serpent(e.kind))
+                })
+                .map(|e| e.pos)
+            {
+                terravibe_sim::enemy::tick_bone_serpent(&mut self.enemies, nearest_to(bs_pos));
+            }
+            if let Some(sk_pos) = self
+                .enemies
+                .iter()
+                .find(|e| e.kind == EnemyKind::SkeletronHead)
+                .map(|e| e.pos)
+            {
+                terravibe_sim::enemy::tick_skeletron_with_day(
+                    &mut self.enemies,
+                    nearest_to(sk_pos),
+                    is_day,
+                );
+            }
         } else {
             let had_skeletron = self
                 .enemies
@@ -5825,6 +6200,38 @@ fn player_save(c: &Conn) -> Option<PlayerSave> {
     })
 }
 
+fn flush_character_state(c: &mut Conn) {
+    if let (Some(char_data), Some(pl)) = (&mut c.character, &c.player) {
+        char_data.inventory = c.inv.clone();
+        char_data.armor = pl.armor;
+        char_data.accessories = pl.accessories;
+        char_data.accessory_prefixes = pl.accessory_prefixes;
+        char_data.vanity_armor = pl.vanity_armor;
+        char_data.vanity_accessories = pl.vanity_accessories;
+        char_data.vanity_accessory_prefixes = pl.vanity_accessory_prefixes;
+        char_data.life_max = pl.vitals.life_max;
+        char_data.life = pl.vitals.life;
+        char_data.mana_max = pl.vitals.mana_max;
+        char_data.mana = pl.vitals.mana;
+        char_data.potion_delay = pl.vitals.potion_delay_ticks as i32;
+        char_data.obsidian_skin_ticks = pl.vitals.obsidian_skin_ticks;
+        char_data.facts = c.character_facts;
+        let bytes = char_data.to_bytes();
+        let _ = c.io.send(ServerMsg::CharacterState(bytes));
+    }
+}
+
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut diff = a.len() ^ b.len();
+    let len = a.len().max(b.len());
+    for i in 0..len {
+        let x = a.get(i).copied().unwrap_or(0);
+        let y = b.get(i).copied().unwrap_or(0);
+        diff |= (x ^ y) as usize;
+    }
+    diff == 0
+}
+
 fn dist2(a: [f32; 3], b: [f32; 3]) -> f32 {
     (0..3).map(|i| (a[i] - b[i]).powi(2)).sum()
 }
@@ -5843,6 +6250,52 @@ pub fn spawn_local_cfg(seed: u32, cfg: ServerCfg) -> (InProcClient, std::thread:
         let mut next = Instant::now();
         while server.connection_count() > 0 {
             server.tick();
+            next += step;
+            let now = Instant::now();
+            if next > now {
+                std::thread::sleep(next - now);
+            } else if now - next > step * 10 {
+                next = now; // fell far behind; don't spiral
+            }
+        }
+        if let Err(e) = server.save_now() {
+            eprintln!("terravibe: final save failed: {e}");
+        }
+    });
+    (client, handle)
+}
+
+/// Runs a multi-player `Server` at 60 Hz on its own thread with a local host client
+/// (trusted/exempt from password & `max_players`) and accepts remote connections from `incoming_conns`.
+/// When the host disconnects or `shutdown` is set, broadcasts `RejectReason::HostClosing`,
+/// flushes `CharacterState` to remaining guests, saves the world, and exits cleanly.
+pub fn spawn_host_cfg(
+    seed: u32,
+    cfg: ServerCfg,
+    incoming_conns: std::sync::mpsc::Receiver<Box<dyn ServerConn>>,
+    shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> (InProcClient, std::thread::JoinHandle<()>) {
+    let (client, conn) = in_process_pair();
+    let handle = std::thread::spawn(move || {
+        let mut server = Server::with_cfg(seed, cfg);
+        let host_id = server.connect_host(Box::new(conn));
+        let step = Duration::from_secs_f64(1.0 / 60.0);
+        let mut next = Instant::now();
+        loop {
+            while let Ok(incoming) = incoming_conns.try_recv() {
+                server.connect(incoming);
+            }
+            if shutdown.load(std::sync::atomic::Ordering::Relaxed) {
+                server.shutdown_host();
+                break;
+            }
+            server.tick();
+            if !server.has_conn(host_id)
+                || shutdown.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                server.shutdown_host();
+                break;
+            }
             next += step;
             let now = Instant::now();
             if next > now {
@@ -6809,6 +7262,7 @@ mod tests {
                 clock_start: terravibe_sim::time::DAY_TICKS,
                 size: WorldSize::Small,
                 save: None,
+                ..ServerCfg::default()
             },
         );
         s.connect(Box::new(conn));
@@ -6842,6 +7296,7 @@ mod tests {
                 clock_start: terravibe_sim::time::DAY_TICKS,
                 size: WorldSize::Small,
                 save: None,
+                ..ServerCfg::default()
             },
         );
         s.connect(Box::new(conn));
@@ -15443,5 +15898,521 @@ mod tests {
         assert_eq!(s.conns[0].guide_slot, None);
         assert_eq!(s.conns[0].inv.count_of(IRON_BAR), 3);
         assert!(got.iter().any(|m| matches!(m, ServerMsg::GuideSlot(None))));
+    }
+
+    #[test]
+    fn hello_rejects_bad_password_full_server_and_wrong_version() {
+        use terravibe_sim::net::{PROTOCOL_VERSION, RejectReason};
+
+        let cfg = ServerCfg {
+            natural_spawns: false,
+            max_players: 2,
+            password: Some("s3cr3t".into()),
+            ..ServerCfg::default()
+        };
+        let mut s = Server::with_cfg(1, cfg);
+
+        // Host connects (exempt from password & max_players).
+        let (host, host_conn) = in_process_pair();
+        s.connect_host(Box::new(host_conn));
+        host.send(ClientMsg::Hello {
+            seed: 1,
+            name: Some("Host".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: None,
+        })
+        .unwrap();
+        s.tick();
+        let mut host_msgs = Vec::new();
+        drain(&host, &mut host_msgs);
+        assert!(
+            host_msgs
+                .iter()
+                .any(|m| matches!(m, ServerMsg::Welcome { .. })),
+            "host must be welcomed even without password"
+        );
+        host_msgs.clear();
+
+        // Wrong protocol version -> Rejected(ProtocolMismatch), no ghost, no RemotePlayerSpawn.
+        let (bad_ver, bad_ver_conn) = in_process_pair();
+        s.connect(Box::new(bad_ver_conn));
+        bad_ver
+            .send(ClientMsg::Hello {
+                seed: 1,
+                name: Some("BadVer".into()),
+                character: None,
+                protocol_version: PROTOCOL_VERSION + 1,
+                password: Some("s3cr3t".into()),
+            })
+            .unwrap();
+        s.tick();
+        let mut bad_ver_msgs = Vec::new();
+        drain(&bad_ver, &mut bad_ver_msgs);
+        assert!(bad_ver_msgs.iter().any(|m| matches!(
+            m,
+            ServerMsg::Rejected {
+                reason: RejectReason::ProtocolMismatch
+            }
+        )));
+        assert_eq!(s.connection_count(), 1);
+
+        // Wrong password -> Rejected(BadPassword), no ghost, no RemotePlayerSpawn.
+        let (bad_pw, bad_pw_conn) = in_process_pair();
+        s.connect(Box::new(bad_pw_conn));
+        bad_pw
+            .send(ClientMsg::Hello {
+                seed: 1,
+                name: Some("BadPw".into()),
+                character: None,
+                protocol_version: PROTOCOL_VERSION,
+                password: Some("wrong".into()),
+            })
+            .unwrap();
+        s.tick();
+        let mut bad_pw_msgs = Vec::new();
+        drain(&bad_pw, &mut bad_pw_msgs);
+        assert!(bad_pw_msgs.iter().any(|m| matches!(
+            m,
+            ServerMsg::Rejected {
+                reason: RejectReason::BadPassword
+            }
+        )));
+        assert_eq!(s.connection_count(), 1);
+
+        drain(&host, &mut host_msgs);
+        assert!(
+            !host_msgs
+                .iter()
+                .any(|m| matches!(m, ServerMsg::RemotePlayerSpawn { .. })),
+            "rejected clients must not broadcast RemotePlayerSpawn"
+        );
+
+        // Valid guest fills the second slot (max_players = 2).
+        let (g1, g1_conn) = in_process_pair();
+        s.connect(Box::new(g1_conn));
+        g1.send(ClientMsg::Hello {
+            seed: 1,
+            name: Some("Guest1".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: Some("s3cr3t".into()),
+        })
+        .unwrap();
+        s.tick();
+        let mut g1_msgs = Vec::new();
+        drain(&g1, &mut g1_msgs);
+        assert!(
+            g1_msgs
+                .iter()
+                .any(|m| matches!(m, ServerMsg::Welcome { .. }))
+        );
+        assert_eq!(s.connection_count(), 2);
+        // Drain host's messages from g1 joining before testing g2 rejection.
+        host_msgs.clear();
+        drain(&host, &mut host_msgs);
+        assert!(
+            host_msgs
+                .iter()
+                .any(|m| matches!(m, ServerMsg::RemotePlayerSpawn { name, .. } if name == "Guest1")),
+            "host must receive RemotePlayerSpawn for accepted Guest1"
+        );
+
+        // Third player -> Rejected(ServerFull), no ghost, no RemotePlayerSpawn.
+        host_msgs.clear();
+        let (g2, g2_conn) = in_process_pair();
+        s.connect(Box::new(g2_conn));
+        g2.send(ClientMsg::Hello {
+            seed: 1,
+            name: Some("Guest2".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: Some("s3cr3t".into()),
+        })
+        .unwrap();
+        s.tick();
+        let mut g2_msgs = Vec::new();
+        drain(&g2, &mut g2_msgs);
+        assert!(g2_msgs.iter().any(|m| matches!(
+            m,
+            ServerMsg::Rejected {
+                reason: RejectReason::ServerFull
+            }
+        )));
+        assert_eq!(s.connection_count(), 2);
+        drain(&host, &mut host_msgs);
+        assert!(
+            !host_msgs
+                .iter()
+                .any(|m| matches!(m, ServerMsg::RemotePlayerSpawn { .. })),
+            "full-server rejection must not broadcast RemotePlayerSpawn"
+        );
+    }
+
+    #[test]
+    fn host_disconnect_broadcasts_host_closing_and_saves() {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::mpsc;
+        use terravibe_sim::Character;
+        use terravibe_sim::net::{PROTOCOL_VERSION, RejectReason};
+
+        let tmp = std::env::temp_dir().join(format!(
+            "terravibe_mp_host_close_{}_{}",
+            std::process::id(),
+            Instant::now().elapsed().as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let save_cfg = SaveCfg {
+            root: tmp.clone(),
+            world: "mp_world".into(),
+        };
+        let cfg = ServerCfg {
+            natural_spawns: false,
+            save: Some(save_cfg),
+            ..ServerCfg::default()
+        };
+
+        let (tx, rx) = mpsc::channel::<Box<dyn ServerConn>>();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let (host, handle) = spawn_host_cfg(7, cfg, rx, Arc::clone(&shutdown));
+
+        // Host joins.
+        host.send(ClientMsg::Hello {
+            seed: 7,
+            name: Some("Host".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: None,
+        })
+        .unwrap();
+        let mut host_got = Vec::new();
+        let t0 = Instant::now();
+        while t0.elapsed() < Duration::from_secs(10) {
+            while let Ok(Some(m)) = host.try_recv() {
+                host_got.push(m);
+            }
+            if host_got
+                .iter()
+                .any(|m| matches!(m, ServerMsg::Welcome { .. }))
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            host_got
+                .iter()
+                .any(|m| matches!(m, ServerMsg::Welcome { .. }))
+        );
+
+        // Guest connects via incoming_conns with a Character.
+        let (guest, guest_conn) = in_process_pair();
+        tx.send(Box::new(guest_conn)).unwrap();
+        let ch = Character::new("GuestHero", terravibe_sim::character::Appearance::default());
+        guest
+            .send(ClientMsg::Hello {
+                seed: 7,
+                name: Some("GuestHero".into()),
+                character: Some(ch.to_bytes()),
+                protocol_version: PROTOCOL_VERSION,
+                password: None,
+            })
+            .unwrap();
+
+        let mut guest_got = Vec::new();
+        let t1 = Instant::now();
+        while t1.elapsed() < Duration::from_secs(10) {
+            while let Ok(Some(m)) = guest.try_recv() {
+                guest_got.push(m);
+            }
+            if guest_got
+                .iter()
+                .any(|m| matches!(m, ServerMsg::Welcome { .. }))
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            guest_got
+                .iter()
+                .any(|m| matches!(m, ServerMsg::Welcome { .. }))
+        );
+        guest_got.clear();
+
+        // Host disconnects with Bye -> server broadcasts HostClosing, flushes CharacterState, saves, and exits.
+        host.send(ClientMsg::Bye).unwrap();
+        handle.join().expect("server thread must exit cleanly");
+
+        while let Ok(Some(m)) = guest.try_recv() {
+            guest_got.push(m);
+        }
+        let char_idx = guest_got
+            .iter()
+            .position(|m| matches!(m, ServerMsg::CharacterState(_)));
+        let close_idx = guest_got.iter().position(|m| {
+            matches!(
+                m,
+                ServerMsg::Rejected {
+                    reason: RejectReason::HostClosing
+                }
+            )
+        });
+        assert!(
+            char_idx.is_some(),
+            "guest must receive flushed CharacterState on host close"
+        );
+        assert!(
+            close_idx.is_some(),
+            "guest must receive Rejected(HostClosing) on host close"
+        );
+        assert!(
+            char_idx.unwrap() < close_idx.unwrap(),
+            "CharacterState should be flushed before HostClosing"
+        );
+
+        // Verify world was saved to disk.
+        let dir = SaveDir::open(&tmp, "mp_world").expect("save dir should open");
+        let loaded = dir.load_world().expect("world should load");
+        assert!(loaded.is_some(), "world snapshot must be saved on exit");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn two_players_see_remote_spawn_state_equipment_and_chat() {
+        use terravibe_sim::item::{COPPER_HELMET, WOODEN_SWORD};
+        use terravibe_sim::net::PROTOCOL_VERSION;
+
+        let mut s = Server::with_cfg(
+            1,
+            ServerCfg {
+                natural_spawns: false,
+                ..ServerCfg::default()
+            },
+        );
+        let (p1, c1) = in_process_pair();
+        let (p2, c2) = in_process_pair();
+        s.connect(Box::new(c1));
+        s.connect(Box::new(c2));
+
+        p1.send(ClientMsg::Hello {
+            seed: 1,
+            name: Some("Alice".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: None,
+        })
+        .unwrap();
+        s.tick();
+        let mut m1 = Vec::new();
+        drain(&p1, &mut m1);
+        let p1_id = m1
+            .iter()
+            .find_map(|m| match m {
+                ServerMsg::Welcome { id, .. } => Some(*id),
+                _ => None,
+            })
+            .expect("p1 Welcome");
+        m1.clear();
+
+        p2.send(ClientMsg::Hello {
+            seed: 1,
+            name: Some("Bob".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: None,
+        })
+        .unwrap();
+        s.tick();
+        let mut m2 = Vec::new();
+        drain(&p1, &mut m1);
+        drain(&p2, &mut m2);
+        let p2_id = m2
+            .iter()
+            .find_map(|m| match m {
+                ServerMsg::Welcome { id, .. } => Some(*id),
+                _ => None,
+            })
+            .expect("p2 Welcome");
+
+        // Both directions receive RemotePlayerSpawn and PlayerList.
+        assert!(m1.iter().any(|m| matches!(
+            m,
+            ServerMsg::RemotePlayerSpawn { id, name, .. } if *id == p2_id && name == "Bob"
+        )));
+        assert!(m2.iter().any(|m| matches!(
+            m,
+            ServerMsg::RemotePlayerSpawn { id, name, .. } if *id == p1_id && name == "Alice"
+        )));
+        assert!(m1.iter().any(|m| matches!(
+            m,
+            ServerMsg::PlayerList { players } if players.len() == 2
+        )));
+        assert!(m2.iter().any(|m| matches!(
+            m,
+            ServerMsg::PlayerList { players } if players.len() == 2
+        )));
+
+        // Equipment change broadcasts RemotePlayerEquipment.
+        m1.clear();
+        m2.clear();
+        s.conns[0].inv.slots[0] = Some(ItemStack {
+            id: WOODEN_SWORD,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        s.conns[0].inv.selected = 0;
+        s.conns[0].player.as_mut().unwrap().armor[0] = Some(COPPER_HELMET);
+        s.tick();
+        drain(&p2, &mut m2);
+        assert!(m2.iter().any(|m| matches!(
+            m,
+            ServerMsg::RemotePlayerEquipment { id, armor, held, .. }
+                if *id == p1_id && armor[0] == Some(COPPER_HELMET) && *held == Some(WOODEN_SWORD)
+        )));
+
+        // 20 Hz RemotePlayerState (within VIEW_RADIUS_BLOCKS).
+        m2.clear();
+        for seq in 1..=3 {
+            let mut input = PlayerInput::default();
+            input.yaw = 1.25;
+            input.pitch = -0.2;
+            p1.send(ClientMsg::Input { seq, input }).unwrap();
+            s.tick();
+        }
+        drain(&p2, &mut m2);
+        assert!(m2.iter().any(|m| matches!(
+            m,
+            ServerMsg::RemotePlayerState { id, yaw, pitch, .. }
+                if *id == p1_id && (*yaw - 1.25).abs() < 1e-4 && (*pitch - (-0.2)).abs() < 1e-4
+        )));
+
+        // Chat: empty/whitespace ignored, >200 chars truncated to 200 chars.
+        m1.clear();
+        m2.clear();
+        p1.send(ClientMsg::Chat {
+            text: "   \t  ".into(),
+        })
+        .unwrap();
+        let long_msg = format!("  {}  ", "a".repeat(250));
+        p1.send(ClientMsg::Chat { text: long_msg }).unwrap();
+        s.tick();
+        drain(&p1, &mut m1);
+        drain(&p2, &mut m2);
+        let chats2: Vec<_> = m2
+            .iter()
+            .filter_map(|m| match m {
+                ServerMsg::Chat { sender, text } => Some((sender.clone(), text.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(chats2.len(), 1, "empty chat must be ignored");
+        assert_eq!(chats2[0].0.as_deref(), Some("Alice"));
+        assert_eq!(chats2[0].1.chars().count(), 200);
+
+        // Leave broadcasts RemotePlayerDespawn, system Chat, and updated PlayerList.
+        m1.clear();
+        p2.send(ClientMsg::Bye).unwrap();
+        s.tick();
+        drain(&p1, &mut m1);
+        assert!(
+            m1.iter()
+                .any(|m| matches!(m, ServerMsg::RemotePlayerDespawn { id } if *id == p2_id))
+        );
+        assert!(m1.iter().any(|m| matches!(
+            m,
+            ServerMsg::Chat { sender: None, text } if text.contains("Bob")
+        )));
+        assert!(m1.iter().any(|m| matches!(
+            m,
+            ServerMsg::PlayerList { players } if players.len() == 1 && players[0].0 == p1_id
+        )));
+    }
+
+    #[test]
+    fn multiplayer_chest_lock_and_enemy_nearest_target() {
+        use terravibe_sim::net::PROTOCOL_VERSION;
+
+        let mut s = Server::with_cfg(
+            1,
+            ServerCfg {
+                natural_spawns: false,
+                clock_start: terravibe_sim::time::DAY_TICKS + 1000, // night so zombies chase
+                ..ServerCfg::default()
+            },
+        );
+        let (p1, c1) = in_process_pair();
+        let (p2, c2) = in_process_pair();
+        s.connect(Box::new(c1));
+        s.connect(Box::new(c2));
+
+        for (p, name) in [(&p1, "P1"), (&p2, "P2")] {
+            p.send(ClientMsg::Hello {
+                seed: 1,
+                name: Some(name.into()),
+                character: None,
+                protocol_version: PROTOCOL_VERSION,
+                password: None,
+            })
+            .unwrap();
+        }
+        let sp = spawn_point(1);
+        let chest_pos = [
+            sp[0].floor() as i32 + 1,
+            sp[1].floor() as i32,
+            sp[2].floor() as i32,
+        ];
+        let chest_cp = ChunkPos::of_block(chest_pos[0], chest_pos[1], chest_pos[2]);
+        let mut got = Vec::new();
+        assert!(pump(&mut s, &p1, &mut got, |m| has_chunk(m, chest_cp)));
+
+        // Place a chest in reach of both players at spawn.
+        s.set_block(chest_pos, CHEST);
+        s.chests.entry(chest_pos).or_default();
+
+        // P1 opens the chest; P2 cannot open it while P1 holds the lock.
+        p1.send(ClientMsg::OpenChest { pos: chest_pos }).unwrap();
+        p2.send(ClientMsg::OpenChest { pos: chest_pos }).unwrap();
+        s.tick();
+        assert_eq!(s.conns[0].open_chest, Some(chest_pos));
+        assert_eq!(s.conns[1].open_chest, None);
+
+        // Enemy targets nearest alive player: place P1 at x=sp[0]-20, P2 at x=sp[0]+20, enemy at x=sp[0]+14.
+        s.conns[0].player.as_mut().unwrap().body.pos = [sp[0] - 20.0, sp[1], sp[2]];
+        s.conns[1].player.as_mut().unwrap().body.pos = [sp[0] + 20.0, sp[1], sp[2]];
+        let enemy_start = [sp[0] + 14.0, sp[1] + 2.0, sp[2]];
+        s.add_enemy(EnemyKind::DemonEye, enemy_start);
+        for _ in 0..10 {
+            s.tick();
+        }
+        let eye = s
+            .enemies
+            .iter()
+            .find(|e| e.kind == EnemyKind::DemonEye)
+            .expect("demon eye alive");
+        assert!(
+            eye.pos[0] > enemy_start[0],
+            "demon eye should move toward nearer P2 (+x), got x={} vs start={}",
+            eye.pos[0],
+            enemy_start[0]
+        );
+
+        // If P2 dies, enemy must retarget alive P1 (-x).
+        s.conns[1].player.as_mut().unwrap().dead = true;
+        let before_x = eye.pos[0];
+        for _ in 0..25 {
+            s.tick();
+        }
+        let eye2 = s
+            .enemies
+            .iter()
+            .find(|e| e.kind == EnemyKind::DemonEye)
+            .expect("demon eye still alive");
+        assert!(
+            eye2.pos[0] < before_x,
+            "when nearer P2 is dead, demon eye must move toward alive P1 (-x), got x={} vs before={}",
+            eye2.pos[0],
+            before_x
+        );
     }
 }
