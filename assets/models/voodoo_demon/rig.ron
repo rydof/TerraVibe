@@ -1,0 +1,24 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (7.000, 9.000, 5.000), offset: (0.000, 12.000, 0.000), parent: None),
+        (name: "wing_l", file: "wing_l.vox", pivot: (0.000, 8.000, 1.000), offset: (6.000, 14.000, -2.000), parent: Some("body")),
+        (name: "wing_r", file: "wing_r.vox", pivot: (14.000, 8.000, 1.000), offset: (-6.000, 14.000, -2.000), parent: Some("body")),
+        (name: "voodoo_doll", file: "voodoo_doll.vox", pivot: (3.000, 8.000, 2.000), offset: (0.000, 2.000, 0.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 0.45, looping: true, keys: [
+            (t: 0.0, part: "wing_l", rot_deg: (0.000, 0.000, 35.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.225, part: "wing_l", rot_deg: (0.000, 0.000, -35.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "wing_l", rot_deg: (0.000, 0.000, 35.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "wing_r", rot_deg: (0.000, 0.000, -35.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.225, part: "wing_r", rot_deg: (0.000, 0.000, 35.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "wing_r", rot_deg: (0.000, 0.000, -35.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.225, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 1.200, 0.000)),
+            (t: 0.45, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "voodoo_doll", rot_deg: (0.000, 0.000, 12.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.225, part: "voodoo_doll", rot_deg: (0.000, 0.000, -12.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "voodoo_doll", rot_deg: (0.000, 0.000, 12.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)

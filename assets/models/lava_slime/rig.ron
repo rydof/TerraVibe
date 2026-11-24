@@ -1,0 +1,19 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (12.000, 0.000, 10.000), offset: (0.000, 0.000, 0.000), parent: None),
+        (name: "eyes", file: "eyes.vox", pivot: (9.000, 1.500, 0.500), offset: (0.000, 8.000, 7.000), parent: Some("body")),
+        (name: "core", file: "core.vox", pivot: (4.000, 4.000, 4.000), offset: (0.000, 7.000, 0.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 1.4, looping: true, keys: [
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000), scale: (1.000, 1.000, 1.000)),
+            (t: 0.7, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000), scale: (1.060, 0.920, 1.060)),
+            (t: 1.4, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000), scale: (1.000, 1.000, 1.000)),
+        ]),
+        "hop": (len: 0.5, looping: false, keys: [
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000), scale: (1.220, 0.740, 1.220)),
+            (t: 0.2, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000), scale: (0.880, 1.220, 0.880)),
+            (t: 0.5, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000), scale: (1.000, 1.000, 1.000)),
+        ]),
+    },
+)

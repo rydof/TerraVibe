@@ -1,0 +1,20 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (5.000, 5.000, 5.000), offset: (0.000, 6.000, 0.000), parent: None),
+        (name: "wing_l", file: "wing_l.vox", pivot: (0.000, 5.000, 1.000), offset: (4.000, 6.000, 0.000), parent: Some("body")),
+        (name: "wing_r", file: "wing_r.vox", pivot: (11.000, 5.000, 1.000), offset: (-4.000, 6.000, 0.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 0.32, looping: true, keys: [
+            (t: 0.0, part: "wing_l", rot_deg: (0.000, 0.000, 42.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.16, part: "wing_l", rot_deg: (0.000, 0.000, -42.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.32, part: "wing_l", rot_deg: (0.000, 0.000, 42.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "wing_r", rot_deg: (0.000, 0.000, -42.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.16, part: "wing_r", rot_deg: (0.000, 0.000, 42.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.32, part: "wing_r", rot_deg: (0.000, 0.000, -42.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.16, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 1.400, 0.000)),
+            (t: 0.32, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)
