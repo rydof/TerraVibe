@@ -1,0 +1,25 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (7.000, 0.000, 7.000), offset: (0.000, 3.000, 0.000), parent: None),
+        (name: "ear_l", file: "ear_l.vox", pivot: (3.000, 4.000, 1.000), offset: (-5.000, 10.000, 0.000), parent: Some("body")),
+        (name: "ear_r", file: "ear_r.vox", pivot: (0.000, 4.000, 1.000), offset: (5.000, 10.000, 0.000), parent: Some("body")),
+        (name: "leg_l", file: "leg_l.vox", pivot: (2.000, 3.000, 2.000), offset: (-3.000, 0.000, 0.000), parent: Some("body")),
+        (name: "leg_r", file: "leg_r.vox", pivot: (2.000, 3.000, 2.000), offset: (3.000, 0.000, 0.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 1.0, looping: true, keys: [
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.5, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.500, 0.000)),
+        ]),
+        "walk": (len: 0.6, looping: true, keys: [
+            (t: 0.0, part: "leg_l", rot_deg: (0.500, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.3, part: "leg_l", rot_deg: (-0.500, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_r", rot_deg: (-0.500, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.3, part: "leg_r", rot_deg: (0.500, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.15, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.600, 0.000)),
+            (t: 0.3, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.600, 0.000)),
+        ]),
+    },
+)

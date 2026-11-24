@@ -1,0 +1,15 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (3.000, 4.000, 6.000), offset: (0.000, 8.000, 0.000), parent: None),
+        (name: "tail", file: "tail.vox", pivot: (2.000, 4.000, 7.000), offset: (0.000, 0.000, -6.000), parent: Some("body")),
+        (name: "jaw", file: "jaw.vox", pivot: (2.000, 2.000, 0.000), offset: (0.000, -3.000, 2.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 0.7, looping: true, keys: [
+            (t: 0.0, part: "tail", rot_deg: (0.000, 0.350, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.35, part: "tail", rot_deg: (0.000, -0.350, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "jaw", rot_deg: (0.250, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.35, part: "jaw", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)

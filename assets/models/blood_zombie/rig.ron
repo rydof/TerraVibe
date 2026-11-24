@@ -1,0 +1,32 @@
+(
+    parts: [
+        (name: "torso", file: "torso.vox", pivot: (4.000, 0.000, 3.000), offset: (0.000, 12.000, 0.000), parent: None),
+        (name: "head", file: "head.vox", pivot: (4.000, 0.000, 4.000), offset: (0.000, 12.000, 0.000), parent: Some("torso")),
+        (name: "arm_l", file: "arm_l.vox", pivot: (3.000, 10.000, 2.000), offset: (-4.000, 10.000, 0.000), parent: Some("torso")),
+        (name: "arm_r", file: "arm_r.vox", pivot: (0.000, 10.000, 2.000), offset: (4.000, 10.000, 0.000), parent: Some("torso")),
+        (name: "leg_l", file: "leg_l.vox", pivot: (2.000, 11.000, 2.000), offset: (-2.000, 0.000, 0.000), parent: Some("torso")),
+        (name: "leg_r", file: "leg_r.vox", pivot: (2.000, 11.000, 2.000), offset: (2.000, 0.000, 0.000), parent: Some("torso")),
+    ],
+    anims: {
+        "idle": (len: 1.2, looping: true, keys: [
+            (t: 0.0, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.6, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, -0.400, 0.000)),
+            (t: 0.0, part: "arm_l", rot_deg: (1.200, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_r", rot_deg: (1.100, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+        "walk": (len: 0.7, looping: true, keys: [
+            (t: 0.0, part: "leg_l", rot_deg: (0.450, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.35, part: "leg_l", rot_deg: (-0.450, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_r", rot_deg: (-0.450, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.35, part: "leg_r", rot_deg: (0.450, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_l", rot_deg: (0.930, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.35, part: "arm_l", rot_deg: (1.470, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_r", rot_deg: (1.370, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.35, part: "arm_r", rot_deg: (0.830, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.175, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.400, 0.000)),
+            (t: 0.35, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.525, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.400, 0.000)),
+        ]),
+    },
+)

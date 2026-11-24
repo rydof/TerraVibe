@@ -1,0 +1,14 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (7.000, 7.000, 7.000), offset: (0.000, 14.000, 0.000), parent: None),
+        (name: "tendril", file: "tendril.vox", pivot: (4.000, 9.000, 4.000), offset: (0.000, -6.000, 0.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 1.0, looping: true, keys: [
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.5, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 1.000, 0.000)),
+            (t: 0.0, part: "tendril", rot_deg: (0.150, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.5, part: "tendril", rot_deg: (-0.150, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)
