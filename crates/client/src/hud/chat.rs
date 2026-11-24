@@ -1,4 +1,4 @@
-//! In-game chat HUD: bottom-left fading chat log and `Enter`/`T` text input bar.
+//! In-game chat HUD: bottom-left fading chat log and `Enter` text input bar.
 
 use std::collections::VecDeque;
 
@@ -248,9 +248,7 @@ pub fn handle_chat_input(
             return;
         }
         let open_pressed = keys.as_ref().is_some_and(|kb| {
-            kb.just_pressed(KeyCode::Enter)
-                || kb.just_pressed(KeyCode::NumpadEnter)
-                || kb.just_pressed(KeyCode::KeyT)
+            kb.just_pressed(KeyCode::Enter) || kb.just_pressed(KeyCode::NumpadEnter)
         });
         if open_pressed {
             chat_open.0 = true;
@@ -526,7 +524,7 @@ mod tests {
         app.update();
         app.update();
 
-        // Press T to open chat input.
+        // Pressing T (Throw Item) must NOT open chat input.
         app.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()
             .press(KeyCode::KeyT);
@@ -536,12 +534,29 @@ mod tests {
         app.update();
 
         assert!(
+            !app.world().resource::<ChatInputOpen>().0,
+            "pressing T in-game must not open chat input (T is Throw Item)"
+        );
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .clear();
+
+        // Press Enter to open chat input.
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.world_mut()
+            .resource_mut::<Messages<KeyboardInput>>()
+            .write(key_special(KeyCode::Enter, Key::Enter));
+        app.update();
+
+        assert!(
             app.world().resource::<ChatInputOpen>().0,
-            "pressing T in-game should open chat input"
+            "pressing Enter in-game should open chat input"
         );
         assert!(
             app.world().resource::<ChatLog>().draft.is_empty(),
-            "opening key T must not leak into chat draft"
+            "opening key Enter must not leak into chat draft"
         );
         app.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()
