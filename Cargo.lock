@@ -6993,6 +6993,8 @@ dependencies = [
  "serde",
  "serde_json",
  "terravibe_assets",
+ "terravibe_lobby",
+ "terravibe_net",
  "terravibe_server",
  "terravibe_sim",
 ]

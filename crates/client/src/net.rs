@@ -68,6 +68,43 @@ pub enum ChestMsg {
     Closed,
 }
 
+/// Remote player lifecycle and replication updates from the server.
+#[derive(Message, Clone, Debug)]
+pub enum RemotePlayerMsg {
+    Spawn {
+        id: terravibe_sim::net::PlayerId,
+        name: String,
+        appearance: terravibe_sim::character::Appearance,
+        pos: [f32; 3],
+        yaw: f32,
+    },
+    State {
+        id: terravibe_sim::net::PlayerId,
+        pos: [f32; 3],
+        vel: [f32; 3],
+        yaw: f32,
+        pitch: f32,
+        swinging: bool,
+        dead: bool,
+    },
+    Equipment {
+        id: terravibe_sim::net::PlayerId,
+        armor: [Option<terravibe_sim::item::ItemId>; 3],
+        vanity_armor: [Option<terravibe_sim::item::ItemId>; 3],
+        held: Option<terravibe_sim::item::ItemId>,
+    },
+    Despawn {
+        id: terravibe_sim::net::PlayerId,
+    },
+}
+
+/// Incoming chat message from the server.
+#[derive(Message, Clone, Debug)]
+pub struct ChatReceived {
+    pub sender: Option<String>,
+    pub text: String,
+}
+
 /// The server's copy of the local player's inventory.
 #[derive(Resource)]
 pub struct LocalInventory(pub terravibe_sim::inventory::Inventory);
@@ -299,6 +336,8 @@ impl Plugin for NetPlugin {
             .add_message::<crate::hud::combat_feedback::CombatHitEvent>()
             .add_message::<PlayerEvents>()
             .add_message::<crate::view::interact::UseEvents>()
+            .add_message::<RemotePlayerMsg>()
+            .add_message::<ChatReceived>()
             .init_resource::<crate::hud::boss_bar::BossState>()
             .init_resource::<LocalCharacterFacts>()
             .init_resource::<CharacterFacts>()
@@ -344,6 +383,9 @@ pub fn reconcile_bounded(
 pub(crate) struct SessionIn<'w> {
     selected_world: Option<Res<'w, SelectedWorld>>,
     selected_char: Option<Res<'w, crate::session::SelectedCharacter>>,
+    session_mode: Option<Res<'w, crate::session::SessionMode>>,
+    characters_dir: Option<Res<'w, crate::session::CharactersDir>>,
+    mp_info: Option<ResMut<'w, crate::session::MultiplayerSessionInfo>>,
     automation: Option<Res<'w, Automation>>,
     session_err: Option<ResMut<'w, SessionError>>,
 }
@@ -370,6 +412,8 @@ pub(crate) struct WorldOut<'w> {
     god_mode: Option<ResMut<'w, ClientGodMode>>,
     local_char_facts: Option<Res<'w, LocalCharacterFacts>>,
     char_facts: Option<Res<'w, CharacterFacts>>,
+    remote_players: MessageWriter<'w, RemotePlayerMsg>,
+    chat: MessageWriter<'w, ChatReceived>,
 }
 
 fn reset_god_mode(mut god_mode: ResMut<ClientGodMode>) {
@@ -380,7 +424,7 @@ fn reset_god_mode(mut god_mode: ResMut<ClientGodMode>) {
 pub(crate) fn pump(
     mut commands: Commands,
     net: Option<Res<Net>>,
-    session: SessionIn,
+    mut session: SessionIn,
     mut st: ResMut<NetState>,
     mode: Option<Res<ControlMode>>,
     time: Option<Res<Time<Real>>>,
@@ -416,11 +460,17 @@ pub(crate) fn pump(
         god_mode,
         local_char_facts,
         char_facts,
+        remote_players,
+        chat,
     } = &mut out;
     if st.disconnected {
         return;
     }
     let seed = session.selected_world.as_ref().map_or(SEED, |w| w.seed);
+    let hello_password = match session.session_mode.as_deref() {
+        Some(crate::session::SessionMode::Join { password, .. }) => password.clone(),
+        _ => None,
+    };
     let control_mode = mode.as_ref().map_or(ControlMode::Player, |m| **m);
     let delta_secs = time.as_ref().map_or(1.0 / 60.0, |t| t.delta_secs());
     let mut gone = false;
@@ -439,7 +489,7 @@ pub(crate) fn pump(
                     name: char_name,
                     character: char_bytes,
                     protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
-                    password: None,
+                    password: hello_password,
                 })
                 .is_err();
         }
@@ -460,7 +510,7 @@ pub(crate) fn pump(
                         name: char_name,
                         character: char_bytes,
                         protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
-                        password: None,
+                        password: hello_password,
                     })
                     .is_err();
             }
@@ -477,6 +527,7 @@ pub(crate) fn pump(
     }
 
     let mut pending_player: Option<Player> = None;
+    let mut rejected = false;
     loop {
         let msg = match net.try_recv() {
             Ok(Some(m)) => m,
@@ -819,7 +870,11 @@ pub(crate) fn pump(
             }
             ServerMsg::CharacterState(bytes) => {
                 if let Ok(c) = terravibe_sim::Character::from_bytes(&bytes) {
-                    let root = terravibe_server::characters::characters_dir();
+                    let root = session
+                        .characters_dir
+                        .as_ref()
+                        .map(|d| d.0.clone())
+                        .unwrap_or_else(terravibe_server::characters::characters_dir);
                     let _ = terravibe_server::characters::save_character(&root, &c);
                 }
                 saves.write(crate::hud::SaveEvent::WorldSaved);
@@ -896,20 +951,97 @@ pub(crate) fn pump(
             ServerMsg::GuideSlot(g) => {
                 commands.insert_resource(LocalGuideSlot(g));
             }
-            ServerMsg::Rejected { .. }
-            | ServerMsg::RemotePlayerSpawn { .. }
-            | ServerMsg::RemotePlayerState { .. }
-            | ServerMsg::RemotePlayerEquipment { .. }
-            | ServerMsg::RemotePlayerDespawn { .. }
-            | ServerMsg::Chat { .. }
-            | ServerMsg::PlayerList { .. } => {}
+            ServerMsg::Rejected { reason } => {
+                let msg = match reason {
+                    terravibe_sim::net::RejectReason::ProtocolMismatch => {
+                        "Protocol version mismatch".to_string()
+                    }
+                    terravibe_sim::net::RejectReason::BadPassword => {
+                        "Incorrect password".to_string()
+                    }
+                    terravibe_sim::net::RejectReason::ServerFull => "Server is full".to_string(),
+                    terravibe_sim::net::RejectReason::HostClosing => {
+                        "Host closed the world".to_string()
+                    }
+                };
+                if let Some(gm) = god_mode.as_deref_mut() {
+                    gm.0 = false;
+                }
+                st.disconnected = true;
+                rejected = true;
+                if !st.is_ready()
+                    && let Some(err) = session.session_err.as_deref_mut()
+                {
+                    err.0 = Some(msg.clone());
+                }
+                commands.insert_resource(DisconnectState { reason: msg });
+                break;
+            }
+            ServerMsg::RemotePlayerSpawn {
+                id,
+                name,
+                appearance,
+                pos,
+                yaw,
+            } => {
+                remote_players.write(RemotePlayerMsg::Spawn {
+                    id,
+                    name,
+                    appearance,
+                    pos,
+                    yaw,
+                });
+            }
+            ServerMsg::RemotePlayerState {
+                id,
+                pos,
+                vel,
+                yaw,
+                pitch,
+                swinging,
+                dead,
+            } => {
+                remote_players.write(RemotePlayerMsg::State {
+                    id,
+                    pos,
+                    vel,
+                    yaw,
+                    pitch,
+                    swinging,
+                    dead,
+                });
+            }
+            ServerMsg::RemotePlayerEquipment {
+                id,
+                armor,
+                vanity_armor,
+                held,
+            } => {
+                remote_players.write(RemotePlayerMsg::Equipment {
+                    id,
+                    armor,
+                    vanity_armor,
+                    held,
+                });
+            }
+            ServerMsg::RemotePlayerDespawn { id } => {
+                remote_players.write(RemotePlayerMsg::Despawn { id });
+            }
+            ServerMsg::Chat { sender, text } => {
+                chat.write(ChatReceived { sender, text });
+            }
+            ServerMsg::PlayerList { players } => {
+                if let Some(info) = session.mp_info.as_deref_mut() {
+                    info.players = players;
+                }
+            }
         }
     }
 
     if let Some(p) = pending_player {
         commands.insert_resource(LocalPlayer(p));
     }
-    if gone {
+    if gone && !rejected {
         if let Some(gm) = god_mode.as_deref_mut() {
             gm.0 = false;
         }
@@ -1060,6 +1192,8 @@ mod tests {
         app.init_resource::<Messages<crate::hud::town::TownMsg>>();
         app.init_resource::<Messages<crate::hud::SaveEvent>>();
         app.init_resource::<Messages<crate::hud::combat_feedback::CombatHitEvent>>();
+        app.init_resource::<Messages<RemotePlayerMsg>>();
+        app.init_resource::<Messages<ChatReceived>>();
         app.init_resource::<crate::hud::death::DeathModalState>();
         app.init_resource::<crate::hud::boss_bar::BossState>();
         app.init_resource::<crate::menu::game::GuideAdviceState>();
@@ -1191,6 +1325,8 @@ mod tests {
         app.init_resource::<Messages<crate::hud::town::TownMsg>>();
         app.init_resource::<Messages<crate::hud::SaveEvent>>();
         app.init_resource::<Messages<crate::hud::combat_feedback::CombatHitEvent>>();
+        app.init_resource::<Messages<RemotePlayerMsg>>();
+        app.init_resource::<Messages<ChatReceived>>();
         app.init_resource::<crate::hud::death::DeathModalState>();
         app.init_resource::<crate::hud::boss_bar::BossState>();
         app.init_resource::<crate::menu::game::GuideAdviceState>();
@@ -1209,5 +1345,229 @@ mod tests {
                 .onboarding_dismissed
         );
         assert!(app.world().resource::<LocalCharacterFacts>().0.has_ore);
+    }
+
+    #[test]
+    fn pump_handles_rejected_host_closing_and_remote_player_msgs() {
+        let (to_client, from_server) = std::sync::mpsc::channel();
+        struct MockTransport(std::sync::Mutex<std::sync::mpsc::Receiver<ServerMsg>>);
+        impl ClientTransport for MockTransport {
+            fn send(&self, _m: ClientMsg) -> Result<(), Disconnected> {
+                Ok(())
+            }
+            fn try_recv(&self) -> Result<Option<ServerMsg>, Disconnected> {
+                Ok(self.0.lock().unwrap().try_recv().ok())
+            }
+        }
+
+        to_client
+            .send(ServerMsg::RemotePlayerSpawn {
+                id: 2,
+                name: "Bob".into(),
+                appearance: terravibe_sim::character::Appearance::default(),
+                pos: [1.0, 2.0, 3.0],
+                yaw: 0.5,
+            })
+            .unwrap();
+        to_client
+            .send(ServerMsg::RemotePlayerState {
+                id: 2,
+                pos: [4.0, 5.0, 6.0],
+                vel: [0.1, 0.0, -0.1],
+                yaw: 1.0,
+                pitch: 0.2,
+                swinging: true,
+                dead: false,
+            })
+            .unwrap();
+        to_client
+            .send(ServerMsg::RemotePlayerEquipment {
+                id: 2,
+                armor: [Some(terravibe_sim::item::ItemId(1)), None, None],
+                vanity_armor: [None; 3],
+                held: Some(terravibe_sim::item::COPPER_PICKAXE),
+            })
+            .unwrap();
+        to_client
+            .send(ServerMsg::RemotePlayerDespawn { id: 2 })
+            .unwrap();
+        to_client
+            .send(ServerMsg::Chat {
+                sender: Some("Bob".into()),
+                text: "Hello!".into(),
+            })
+            .unwrap();
+        to_client
+            .send(ServerMsg::PlayerList {
+                players: vec![(1, "Alice".into()), (2, "Bob".into())],
+            })
+            .unwrap();
+        to_client
+            .send(ServerMsg::Rejected {
+                reason: terravibe_sim::net::RejectReason::HostClosing,
+            })
+            .unwrap();
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(bevy::state::app::StatesPlugin)
+            .add_plugins(crate::session::SessionPlugin)
+            .add_plugins(NetPlugin);
+        app.insert_resource(Net::new(MockTransport(std::sync::Mutex::new(from_server))));
+        app.insert_resource(NetState {
+            hello_sent: true,
+            ..default()
+        });
+        app.add_systems(Update, pump);
+        app.update();
+
+        let disconnect = app
+            .world()
+            .get_resource::<DisconnectState>()
+            .expect("DisconnectState should be set on Rejected");
+        assert_eq!(disconnect.reason, "Host closed the world");
+        assert!(app.world().resource::<NetState>().is_disconnected());
+        assert_eq!(
+            app.world().resource::<SessionError>().0.as_deref(),
+            Some("Host closed the world")
+        );
+
+        let mp = app
+            .world()
+            .resource::<crate::session::MultiplayerSessionInfo>();
+        assert_eq!(mp.players, vec![(1, "Alice".into()), (2, "Bob".into())]);
+
+        let remote_msgs: Vec<_> = app
+            .world()
+            .resource::<Messages<RemotePlayerMsg>>()
+            .iter_current_update_messages()
+            .cloned()
+            .collect();
+        assert_eq!(remote_msgs.len(), 4);
+        assert!(matches!(remote_msgs[0], RemotePlayerMsg::Spawn { id: 2, .. }));
+        assert!(matches!(
+            remote_msgs[1],
+            RemotePlayerMsg::State {
+                id: 2,
+                swinging: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            remote_msgs[2],
+            RemotePlayerMsg::Equipment { id: 2, .. }
+        ));
+        assert!(matches!(remote_msgs[3], RemotePlayerMsg::Despawn { id: 2 }));
+
+        let chat_msgs: Vec<_> = app
+            .world()
+            .resource::<Messages<ChatReceived>>()
+            .iter_current_update_messages()
+            .cloned()
+            .collect();
+        assert_eq!(chat_msgs.len(), 1);
+        assert_eq!(chat_msgs[0].sender.as_deref(), Some("Bob"));
+        assert_eq!(chat_msgs[0].text, "Hello!");
+    }
+
+    #[test]
+    fn join_mode_saves_character_state_locally() {
+        let dir = std::env::temp_dir().join(format!(
+            "tv-guest-char-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let (to_client, from_server) = std::sync::mpsc::channel();
+        struct MockTransport(std::sync::Mutex<std::sync::mpsc::Receiver<ServerMsg>>);
+        impl ClientTransport for MockTransport {
+            fn send(&self, _m: ClientMsg) -> Result<(), Disconnected> {
+                Ok(())
+            }
+            fn try_recv(&self) -> Result<Option<ServerMsg>, Disconnected> {
+                Ok(self.0.lock().unwrap().try_recv().ok())
+            }
+        }
+
+        let mut ch = terravibe_sim::Character::new(
+            "GuestHero",
+            terravibe_sim::character::Appearance::default(),
+        );
+        ch.life = 80;
+        to_client
+            .send(ServerMsg::CharacterState(ch.to_bytes()))
+            .unwrap();
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(bevy::state::app::StatesPlugin)
+            .add_plugins(crate::session::SessionPlugin)
+            .add_plugins(NetPlugin);
+        app.insert_resource(crate::session::SessionMode::Join {
+            ticket: "tv1:dummy".into(),
+            password: Some("secret".into()),
+        });
+        app.insert_resource(crate::session::CharactersDir(dir.clone()));
+        app.insert_resource(Net::new(MockTransport(std::sync::Mutex::new(from_server))));
+        app.insert_resource(NetState {
+            hello_sent: true,
+            ..default()
+        });
+        app.add_systems(Update, pump);
+        app.update();
+
+        let loaded = terravibe_server::characters::load_character(&dir, "GuestHero")
+            .expect("guest character should be saved locally");
+        assert_eq!(loaded.name, "GuestHero");
+        assert_eq!(loaded.life, 80);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn join_mode_hello_includes_password_and_protocol_version() {
+        #[derive(Clone)]
+        struct SendRecorder(std::sync::Arc<Mutex<Vec<ClientMsg>>>);
+        impl ClientTransport for SendRecorder {
+            fn send(&self, m: ClientMsg) -> Result<(), Disconnected> {
+                self.0.lock().unwrap().push(m);
+                Ok(())
+            }
+            fn try_recv(&self) -> Result<Option<ServerMsg>, Disconnected> {
+                Ok(None)
+            }
+        }
+
+        let sent = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(bevy::state::app::StatesPlugin)
+            .add_plugins(crate::session::SessionPlugin)
+            .add_plugins(NetPlugin);
+        app.insert_resource(crate::session::SessionMode::Join {
+            ticket: "tv1:dummy".into(),
+            password: Some("letmein".into()),
+        });
+        app.insert_resource(Net::new(SendRecorder(sent.clone())));
+        app.insert_resource(NetState::default());
+        app.add_systems(Update, pump);
+        app.update();
+
+        let msgs = sent.lock().unwrap();
+        assert_eq!(msgs.len(), 1);
+        match &msgs[0] {
+            ClientMsg::Hello {
+                protocol_version,
+                password,
+                ..
+            } => {
+                assert_eq!(*protocol_version, terravibe_sim::net::PROTOCOL_VERSION);
+                assert_eq!(password.as_deref(), Some("letmein"));
+            }
+            other => panic!("expected ClientMsg::Hello, got {other:?}"),
+        }
     }
 }

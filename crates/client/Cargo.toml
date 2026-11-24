@@ -11,6 +11,8 @@ path = "src/main.rs"
 [dependencies]
 bevy = { workspace = true, features = ["wav"] }
 terravibe_assets = { path = "../assets" }
+terravibe_lobby = { path = "../lobby" }
+terravibe_net = { path = "../net" }
 terravibe_server = { path = "../server" }
 terravibe_sim = { path = "../sim" }
 png = "0.18.1"

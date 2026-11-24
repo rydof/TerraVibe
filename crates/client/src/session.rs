@@ -1,8 +1,10 @@
 //! Application states, session lifecycle, and gameplay gating.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 use terravibe_server::{SaveCfg, ServerCfg, WorldInfo, list_worlds, spawn_local_cfg};
@@ -56,6 +58,92 @@ pub struct SelectedWorld {
 /// Root directory where worlds are saved.
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct SaveRoot(pub PathBuf);
+
+/// Optional override for where character `.plr` files are saved (primarily for tests).
+#[derive(Resource, Clone, Debug, PartialEq, Eq)]
+pub struct CharactersDir(pub PathBuf);
+
+/// Active session mode: single-player, hosting a multiplayer world, or joining a remote host.
+#[derive(Resource, Clone, Debug, Default, PartialEq, Eq)]
+pub enum SessionMode {
+    #[default]
+    SinglePlayer,
+    Host {
+        max_players: u8,
+        password: Option<String>,
+        public: bool,
+    },
+    Join {
+        ticket: String,
+        password: Option<String>,
+    },
+}
+
+/// Live multiplayer metadata exposed to pause menu, HUD, and discovery syncing.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct MultiplayerSessionInfo {
+    pub join_code: Option<String>,
+    pub ticket: Option<String>,
+    pub is_host: bool,
+    pub max_players: u8,
+    pub players: Vec<(terravibe_sim::net::PlayerId, String)>,
+}
+
+/// Active host-side networking handles (iroh listener, LAN beacon, lobby heartbeat thread).
+#[derive(Resource)]
+struct HostSessionHandles {
+    shutdown: Arc<AtomicBool>,
+    iroh_host: Mutex<Option<terravibe_net::IrohHost>>,
+    lan_beacon: Option<terravibe_net::LanBeacon>,
+    lobby_stop: Arc<AtomicBool>,
+    lobby_player_count: Arc<AtomicU8>,
+    lobby_code_rx: Option<Mutex<mpsc::Receiver<String>>>,
+    lobby_thread: Option<JoinHandle<()>>,
+}
+
+impl HostSessionHandles {
+    fn stop_discovery(&mut self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+        self.lobby_stop.store(true, Ordering::Relaxed);
+        if let Some(beacon) = self.lan_beacon.take() {
+            beacon.stop();
+        }
+        if let Some(handle) = self.lobby_thread.take() {
+            let _ = handle.join();
+        }
+    }
+
+    fn shutdown_all(&mut self) {
+        self.stop_discovery();
+        if let Some(host) = self
+            .iroh_host
+            .get_mut()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            host.shutdown();
+        }
+    }
+}
+
+impl Drop for HostSessionHandles {
+    fn drop(&mut self) {
+        self.shutdown_all();
+    }
+}
+
+/// Keeps the host's `IrohHost` endpoint alive while `SessionStopping` waits for the
+/// server thread to flush `CharacterState` and `RejectReason::HostClosing` to guests.
+#[derive(Resource)]
+struct HostNetworkStopping(Mutex<Option<terravibe_net::IrohHost>>);
+
+impl Drop for HostNetworkStopping {
+    fn drop(&mut self) {
+        if let Some(host) = self.0.get_mut().unwrap_or_else(|e| e.into_inner()).take() {
+            host.shutdown();
+        }
+    }
+}
 
 /// Handle to the in-process server thread during an active game session.
 #[derive(Resource)]
@@ -210,6 +298,8 @@ impl Plugin for SessionPlugin {
             .init_resource::<GameMenu>()
             .init_resource::<SelectedWorld>()
             .init_resource::<SelectedCharacter>()
+            .init_resource::<SessionMode>()
+            .init_resource::<MultiplayerSessionInfo>()
             .add_systems(OnEnter(AppState::InGame), session_start)
             .add_systems(OnExit(AppState::InGame), session_teardown)
             .add_systems(
@@ -227,7 +317,12 @@ impl Plugin for SessionPlugin {
             )
             .add_systems(
                 Update,
-                (loading_timeout, autosave_map).run_if(in_state(AppState::InGame)),
+                (
+                    loading_timeout,
+                    autosave_map,
+                    poll_host_handles.run_if(resource_exists::<HostSessionHandles>),
+                )
+                    .run_if(in_state(AppState::InGame)),
             );
     }
 }
@@ -278,9 +373,93 @@ pub(crate) fn session_cfg(
     cfg
 }
 
+fn spawn_lobby_thread(
+    client: terravibe_net::LobbyClient,
+    req: terravibe_lobby::CreateRoomReq,
+    stop: Arc<AtomicBool>,
+    player_count: Arc<AtomicU8>,
+    code_tx: mpsc::Sender<String>,
+) -> Option<JoinHandle<()>> {
+    std::thread::Builder::new()
+        .name("terravibe-lobby-host".into())
+        .spawn(move || {
+            let Ok(resp) = client.create_room(&req) else {
+                return;
+            };
+            let _ = code_tx.send(resp.code.clone());
+            const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
+            while !stop.load(Ordering::Relaxed) {
+                let deadline = Instant::now() + HEARTBEAT_INTERVAL;
+                while !stop.load(Ordering::Relaxed) && Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                let players = player_count.load(Ordering::Relaxed).max(1);
+                let _ = client.heartbeat(
+                    &resp.code,
+                    &terravibe_lobby::HeartbeatReq {
+                        secret: resp.secret.clone(),
+                        players,
+                    },
+                );
+            }
+            let _ = client.delete_room(
+                &resp.code,
+                &terravibe_lobby::DeleteRoomReq {
+                    secret: resp.secret,
+                },
+            );
+        })
+        .ok()
+}
+
+fn insert_common_session_resources(
+    commands: &mut Commands,
+    seed: u32,
+    size: terravibe_sim::WorldSize,
+    persist: bool,
+    root: Option<&Path>,
+    name: &str,
+) {
+    let p = terravibe_sim::player::Player::new([0.0, 0.0, 0.0]);
+    let eye = crate::view::player::eye_of(&p);
+    commands.insert_resource(LocalPlayer(p));
+    commands.insert_resource(PlayerView {
+        prev_eye: eye,
+        eye,
+        offset: Vec3::ZERO,
+    });
+    commands.insert_resource(LocalInventory(Inventory::starting(&mut Rng::new(
+        seed as u64,
+    ))));
+    commands.insert_resource(LocalArmor([None, None, None]));
+    commands.insert_resource(LocalAccessories::default());
+    commands.insert_resource(LocalAccessoryPrefixes::default());
+    commands.insert_resource(ClientClock::default());
+    commands.insert_resource(NetState::default());
+    commands.insert_resource(ChunkStream::default());
+
+    let half_extent = size.half_extent();
+    let map = if persist && let Some(root) = root {
+        let map_path = root
+            .join(terravibe_server::save::sanitize(name, "world1"))
+            .join("map.bin");
+        crate::hud::map::ExploredMap::load_from(&map_path, half_extent)
+            .unwrap_or_else(|_| crate::hud::map::ExploredMap::new(half_extent))
+    } else {
+        crate::hud::map::ExploredMap::new(half_extent)
+    };
+    commands.insert_resource(map);
+}
+
+#[allow(clippy::too_many_arguments)]
 fn session_start(
     mut commands: Commands,
     mut session_error: ResMut<SessionError>,
+    session_mode: Option<Res<SessionMode>>,
+    mut mp_info: Option<ResMut<MultiplayerSessionInfo>>,
     selected_world: Option<Res<SelectedWorld>>,
     selected_char: Option<Res<SelectedCharacter>>,
     save_root: Option<Res<SaveRoot>>,
@@ -288,6 +467,38 @@ fn session_start(
     qa_liquids_demo: Option<Res<crate::qa::QaLiquidsDemo>>,
     qa_kill_demo: Option<Res<crate::qa::QaKillDemo>>,
 ) {
+    let mode = session_mode.as_deref().cloned().unwrap_or_default();
+    commands.remove_resource::<DisconnectState>();
+
+    if let SessionMode::Join { ticket, .. } = &mode {
+        let client = match terravibe_net::IrohClientTransport::connect(ticket) {
+            Ok(c) => c,
+            Err(e) => {
+                session_error.0 = Some(format!("Failed to connect to host: {e}"));
+                return;
+            }
+        };
+        if let Some(info) = mp_info.as_deref_mut() {
+            *info = MultiplayerSessionInfo {
+                join_code: None,
+                ticket: Some(ticket.clone()),
+                is_host: false,
+                max_players: 0,
+                players: Vec::new(),
+            };
+        }
+        commands.insert_resource(Net::new(client));
+        insert_common_session_resources(
+            &mut commands,
+            SEED,
+            terravibe_sim::WorldSize::Small,
+            false,
+            None,
+            "",
+        );
+        return;
+    }
+
     let seed = selected_world.as_ref().map_or(SEED, |w| w.seed);
     let size = selected_world
         .as_ref()
@@ -296,7 +507,6 @@ fn session_start(
         .as_ref()
         .map_or_else(|| "Default".to_string(), |w| w.name.clone());
     let persist = selected_world.as_ref().is_some_and(|w| w.persist);
-    commands.remove_resource::<DisconnectState>();
     let root = save_root.as_ref().map_or_else(
         || SaveCfg::from_args_env(&[], |k| std::env::var(k).ok()).root,
         |r| r.0.clone(),
@@ -337,41 +547,139 @@ fn session_start(
         cfg.liquid_stress = true;
     }
 
-    let (client, server) = spawn_local_cfg(seed, cfg);
-    commands.insert_resource(Net::new(client));
-    commands.insert_resource(SessionHandle::new(server));
-    let p = terravibe_sim::player::Player::new([0.0, 0.0, 0.0]);
-    let eye = crate::view::player::eye_of(&p);
-    commands.insert_resource(LocalPlayer(p));
-    commands.insert_resource(PlayerView {
-        prev_eye: eye,
-        eye,
-        offset: Vec3::ZERO,
-    });
-    commands.insert_resource(LocalInventory(Inventory::starting(&mut Rng::new(
-        seed as u64,
-    ))));
-    commands.insert_resource(LocalArmor([None, None, None]));
-    commands.insert_resource(LocalAccessories::default());
-    commands.insert_resource(LocalAccessoryPrefixes::default());
-    commands.insert_resource(ClientClock::default());
-    commands.insert_resource(NetState::default());
-    commands.insert_resource(ChunkStream::default());
+    match mode {
+        SessionMode::SinglePlayer => {
+            if let Some(info) = mp_info.as_deref_mut() {
+                *info = MultiplayerSessionInfo::default();
+            }
+            let (client, server) = spawn_local_cfg(seed, cfg);
+            commands.insert_resource(Net::new(client));
+            commands.insert_resource(SessionHandle::new(server));
+        }
+        SessionMode::Host {
+            max_players,
+            password,
+            public,
+        } => {
+            let clamped_max = max_players.clamp(2, 16);
+            let normalized_pw = password.filter(|p| !p.is_empty());
+            let has_password = normalized_pw.is_some();
+            cfg.max_players = clamped_max;
+            cfg.password = normalized_pw;
 
-    let half_extent = size.half_extent();
-    let map = if persist {
-        let map_path = root
-            .join(terravibe_server::save::sanitize(&name, "world1"))
-            .join("map.bin");
-        crate::hud::map::ExploredMap::load_from(&map_path, half_extent)
-            .unwrap_or_else(|_| crate::hud::map::ExploredMap::new(half_extent))
-    } else {
-        crate::hud::map::ExploredMap::new(half_extent)
-    };
-    commands.insert_resource(map);
+            let mut host = match terravibe_net::IrohHost::bind() {
+                Ok(h) => h,
+                Err(e) => {
+                    session_error.0 = Some(format!("Failed to start multiplayer host: {e}"));
+                    return;
+                }
+            };
+            let ticket = host.ticket();
+            let incoming_rx = host
+                .take_incoming()
+                .expect("fresh IrohHost has incoming receiver");
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let (client, server) =
+                terravibe_server::spawn_host_cfg(seed, cfg, incoming_rx, Arc::clone(&shutdown));
+
+            let host_name = selected_char
+                .as_ref()
+                .and_then(|sc| sc.0.as_ref().map(|c| c.name.clone()))
+                .filter(|n| !n.trim().is_empty())
+                .unwrap_or_else(|| "Host".to_string());
+
+            let lan_beacon = terravibe_net::LanBeacon::start(terravibe_net::LanRoomInfo {
+                world_name: name.clone(),
+                host_name: host_name.clone(),
+                players: 1,
+                max_players: clamped_max,
+                has_password,
+                ticket: ticket.clone(),
+            })
+            .ok();
+
+            let lobby_stop = Arc::new(AtomicBool::new(false));
+            let lobby_player_count = Arc::new(AtomicU8::new(1));
+            let (lobby_code_rx, lobby_thread) = match terravibe_net::LobbyClient::from_env() {
+                Some(lobby_client) => {
+                    let (code_tx, code_rx) = mpsc::channel();
+                    let req = terravibe_lobby::CreateRoomReq {
+                        world_name: name.clone(),
+                        host_name,
+                        players: 1,
+                        max_players: clamped_max,
+                        has_password,
+                        public,
+                        ticket: ticket.clone(),
+                    };
+                    let handle = spawn_lobby_thread(
+                        lobby_client,
+                        req,
+                        Arc::clone(&lobby_stop),
+                        Arc::clone(&lobby_player_count),
+                        code_tx,
+                    );
+                    (Some(Mutex::new(code_rx)), handle)
+                }
+                None => (None, None),
+            };
+
+            if let Some(info) = mp_info.as_deref_mut() {
+                *info = MultiplayerSessionInfo {
+                    join_code: Some(ticket.clone()),
+                    ticket: Some(ticket),
+                    is_host: true,
+                    max_players: clamped_max,
+                    players: Vec::new(),
+                };
+            }
+
+            commands.insert_resource(HostSessionHandles {
+                shutdown,
+                iroh_host: Mutex::new(Some(host)),
+                lan_beacon,
+                lobby_stop,
+                lobby_player_count,
+                lobby_code_rx,
+                lobby_thread,
+            });
+            commands.insert_resource(Net::new(client));
+            commands.insert_resource(SessionHandle::new(server));
+        }
+        SessionMode::Join { .. } => unreachable!(),
+    }
+
+    insert_common_session_resources(&mut commands, seed, size, persist, Some(&root), &name);
+}
+
+fn poll_host_handles(
+    handles: Res<HostSessionHandles>,
+    mut mp_info: ResMut<MultiplayerSessionInfo>,
+) {
+    if let Some(rx) = handles.lobby_code_rx.as_ref()
+        && let Ok(guard) = rx.lock()
+        && let Ok(code) = guard.try_recv()
+    {
+        mp_info.join_code = Some(code);
+    }
+    let count = mp_info.players.len().max(1).min(u8::MAX as usize) as u8;
+    if handles.lobby_player_count.swap(count, Ordering::Relaxed) != count
+        && let Some(beacon) = handles.lan_beacon.as_ref()
+    {
+        beacon.update_players(count);
+    }
 }
 
 fn session_teardown(world: &mut World) {
+    let mut pending_iroh_host = None;
+    if let Some(mut handles) = world.remove_resource::<HostSessionHandles>() {
+        handles.stop_discovery();
+        pending_iroh_host = handles
+            .iroh_host
+            .get_mut()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+    }
     if let Some(net) = world.get_resource::<Net>() {
         let _ = net.send(ClientMsg::Bye);
     }
@@ -385,26 +693,41 @@ fn session_teardown(world: &mut World) {
     world.remove_resource::<ClientClock>();
     world.remove_resource::<NetState>();
     world.insert_resource(ChunkStream::default());
+    let is_join = matches!(
+        world.get_resource::<SessionMode>(),
+        Some(SessionMode::Join { .. })
+    );
     if let Some(map) = world.remove_resource::<crate::hud::map::ExploredMap>() {
-        let selected_world = world.get_resource::<SelectedWorld>();
-        let save_root = world.get_resource::<SaveRoot>();
-        let persist = selected_world.as_ref().is_some_and(|w| w.persist);
-        if persist && map.dirty {
-            let name = selected_world.map_or("Default", |w| &w.name);
-            let root = save_root.map_or_else(
-                || SaveCfg::from_args_env(&[], |k| std::env::var(k).ok()).root,
-                |r| r.0.clone(),
-            );
-            let map_path = root
-                .join(terravibe_server::save::sanitize(name, "world1"))
-                .join("map.bin");
-            let _ = map.save_to(&map_path);
+        if !is_join {
+            let selected_world = world.get_resource::<SelectedWorld>();
+            let save_root = world.get_resource::<SaveRoot>();
+            let persist = selected_world.as_ref().is_some_and(|w| w.persist);
+            if persist && map.dirty {
+                let name = selected_world.map_or("Default", |w| &w.name);
+                let root = save_root.map_or_else(
+                    || SaveCfg::from_args_env(&[], |k| std::env::var(k).ok()).root,
+                    |r| r.0.clone(),
+                );
+                let map_path = root
+                    .join(terravibe_server::save::sanitize(name, "world1"))
+                    .join("map.bin");
+                let _ = map.save_to(&map_path);
+            }
         }
     }
     if let Some(mut handle) = world.remove_resource::<SessionHandle>() {
         if let Some(join) = handle.0.take() {
             world.insert_resource(SessionStopping::new(join));
+            if let Some(host) = pending_iroh_host.take() {
+                world.insert_resource(HostNetworkStopping(Mutex::new(Some(host))));
+            }
         }
+    }
+    if let Some(host) = pending_iroh_host.take() {
+        host.shutdown();
+    }
+    if let Some(mut mp) = world.get_resource_mut::<MultiplayerSessionInfo>() {
+        *mp = MultiplayerSessionInfo::default();
     }
     if let Some(mut boss) = world.get_resource_mut::<crate::hud::boss_bar::BossState>() {
         boss.clear();
@@ -481,6 +804,7 @@ fn session_teardown(world: &mut World) {
 fn stopping_poll(mut commands: Commands, stopping: Res<SessionStopping>) {
     if stopping.0.as_ref().is_some_and(|h| h.is_finished()) {
         commands.remove_resource::<SessionStopping>();
+        commands.remove_resource::<HostNetworkStopping>();
     }
 }
 
@@ -1302,5 +1626,76 @@ mod tests {
         );
         assert!(!world.resource::<crate::net::LocalWorldFacts>().0.downed_eye);
         assert_eq!(world.resource::<crate::hud::HurtFlash>().ticks, 0.0);
+    }
+
+    #[test]
+    fn join_invalid_ticket_sets_session_error_without_panicking() {
+        let root = tmp();
+        let mut app = test_app(root);
+        app.insert_resource(SessionMode::Join {
+            ticket: "not-a-valid-ticket".into(),
+            password: None,
+        });
+        set_state(&mut app, AppState::InGame);
+        app.update();
+
+        assert!(
+            app.world().resource::<SessionError>().0.is_some(),
+            "invalid ticket must set SessionError"
+        );
+        assert!(
+            !app.world().contains_resource::<Net>(),
+            "failed join must not insert Net"
+        );
+        assert!(
+            !app.world().contains_resource::<SessionHandle>(),
+            "join mode must not spawn a local server"
+        );
+    }
+
+    #[test]
+    fn host_session_starts_with_ticket_fallback_and_tears_down_cleanly() {
+        let root = tmp();
+        let mut app = test_app(root);
+        app.insert_resource(SelectedWorld {
+            name: "HostWorld".into(),
+            seed: 99,
+            persist: false,
+            ..Default::default()
+        });
+        app.insert_resource(SessionMode::Host {
+            max_players: 6,
+            password: Some("pw123".into()),
+            public: false,
+        });
+        set_state(&mut app, AppState::InGame);
+        app.update();
+
+        assert!(app.world().contains_resource::<Net>());
+        assert!(app.world().contains_resource::<SessionHandle>());
+        assert!(app.world().contains_resource::<HostSessionHandles>());
+        let mp = app.world().resource::<MultiplayerSessionInfo>();
+        assert!(mp.is_host);
+        assert_eq!(mp.max_players, 6);
+        assert!(mp.ticket.as_deref().is_some_and(|t| t.starts_with("tv1:")));
+        assert!(mp.join_code.is_some());
+
+        set_state(&mut app, AppState::Menu);
+        app.update();
+        assert!(!app.world().contains_resource::<HostSessionHandles>());
+        let mp_after = app.world().resource::<MultiplayerSessionInfo>();
+        assert!(!mp_after.is_host);
+        assert!(mp_after.ticket.is_none());
+        assert!(mp_after.join_code.is_none());
+        assert!(mp_after.players.is_empty());
+
+        let mut spins = 0;
+        while app.world().contains_resource::<SessionStopping>() {
+            app.update();
+            spins += 1;
+            assert!(spins < 10_000, "host server never finished stopping");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(!app.world().contains_resource::<HostNetworkStopping>());
     }
 }
