@@ -480,11 +480,20 @@ pub fn build_fixture(kind: FixtureKind, root: &Path, world: &str) -> io::Result<
         }
     }
 
+    let (armor, life_max) = if kind == FixtureKind::Combat {
+        (
+            [Some(IRON_HELMET), Some(IRON_CHAINMAIL), Some(IRON_GREAVES)],
+            200,
+        )
+    } else {
+        ([None, None, None], 100)
+    };
+
     let player_save = PlayerSave {
         inventory: inv,
-        armor: [None, None, None],
-        life_max: 100,
-        life: 100,
+        armor,
+        life_max,
+        life: life_max,
         pos: [sx, sy, sz],
         potion_delay: 0,
     };
@@ -730,5 +739,23 @@ mod tests {
             .expect("load world")
             .expect("snapshot exists");
         assert!(snap.clock_tick >= terravibe_sim::time::DAY_TICKS);
+    }
+
+    #[test]
+    fn combat_fixture_has_survivability_headroom() {
+        let (root, _guard) = test_dir("combat_headroom");
+        build_fixture(FixtureKind::Combat, &root, "combat_world").expect("build combat fixture");
+        let snap = SaveDir::open(&root, "combat_world")
+            .expect("open save dir")
+            .load_world()
+            .expect("load world")
+            .expect("snapshot exists");
+        let (_, player) = &snap.players[0];
+        assert_eq!(player.life_max, 200);
+        assert_eq!(player.life, 200);
+        assert_eq!(
+            player.armor,
+            [Some(IRON_HELMET), Some(IRON_CHAINMAIL), Some(IRON_GREAVES)]
+        );
     }
 }
