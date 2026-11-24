@@ -18,7 +18,7 @@ use terravibe_sim::combat::{
 };
 use terravibe_sim::crafting::{CraftError, RecipeId, craft_with_rng, recipe, station_in_reach};
 use terravibe_sim::drop::{
-    Drop, DropId, heart_drop, loot_for, tick_drop, try_pickup, try_pickup_heart,
+    Drop, DropId, heart_drop, loot_for, magnetize_drop, tick_drop, try_pickup, try_pickup_heart,
 };
 use terravibe_sim::enemy::{Enemy, EnemyId, EnemyKind, tick_enemy};
 use terravibe_sim::interact::{
@@ -3749,7 +3749,20 @@ impl Server {
         let guide_alive = self.town_alive(TownKind::Guide);
         let wof_active = self.wof.is_some();
         let mut wof_summon_pos: Option<[f32; 3]> = None;
+        let player_centers: Vec<[f32; 3]> = self
+            .conns
+            .iter()
+            .filter(|c| !c.dead)
+            .filter_map(|c| c.player.as_ref())
+            .filter(|p| p.vitals.life > 0)
+            .map(|p| p.body.pos)
+            .collect();
         for d in &mut self.drops {
+            for &pc in &player_centers {
+                if magnetize_drop(d, pc) {
+                    break;
+                }
+            }
             tick_drop(&WorldQ(&self.world), d);
             bounds.clamp_body(&mut d.pos, &mut d.vel, 0.25);
             if d.stack.id == terravibe_sim::item::GUIDE_VOODOO_DOLL

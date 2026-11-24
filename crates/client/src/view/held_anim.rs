@@ -4,8 +4,9 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 use terravibe_sim::item::{
-    CLOCKWORK_ASSAULT_RIFLE, COPPER_SHORTSWORD, FLINTLOCK_PISTOL, HANDGUN, ItemClass, ItemId,
-    MINISHARK, MUSKET, PHOENIX_BLASTER, SPEAR, TORCH, item_data,
+    BEE_GUN, CLOCKWORK_ASSAULT_RIFLE, COPPER_SHORTSWORD, DARK_LANCE, FIRECRACKER, FLINTLOCK_PISTOL,
+    HANDGUN, ItemClass, ItemId, LASER_RIFLE, MINISHARK, MUSKET, PHOENIX_BLASTER, SPACE_GUN, SPEAR,
+    STAR_CANNON, TORCH, item_data,
 };
 
 /// Held-item view-space rest anchor (in camera local space).
@@ -92,13 +93,18 @@ pub struct HeldAnimTracker {
 pub fn held_anim_kind(id: ItemId) -> HeldAnimKind {
     match id {
         COPPER_SHORTSWORD => HeldAnimKind::ShortswordStab,
-        SPEAR => HeldAnimKind::SpearThrust,
+        SPEAR | DARK_LANCE => HeldAnimKind::SpearThrust,
+        FIRECRACKER => HeldAnimKind::WhipSnap,
         FLINTLOCK_PISTOL
         | MUSKET
         | MINISHARK
         | HANDGUN
         | PHOENIX_BLASTER
-        | CLOCKWORK_ASSAULT_RIFLE => HeldAnimKind::GunFire,
+        | CLOCKWORK_ASSAULT_RIFLE
+        | SPACE_GUN
+        | STAR_CANNON
+        | BEE_GUN
+        | LASER_RIFLE => HeldAnimKind::GunFire,
         _ => {
             let d = item_data(id);
             if d.name.contains("Whip") {

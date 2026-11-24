@@ -30,8 +30,10 @@ pub struct Drop {
 pub const DROP_GRAVITY: f32 = 0.4 * PX_TO_BLOCKS;
 /// Reach (blocks) from the player's centre.
 pub const PICKUP_RADIUS: f32 = 1.5;
+/// Magnetic pull-in radius (blocks) from the player's centre.
+pub const MAGNET_RADIUS: f32 = 3.5;
 /// Ticks between spawning and being collectable (also after a failed pickup).
-pub const PICKUP_DELAY: i32 = 30;
+pub const PICKUP_DELAY: i32 = 15;
 
 impl Drop {
     pub fn new(id: DropId, stack: ItemStack, pos: [f32; 3]) -> Drop {
@@ -274,6 +276,28 @@ pub fn try_pickup_heart(d: &mut Drop, v: &mut Vitals, player_pos: [f32; 3]) -> b
         v.heal(HEART_HEAL);
     }
     d.stack.count = 0;
+    true
+}
+
+/// Pulls a drop smoothly toward `player_pos` when within [`MAGNET_RADIUS`].
+/// Returns `true` if the drop was magnetized.
+pub fn magnetize_drop(d: &mut Drop, player_pos: [f32; 3]) -> bool {
+    if d.pickup_delay > 0 {
+        return false;
+    }
+    let dx = player_pos[0] - d.pos[0];
+    let dy = player_pos[1] - d.pos[1];
+    let dz = player_pos[2] - d.pos[2];
+    let dist2 = dx * dx + dy * dy + dz * dz;
+    if dist2 > MAGNET_RADIUS * MAGNET_RADIUS || dist2 < 1e-4 {
+        return false;
+    }
+    let dist = dist2.sqrt();
+    let speed = 0.22;
+    d.vel[0] = (dx / dist) * speed;
+    d.vel[1] = (dy / dist) * speed;
+    d.vel[2] = (dz / dist) * speed;
+    d.on_ground = false;
     true
 }
 

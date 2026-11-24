@@ -55,7 +55,7 @@ pub struct LocalAppearance(pub Option<Appearance>);
 /// Held item scale on the avatar, and the hand's rest spot in `arm_r` space
 /// (blocks, below the shoulder pivot).
 const HELD_SCALE: f32 = 0.72;
-const HAND_POS: Vec3 = Vec3::new(0.0, -11.0 / VOXELS_PER_UNIT, 0.0);
+const HAND_POS: Vec3 = Vec3::new(0.0, -9.5 / VOXELS_PER_UNIT, 0.06);
 /// First-person size of a held model, blocks across its longest side.
 const FP_SIZE: f32 = 0.55;
 /// Horizontal speed (blocks per tick) above which the walk anim plays.
@@ -636,14 +636,8 @@ pub(crate) fn spawn_player_rig_parts(
     let dir = art_dir().join("models/player");
     let rig = rig::load(&dir);
     let mut rig_cache = rig_view::MeshCache::default();
-    let (root, material) = rig_view::spawn_rig_with(
-        commands,
-        meshes,
-        materials,
-        &rig,
-        &dir,
-        &mut rig_cache,
-    );
+    let (root, material) =
+        rig_view::spawn_rig_with(commands, meshes, materials, &rig, &dir, &mut rig_cache);
     commands.entity(root).insert((
         Transform::from_scale(Vec3::splat(AVATAR_SCALE)),
         DespawnOnExit(AppState::InGame),
@@ -887,7 +881,8 @@ pub(crate) fn tp_held_rotation(upright: bool) -> Quat {
     if upright {
         Quat::from_mat3(&Mat3::from_cols(Vec3::Y, Vec3::Z, Vec3::X))
     } else {
-        Quat::from_mat3(&Mat3::from_cols(Vec3::Z, Vec3::NEG_Y, Vec3::X))
+        Quat::from_rotation_x(-0.95)
+            * Quat::from_mat3(&Mat3::from_cols(Vec3::Z, Vec3::NEG_Y, Vec3::X))
     }
 }
 
@@ -1200,7 +1195,7 @@ mod tests {
 
     #[test]
     fn hand_and_first_person_scale_follow_voxel_unit() {
-        assert_eq!(HAND_POS.y * VOXELS_PER_UNIT, -11.0);
+        assert_eq!(HAND_POS.y * VOXELS_PER_UNIT, -9.5);
         // A 16-voxel-tall item is exactly one block, so it scales by FP_SIZE.
         assert_eq!(fp_scale(16.0, 16.0), FP_SIZE / 1.0);
         assert_eq!(fp_scale(8.0, 32.0), FP_SIZE / 2.0);
@@ -1307,22 +1302,21 @@ mod tests {
     fn tp_held_rotation_extends_tools_forward_and_outward() {
         let tool_rot = tp_held_rotation(false);
         assert!(tool_rot.is_normalized());
-        // Model diagonal (+1, +1, 0) in arm_r local space must extend outward
-        // along -Y (past the hand) and forward (+Z), never up into the shoulder.
+        // Model diagonal (+1, +1, 0) in arm_r local space must extend forward (+Z)
+        // and slightly upward (+Y) so tools/swords never clip into the floor.
         let tip_in_arm = tool_rot * Vec3::new(1.0, 1.0, 0.0);
         assert!(
-            tip_in_arm.y < -0.5,
-            "tip should extend past hand: {tip_in_arm:?}"
+            tip_in_arm.y > 0.0,
+            "tip should angle upward away from floor: {tip_in_arm:?}"
         );
         assert!(
             tip_in_arm.z > 0.5,
             "tip should point forward: {tip_in_arm:?}"
         );
 
-        // When arm_r is raised forward by -90 deg around X, tip points world +Z/+Y.
+        // When arm_r is raised forward by -90 deg around X, tip points world +Y (overhead).
         let arm_forward = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
         let tip_in_world = arm_forward * tip_in_arm;
-        assert!(tip_in_world.z > 0.5, "world forward +Z: {tip_in_world:?}");
         assert!(tip_in_world.y > 0.5, "world up +Y: {tip_in_world:?}");
 
         let upright_rot = tp_held_rotation(true);
@@ -1331,7 +1325,7 @@ mod tests {
         // Axe cutting edge (+X in model space) must point forward (+Z in arm_r space)
         let edge_in_arm = tool_rot * Vec3::X;
         assert!(
-            edge_in_arm.z > 0.9,
+            edge_in_arm.z > 0.5,
             "tool/axe cutting edge (+X) must face forward (+Z) in arm_r: {edge_in_arm:?}"
         );
     }
