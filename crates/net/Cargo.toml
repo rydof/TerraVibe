@@ -1,0 +1,16 @@
+[package]
+name = "terravibe_net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+terravibe_sim = { path = "../sim" }
+terravibe_lobby = { path = "../lobby" }
+iroh = "1"
+lz4_flex = "0.11"
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+thiserror.workspace = true
+tokio = { version = "1", features = ["io-util", "macros", "rt-multi-thread", "sync", "time"] }
+ureq = { version = "2", features = ["json"] }
