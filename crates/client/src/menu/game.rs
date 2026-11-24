@@ -16,7 +16,7 @@ use super::{Action, MenuButton};
 use crate::net::{LoadingStage, NetState};
 use crate::session::{
     AppState, GameMenu, GamePanel, MenuScreen, MultiplayerSessionInfo, SelectedWorld, SessionError,
-    SessionStopping,
+    SessionMode, SessionStopping,
 };
 use crate::settings::Settings;
 use crate::view::camera::set_grab;
@@ -464,6 +464,54 @@ pub fn handle_game_menu_actions(
     }
 }
 
+/// Word-wraps Guide advice text for SpriteFont [`MenuText`] so it stays cleanly inside the Game
+/// Menu panel width and vertical header budget without overflowing.
+pub fn wrap_guide_advice(text: &str, max_chars: usize, max_lines: usize) -> String {
+    if max_chars == 0 || max_lines == 0 {
+        return String::new();
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+
+    for word in text.split_whitespace() {
+        let word_len = word.chars().count();
+        if current.is_empty() {
+            if word_len > max_chars {
+                current = word.chars().take(max_chars).collect();
+            } else {
+                current.push_str(word);
+            }
+        } else if current.chars().count() + 1 + word_len <= max_chars {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(std::mem::take(&mut current));
+            if lines.len() == max_lines {
+                if let Some(last) = lines.last_mut() {
+                    let keep = max_chars.saturating_sub(3);
+                    let mut truncated: String = last.chars().take(keep).collect();
+                    while truncated.ends_with(' ') {
+                        truncated.pop();
+                    }
+                    truncated.push_str("...");
+                    *last = truncated;
+                }
+                return lines.join("\n");
+            }
+            if word_len > max_chars {
+                current = word.chars().take(max_chars).collect();
+            } else {
+                current.push_str(word);
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines.join("\n")
+}
+
 fn spawn_game_root_ui(commands: &mut Commands, advice: &str, viewport: (f32, f32)) {
     let (win_w, win_h) = viewport;
     let center_x = win_w * 0.5;
@@ -516,13 +564,14 @@ fn spawn_game_root_ui(commands: &mut Commands, advice: &str, viewport: (f32, f32
                 GameRootUi,
             ));
             if !advice.is_empty() {
+                let wrapped = wrap_guide_advice(&format!("Guide's Advice: {advice}"), 44, 3);
                 p.spawn((
                     Node {
-                        margin: UiRect::bottom(Val::Px(16.0)),
+                        margin: UiRect::bottom(Val::Px(12.0)),
                         max_width: Val::Px(420.0),
                         ..default()
                     },
-                    MenuText::new(&format!("Guide's Advice: {advice}"), 0.8),
+                    MenuText::new(wrapped, 0.72),
                     GameRootUi,
                 ));
             }
@@ -737,6 +786,7 @@ pub fn sync_game_root_ui(
     confirm_entities: Query<Entity, With<ConfirmQuitUi>>,
     controls_entities: Query<Entity, With<ControlsUiRoot>>,
     advice_state: Option<Res<GuideAdviceState>>,
+    session_mode: Option<Res<SessionMode>>,
     mp_info: Option<Res<MultiplayerSessionInfo>>,
     settings: Option<Res<crate::settings::Settings>>,
     primary_window: Option<Query<&Window, With<PrimaryWindow>>>,
@@ -765,9 +815,14 @@ pub fn sync_game_root_ui(
         }
     }
 
-    let mp_has_info = mp_info
-        .as_ref()
-        .is_some_and(|m| m.join_code.is_some() || !m.players.is_empty());
+    let is_multiplayer = matches!(
+        session_mode.as_deref(),
+        Some(SessionMode::Host { .. } | SessionMode::Join { .. })
+    );
+    let mp_has_info = is_multiplayer
+        && mp_info
+            .as_ref()
+            .is_some_and(|m| m.join_code.is_some() || !m.players.is_empty());
     let mp_should_show = should_show && mp_has_info;
     let mp_exists = mp_card_entities.iter().next().is_some();
     let mp_changed = mp_info.as_ref().is_some_and(|m| m.is_changed());
@@ -3354,6 +3409,11 @@ mod tests {
             .resource_mut::<NextState<AppState>>()
             .set(AppState::InGame);
         app.update();
+        app.insert_resource(SessionMode::Host {
+            max_players: 8,
+            password: None,
+            public: false,
+        });
         app.insert_resource(MultiplayerSessionInfo {
             join_code: Some("TV4K9P".to_string()),
             ticket: Some("iroh-ticket-full-value".to_string()),
@@ -3408,5 +3468,57 @@ mod tests {
             "iroh_tic...cdef"
         );
         assert_eq!(format_join_code_display("TV4K9P"), "TV4K9P");
+    }
+
+    #[test]
+    fn pause_menu_hides_multiplayer_card_in_singleplayer() {
+        let mut app = base_test_app();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::InGame);
+        app.update();
+        app.insert_resource(SessionMode::SinglePlayer);
+        // Even when the local server sends a 1-player PlayerList, SinglePlayer must not spawn
+        // the MultiplayerInfoCardUi.
+        app.insert_resource(MultiplayerSessionInfo {
+            join_code: None,
+            ticket: None,
+            is_host: false,
+            max_players: 1,
+            players: vec![(1, "Solo".to_string())],
+        });
+        open_pause_menu(&mut app);
+
+        let mp_card_count = app
+            .world_mut()
+            .query::<&MultiplayerInfoCardUi>()
+            .iter(app.world())
+            .count();
+        assert_eq!(
+            mp_card_count, 0,
+            "SessionMode::SinglePlayer must not spawn MultiplayerInfoCardUi"
+        );
+    }
+
+    #[test]
+    fn guide_advice_wraps_within_panel_budget() {
+        let wrapped = wrap_guide_advice(
+            "Guide's Advice: You should build a shelter before monsters arrive at night.",
+            44,
+            3,
+        );
+        let lines: Vec<&str> = wrapped.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines.iter().all(|l| l.chars().count() <= 44));
+
+        let long = wrap_guide_advice(
+            "Guide's Advice: Mine Hellstone with a Nightmare Pickaxe and smelt Hellstone Bars with Obsidian at a Hellforge for Molten gear, then drop a Guide Voodoo Doll into Underworld lava to summon the Wall of Flesh.",
+            44,
+            3,
+        );
+        let long_lines: Vec<&str> = long.lines().collect();
+        assert_eq!(long_lines.len(), 3);
+        assert!(long_lines.iter().all(|l| l.chars().count() <= 44));
+        assert!(long_lines.last().unwrap().ends_with("..."));
     }
 }
