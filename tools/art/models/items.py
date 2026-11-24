@@ -17,11 +17,20 @@ from vox import Model
 
 OUT = os.path.join(ASSETS, "models", "items")
 N = 19  # 1.2 blocks at 16 voxels per block
-HANDLE = hexc("#8a5a2c")
-HANDLE_D = hexc("#5e3b1c")
-HANDLE_L = hexc("#b07a40")
-GRIP = hexc("#3c2a1a")  # the pommel and the leather wrap band
+HANDLE_DD = hexc("#3f2511")  # deep wood grain groove
+HANDLE_D = hexc("#5e3b1c")   # dark shaded oak
+HANDLE = hexc("#8a5a2c")     # warm oak wood
+HANDLE_L = hexc("#b57e44")   # sunlit oak highlight
+HANDLE_LL = hexc("#d49e62")  # wood bevel specular
+LEATHER_D = hexc("#2b1c12")  # deep leather wrap shadow
+LEATHER = hexc("#472e1c")    # rich dark leather grip
+LEATHER_L = hexc("#6e472b")  # leather cross-wrap highlight
+GRIP = LEATHER               # alias for legacy callers
+FERRULE_D = hexc("#4f5562")  # dark metal ferrule shadow
+FERRULE = hexc("#848c9c")    # brushed metal ferrule
+FERRULE_L = hexc("#c8d0de")  # specular ferrule glint
 STRING = hexc("#f2ecd8")
+STRING_D = hexc("#cfc5a8")
 FEATHER = hexc("#ffffff")
 FEATHER_D = hexc("#c8ccd6")
 FLAME_W = hexc("#fff3a0")
@@ -29,15 +38,51 @@ FLAME_Y = hexc("#ffcf33")
 FLAME_O = hexc("#ff8a1e")
 FLAME_R = hexc("#d9480f")
 
-# (main, light, dark) per metal tier.
+# 5-tone metallic ramps: (shadow, dark, main, light, spec) per metal tier.
 METAL = {
-    "copper": (COPPER, COPPER_L, hexc("#9c4a18")),
-    "iron": (hexc("#a9aebb"), hexc("#e3e7ee"), hexc("#6c7280")),
-    "silver": (SILVER, SILVER_L, hexc("#8493ac")),
-    "gold": (GOLD, GOLD_L, hexc("#b08a14")),
-    "demonite": (DEMONITE, DEMONITE_L, DEMONITE_D),
-    # M10 Molten tier: dark basalt body, molten yellow edge, deep magma bevel.
-    "molten": (hexc("#332b34"), FLAME_Y, hexc("#7a1c06")),
+    "copper": (
+        hexc("#5c260a"),
+        hexc("#964215"),
+        COPPER,
+        COPPER_L,
+        hexc("#ffd7a8"),
+    ),
+    "iron": (
+        hexc("#3e434f"),
+        hexc("#6b7282"),
+        hexc("#a6adb9"),
+        hexc("#d5dbe6"),
+        hexc("#f5f8ff"),
+    ),
+    "silver": (
+        hexc("#4b5a73"),
+        hexc("#7e90ad"),
+        SILVER,
+        SILVER_L,
+        hexc("#ffffff"),
+    ),
+    "gold": (
+        hexc("#6e4c06"),
+        hexc("#b08210"),
+        GOLD,
+        GOLD_L,
+        hexc("#fff7b8"),
+    ),
+    "demonite": (
+        hexc("#1c112b"),
+        DEMONITE_D,
+        DEMONITE,
+        DEMONITE_L,
+        hexc("#e6c2ff"),
+    ),
+    # M10 Molten tier: volcanic crust shadow, smoldering dark, basalt body, molten orange, white-hot spec.
+    "molten": (
+        hexc("#1a141c"),
+        hexc("#6e1f0a"),
+        hexc("#332b34"),
+        FLAME_O,
+        FLAME_W,
+    ),
 }
 
 # Item ids: gameplay spec via crates/sim/src/item/mod.rs.
@@ -59,24 +104,76 @@ def px_full(m, x, y, c):
     px(m, x, y, c, 0, m.size[2] - 1)
 
 
+def px4(m, x, y, c_back, c_mid=None, c_front=None):
+    """Full 4-layer Z shading (z=0 back, z=1..2 core, z=3 front); safe for z=2 models."""
+    if c_mid is None:
+        c_mid = c_back
+    if c_front is None:
+        c_front = c_mid
+    nz = m.size[2]
+    if nz <= 2:
+        for z in range(nz):
+            m.set(x, y, z, c_front if z == nz - 1 else c_mid)
+    else:
+        m.set(x, y, 0, c_back)
+        m.set(x, y, 1, c_mid)
+        m.set(x, y, 2, c_mid)
+        m.set(x, y, 3, c_front)
+
+
+def px2(m, x, y, c_back, c_front=None):
+    """Inner 2-layer Z shading (z=1 back-core, z=2 front-core); safe for z=2 models."""
+    if c_front is None:
+        c_front = c_back
+    nz = m.size[2]
+    if nz <= 2:
+        for z in range(nz):
+            m.set(x, y, z, c_front if z == nz - 1 else c_back)
+    else:
+        m.set(x, y, 1, c_back)
+        m.set(x, y, 2, c_front)
+
+
 def save(m, item_id):
     m.save(os.path.join(OUT, f"{item_id}.vox"))
 
 
-def handle(m, end):
-    """Sculpted 3D wooden handle on the diagonal from the pommel (0,0) to (end,end)
-    with a 4-voxel pommel cap, rounded grip spine, and leather wrap bands."""
-    # Rounded 4-voxel pommel cap
-    px_full(m, 0, 0, GRIP)
-    px_full(m, 1, 1, GRIP)
-    px(m, 1, 0, HANDLE_D)
-    px(m, 0, 1, HANDLE_D)
+def handle(m, end, metal=None):
+    """Sculpted 3D wooden handle on the diagonal from pommel (0,0) to (end,end)
+    with a metallic pommel cap, leather cross-wrap highlights, varied wood grain,
+    and a metal ferrule collar at the top."""
+    if metal is not None and metal in METAL:
+        m_sh, m_d, m_m, m_l, m_sp = METAL[metal]
+    else:
+        m_sh, m_d, m_m, m_l, m_sp = FERRULE_D, FERRULE_D, FERRULE, FERRULE_L, FERRULE_L
+    # Sculpted 4-voxel metallic pommel cap with specular stud
+    px4(m, 0, 0, m_sh, m_m, m_sp)
+    px2(m, 1, 0, m_sh, m_d)
+    px2(m, 0, 1, m_d, m_l)
+    # Leather collar base just above pommel
+    px4(m, 1, 1, LEATHER_D, LEATHER, LEATHER_L)
+    px2(m, 2, 1, LEATHER_D, HANDLE_DD)
+    px2(m, 1, 2, LEATHER, LEATHER_L)
+    # Diagonal shaft: leather cross-wrapped grip + varied hardwood grain + ferrule
     for i in range(2, end + 1):
-        wrap = (i % 2 == 0)
-        # Central spine is full 4 voxels thick; shaded sides taper to 2 voxels
-        px_full(m, i, i, GRIP if wrap else HANDLE_L)
-        px(m, i + 1, i, HANDLE_D)
-        px(m, i, i + 1, HANDLE)
+        is_ferrule = (i == end and end >= 4)
+        is_wrap = (not is_ferrule) and (i <= 4 or (i % 3 == 0 and i < end - 1))
+        if is_ferrule:
+            px4(m, i, i, m_sh, m_m, m_l)
+            px2(m, i + 1, i, m_sh, m_d)
+            px2(m, i, i + 1, m_m, m_l)
+        elif is_wrap:
+            # Diagonal leather cross-wrap with stitched highlight
+            px4(m, i, i, LEATHER_D, LEATHER, LEATHER_L if i % 2 == 0 else LEATHER)
+            px2(m, i + 1, i, LEATHER_D, HANDLE_DD)
+            px2(m, i, i + 1, LEATHER, LEATHER_L)
+        else:
+            # Varied hardwood grain along the shaft
+            grain_spine = HANDLE_LL if i % 3 == 1 else HANDLE_L
+            grain_back = HANDLE_DD if i % 2 == 0 else HANDLE_D
+            px4(m, i, i, grain_back, HANDLE, grain_spine)
+            px2(m, i + 1, i, HANDLE_DD, HANDLE_D)
+            px2(m, i, i + 1, HANDLE, HANDLE_L if i % 2 == 1 else HANDLE)
 
 
 def pickaxe(tier, item_id):
@@ -86,175 +183,242 @@ def pickaxe(tier, item_id):
     if tier == "molten":
         molten_pickaxe()
         return
-    main, light, dark = METAL[tier]
+    shadow, dark, main, light, spec = METAL[tier]
     m = Model(N, N, 4)
-    handle(m, 9)
-    # Heavy 4-voxel socket/collar joining head to handle
+    handle(m, 9, metal=tier)
+    # Heavy 4-voxel riveted socket collar joining head to handle
     for x in range(9, 12):
         for y in range(9, 12):
-            px_full(m, x, y, dark)
-    px_full(m, 10, 10, main)
-    # Curved pickaxe head: central ridge is 4 voxels thick, beveled edges 2 voxels thick
+            px4(m, x, y, shadow, dark, main)
+    px4(m, 10, 10, dark, main, spec)   # raised center collar rivet
+    px4(m, 11, 11, dark, main, light)  # crown socket cap
+    px2(m, 12, 12, HANDLE_D, HANDLE_L)  # wood tang cap protruding at top
+    # Curved pickaxe head: central fuller groove, beveled spine, and gleaming cutting edges
     for x in range(6, 15):
         y_center = 20 - x
-        px_full(m, x, y_center, main)
-        px(m, x, y_center - 1, dark)
-        px(m, x, y_center + 1, light)
-    # Upper pick horn tapering to sharp point
-    px_full(m, 5, 15, main)
-    px(m, 5, 14, dark)
-    px(m, 4, 15, light)
-    px(m, 4, 14, dark)
-    # Lower pick horn tapering to sharp point
-    px_full(m, 15, 5, main)
-    px(m, 14, 5, dark)
-    px(m, 15, 4, light)
-    px(m, 14, 4, dark)
+        dist = abs(x - 10)
+        # Central spine with darker recessed fuller toward the center
+        if dist in (1, 2):
+            px4(m, x, y_center, shadow, dark, main)
+        else:
+            px4(m, x, y_center, dark, main, light)
+        # Underside beveled shadow edge
+        px2(m, x, y_center - 1, shadow, dark)
+        # Upper/outer cutting edge with bright specular glint
+        if dist >= 3:
+            px2(m, x, y_center + 1, light, spec)
+        else:
+            px2(m, x, y_center + 1, main, light)
+    # Upper pick horn tapering to sharp specular point
+    px4(m, 5, 15, dark, main, light)
+    px2(m, 5, 14, shadow, dark)
+    px2(m, 4, 15, light, spec)
+    px2(m, 4, 14, dark, main)
+    m.set(3, 14, 1, light)
+    m.set(3, 14, 2, spec)
+    # Lower pick horn tapering to sharp specular point
+    px4(m, 15, 5, dark, main, light)
+    px2(m, 14, 5, shadow, dark)
+    px2(m, 15, 4, light, spec)
+    px2(m, 14, 4, dark, main)
+    m.set(14, 3, 1, light)
+    m.set(14, 3, 2, spec)
     save(m, item_id)
 
 
 def nightmare_pickaxe():
     """Terraria Nightmare Pickaxe (22x22x4): curved jagged demonite horns & glowing eye socket."""
-    main, light, dark = METAL["demonite"]
+    shadow, dark, main, light, spec = METAL["demonite"]
     m = Model(22, 22, 4)
-    handle(m, 11)
+    handle(m, 11, metal="demonite")
     for x in range(10, 14):
         for y in range(10, 14):
-            px_full(m, x, y, dark)
-    px_full(m, 12, 12, light)  # glowing violet eye socket
-    px_full(m, 11, 11, EBONSTONE_DD)
+            px4(m, x, y, shadow, dark, main)
+    px4(m, 12, 12, light, light, spec)     # glowing violet eye socket
+    px4(m, 11, 11, shadow, shadow, dark)   # deep obsidian pupil/recess
+    px2(m, 13, 13, dark, light)            # horned crest
     for d in range(-6, 7):
         cx = 12 + d
         cy = 12 - d + (abs(d) // 3)
         if 1 <= cx < 21 and 1 <= cy < 21:
-            px_full(m, cx, cy, main)
-            px(m, cx, cy + 1, light if abs(d) >= 3 else main)
-            px(m, cx, cy - 1, dark)
+            if abs(d) in (1, 2):
+                px4(m, cx, cy, shadow, dark, main)  # recessed fuller
+            else:
+                px4(m, cx, cy, dark, main, light)
+            if abs(d) >= 4:
+                px2(m, cx, cy + 1, light, spec)
+            elif abs(d) >= 2:
+                px2(m, cx, cy + 1, main, light)
+            else:
+                px2(m, cx, cy + 1, dark, main)
+            px2(m, cx, cy - 1, shadow, dark)
             if abs(d) in (3, 5):  # jagged demonite barbs
-                px(m, cx - (1 if d < 0 else 0), cy - 2, dark)
+                bx = cx - (1 if d < 0 else 0)
+                if 1 <= bx < 21 and 1 <= cy - 2 < 21:
+                    px2(m, bx, cy - 2, shadow, light)
     # Sharp curved pick tips
-    px_full(m, 5, 19, light)
-    px(m, 4, 20, light)
-    px_full(m, 19, 7, light)
-    px(m, 20, 6, light)
+    px4(m, 5, 19, main, light, spec)
+    px2(m, 4, 20, light, spec)
+    px4(m, 19, 7, main, light, spec)
+    px2(m, 20, 6, light, spec)
     save(m, 103)
 
 
 def molten_pickaxe():
     """Terraria Molten Pickaxe (22x22x4): blazing magma-rimmed basalt pick with curving fiery horns."""
-    main, _, dark = METAL["molten"]
+    shadow, dark, main, light, spec = METAL["molten"]
     m = Model(22, 22, 4)
-    handle(m, 11)
+    handle(m, 11, metal="molten")
     for x in range(10, 14):
         for y in range(10, 14):
-            px_full(m, x, y, dark)
-    px_full(m, 12, 12, FLAME_O)
+            px4(m, x, y, shadow, main, dark)
+    px4(m, 12, 12, FLAME_R, FLAME_O, FLAME_Y)  # glowing magma socket core
+    px4(m, 11, 11, shadow, shadow, main)
     for d in range(-6, 7):
         cx = 12 + d
         cy = 12 - d + (abs(d) // 3)
         if 1 <= cx < 21 and 1 <= cy < 21:
-            px_full(m, cx, cy, main if abs(d) < 4 else FLAME_R)
-            px(m, cx, cy + 1, FLAME_Y if abs(d) >= 3 else FLAME_O)
-            px(m, cx, cy - 1, dark)
-    px_full(m, 5, 19, FLAME_Y)
-    px(m, 4, 20, FLAME_W)
-    px_full(m, 19, 7, FLAME_Y)
-    px(m, 20, 6, FLAME_W)
+            if abs(d) < 3:
+                px4(m, cx, cy, shadow, main, FLAME_R)
+            elif abs(d) < 5:
+                px4(m, cx, cy, dark, FLAME_R, FLAME_O)
+            else:
+                px4(m, cx, cy, FLAME_R, FLAME_O, FLAME_Y)
+            px2(m, cx, cy + 1, FLAME_O if abs(d) < 3 else FLAME_Y, FLAME_Y if abs(d) < 4 else spec)
+            px2(m, cx, cy - 1, shadow, dark)
+    px4(m, 5, 19, FLAME_O, FLAME_Y, spec)
+    px2(m, 4, 20, FLAME_Y, spec)
+    px4(m, 19, 7, FLAME_O, FLAME_Y, spec)
+    px2(m, 20, 6, FLAME_Y, spec)
     save(m, 122)
 
 
 def axe(tier, item_id):
     """3D bearded battle-axe: long diagonal haft extending through a socketed collar
-    with a back poll, flared crescent blade on the +X (forward) side, sharp 1-2 voxel
-    cutting edge, and clear negative space under the beard."""
+    with a back poll, flared crescent blade on the +X (forward) side, recessed fuller,
+    sharp 1-voxel specular cutting edge, and clear negative space under the beard."""
     if tier == "demonite":
         war_axe_of_the_night()
         return
     if tier == "molten":
         molten_hamaxe()
         return
-    main, light, dark = METAL[tier]
+    shadow, dark, main, light, spec = METAL[tier]
     m = Model(N, N, 4)
-    handle(m, 12)
+    handle(m, 12, metal=tier)
     # Haft tip protruding cleanly above the socket
-    px_full(m, 13, 13, HANDLE_L)
-    # Narrow socket collar (10..12) with reinforced 4-voxel dark back poll
+    px4(m, 13, 13, HANDLE_D, HANDLE, HANDLE_LL)
+    # Narrow socket collar (10..12) with reinforced 4-voxel dark back poll & rivets
     for i in (10, 11, 12):
-        px_full(m, i, i, dark)
+        px4(m, i, i, shadow, dark, main)
+    px4(m, 11, 11, dark, main, spec)  # collar rivet stud
     for (x, y) in ((9, 11), (9, 12), (10, 12), (10, 13)):
-        px_full(m, x, y, dark)
+        px4(m, x, y, shadow, dark, main if y == 12 else dark)
+    px4(m, 10, 12, dark, main, light)  # poll highlight
     # Thick 4-voxel socket cheek tapering into the flared crescent blade (+X side)
     for (x, y) in ((11, 10), (12, 10), (12, 11), (13, 10), (13, 11)):
-        px_full(m, x, y, main)
-    px_full(m, 12, 12, dark)
-    # Mid-blade cheek (2 voxels thick in Z)
+        px4(m, x, y, shadow, dark if (x == 13 and y == 10) else main, light if y == 11 else main)
+    px4(m, 12, 12, shadow, dark, main)
+    # Mid-blade cheek (2 voxels thick in Z) with recessed fuller channel
     for (x, y) in (
         (13, 9),
         (14, 9), (14, 10), (14, 11), (14, 12),
         (15, 6), (15, 7), (15, 8), (15, 9), (15, 10), (15, 11), (15, 12),
     ):
-        px(m, x, y, main)
+        if x == 14 and y in (9, 10):
+            px2(m, x, y, shadow, dark)  # recessed cheek fuller
+        elif y >= 11:
+            px2(m, x, y, main, light)
+        else:
+            px2(m, x, y, dark, main)
     # Bearded lower hook (clear air gap at (10..13, 6..8) between beard and haft)
-    px(m, 14, 5, dark)
-    px(m, 15, 5, main)
-    # Inner bevel (2 voxels thick) and sharp 1-voxel outer cutting edge (z=1)
+    px2(m, 14, 5, shadow, dark)
+    px2(m, 15, 5, dark, main)
+    # Inner bevel (2 voxels thick) and sharp 1-voxel outer specular cutting edge
     for y in range(5, 12):
-        px(m, 16, y, light if 6 <= y <= 10 else main)
+        if 6 <= y <= 10:
+            px2(m, 16, y, main, light)
+        else:
+            px2(m, 16, y, dark, main)
     for y in range(6, 11):
         m.set(17, y, 1, light)
+        m.set(17, y, 2, spec)
     m.set(16, 12, 1, light)
+    m.set(16, 12, 2, spec)
     m.set(15, 13, 1, light)
+    m.set(15, 13, 2, spec)
     m.set(15, 4, 1, light)
+    m.set(15, 4, 2, spec)
     save(m, item_id)
 
 
 def war_axe_of_the_night():
     """Terraria War Axe of the Night (22x22x4): jagged double-notch demonite war axe."""
-    main, light, dark = METAL["demonite"]
+    shadow, dark, main, light, spec = METAL["demonite"]
     m = Model(22, 22, 4)
-    handle(m, 14)
-    px_full(m, 15, 15, dark)
+    handle(m, 14, metal="demonite")
+    px4(m, 15, 15, shadow, dark, main)
     for i in (12, 13, 14):
-        px_full(m, i, i, dark)
-    px_full(m, 13, 13, light)  # glowing violet eye
+        px4(m, i, i, shadow, dark, main)
+    px4(m, 13, 13, light, light, spec)  # glowing violet eye
     for x in range(13, 18):
         for y in range(9, 16):
             if (x == 17 and y in (11, 13)) or (x == 13 and y in (9, 10)):
                 continue  # jagged double-notch silhouette
-            px_full(m, x, y, main if x < 16 else light)
+            if x == 15 and y in (11, 12, 13):
+                px4(m, x, y, shadow, dark, main)  # recessed demonic fuller
+            elif x >= 16:
+                px2(m, x, y, main, light)
+            else:
+                px4(m, x, y, shadow, main, light if y >= 14 else main)
     for y in (8, 9, 10, 12, 14, 15, 16):
         m.set(18, y, 1, light)
+        m.set(18, y, 2, spec)
     m.set(17, 16, 1, light)
+    m.set(17, 16, 2, spec)
     m.set(16, 17, 1, light)
+    m.set(16, 17, 2, spec)
     m.set(17, 8, 1, light)
-    px_full(m, 11, 14, dark)
-    px_full(m, 11, 15, main)
+    m.set(17, 8, 2, spec)
+    px4(m, 11, 14, shadow, dark, main)
+    px4(m, 11, 15, dark, main, light)
+    px2(m, 10, 15, main, spec)  # back spike
     save(m, 45)
 
 
 def molten_hamaxe():
     """Terraria Molten Hamaxe (23x23x4): dual-headed fiery axe + glowing magma hammer."""
-    main, _, dark = METAL["molten"]
+    shadow, dark, main, light, spec = METAL["molten"]
     m = Model(23, 23, 4)
-    handle(m, 15)
-    px_full(m, 16, 16, dark)
+    handle(m, 15, metal="molten")
+    px4(m, 16, 16, shadow, dark, main)
     for i in (13, 14, 15):
-        px_full(m, i, i, dark)
-    px_full(m, 14, 14, FLAME_O)
-    # Fiery axe blade on +X side
+        px4(m, i, i, shadow, main, dark)
+    px4(m, 14, 14, FLAME_R, FLAME_O, FLAME_Y)  # glowing magma socket
+    # Fiery axe blade on +X side with recessed dark basalt fuller
     for x in range(15, 19):
         for y in range(9, 17):
-            px_full(m, x, y, main if x < 17 else FLAME_R)
+            if x == 16 and 11 <= y <= 14:
+                px4(m, x, y, shadow, shadow, dark)
+            elif x < 17:
+                px4(m, x, y, shadow, main, dark)
+            else:
+                px4(m, x, y, dark, FLAME_R, FLAME_O)
     for y in range(8, 18):
-        px(m, 19, y, FLAME_O)
-        m.set(20, y, 1, FLAME_Y if 10 <= y <= 15 else FLAME_O)
-    m.set(20, 13, 1, FLAME_W)
+        px2(m, 19, y, FLAME_R, FLAME_O)
+        m.set(20, y, 1, FLAME_O if y in (8, 9, 16, 17) else FLAME_Y)
+        m.set(20, y, 2, FLAME_Y if y in (8, 9, 16, 17) else spec)
+    m.set(20, 13, 1, FLAME_Y)
+    m.set(20, 13, 2, spec)
     # Glowing magma hammer poll on -X/+Y side
     for x in range(10, 14):
         for y in range(15, 19):
-            px_full(m, x, y, main if x > 10 else FLAME_O)
-    px_full(m, 9, 16, FLAME_Y)
-    px_full(m, 9, 17, FLAME_W)
+            if x == 10:
+                px4(m, x, y, FLAME_R, FLAME_O, FLAME_Y)
+            else:
+                px4(m, x, y, shadow, main, dark if y < 18 else FLAME_R)
+    px4(m, 9, 16, FLAME_O, FLAME_Y, spec)
+    px4(m, 9, 17, FLAME_O, FLAME_Y, spec)
     save(m, 217)
 
 
@@ -269,37 +433,50 @@ def sword(tier, item_id, wide):
 
 
 def shortsword(tier, item_id):
-    """Compact 14x14x4 stabbing shortsword with narrow pointed gladius blade and small crossguard."""
-    main, light, dark = METAL[tier]
+    """Compact 14x14x4 stabbing shortsword with narrow pointed gladius blade, fuller, and riveted crossguard."""
+    shadow, dark, main, light, spec = METAL[tier]
     m = Model(14, 14, 4)
-    handle(m, 3)
-    # Small compact crossguard at g=4
+    handle(m, 3, metal=tier)
+    # Compact tiered crossguard at g=4
     for d in (-2, -1, 0, 1, 2):
         gx, gy = 4 + d, 4 - d
         if 0 <= gx < 14 and 0 <= gy < 14:
-            px_full(m, gx, gy, dark if abs(d) == 2 else main)
-    # Narrow gladius blade (5..12)
+            if d == 0:
+                px4(m, gx, gy, dark, main, spec)  # center guard boss
+            elif abs(d) == 2:
+                px4(m, gx, gy, shadow, dark, light)
+            else:
+                px4(m, gx, gy, shadow, main, light)
+    # Narrow gladius blade (5..11) with darker fuller & specular cutting edge
     for i in range(5, 12):
-        px_full(m, i, i, light if i >= 9 else main)
-        px(m, i - 1, i, light)
-        px(m, i, i - 1, dark)
-    px_full(m, 12, 12, light)
-    px(m, 12, 13, light)
-    px(m, 13, 12, light)
-    px(m, 13, 13, light)
+        if 6 <= i <= 9:
+            px4(m, i, i, shadow, dark, main)  # recessed fuller
+        else:
+            px4(m, i, i, dark, main, light)
+        px2(m, i - 1, i, light, spec if i >= 8 else light)
+        px2(m, i, i - 1, shadow, dark)
+    px4(m, 12, 12, main, light, spec)
+    px2(m, 12, 13, light, spec)
+    px2(m, 13, 12, main, light)
+    px2(m, 13, 13, light, spec)
     save(m, item_id)
 
 
 def sword_model(tier, wide):
-    """Progressive Terraria broadswords: Copper 19, Iron 20, Silver 21, Gold 22."""
+    """Progressive Terraria broadswords: Copper 19, Iron 20, Silver 21, Gold 22.
+    Features 5-tone metallic shading, ornate tiered crossguard, pommel gem/stud,
+    deep blade fuller, and gleaming specular cutting edge."""
     sizes = {"copper": 19, "iron": 20, "silver": 21, "gold": 22}
     sz = sizes.get(tier, N)
-    main, light, dark = METAL[tier]
+    shadow, dark, main, light, spec = METAL[tier]
     m = Model(sz, sz, 4)
-    handle(m, 4)
+    handle(m, 4, metal=tier)
+    # Tier-distinct pommel gems / studs
     if tier == "silver":
-        px_full(m, 0, 0, hexc("#4fb6ff"))  # sapphire pommel
-    # Crossguard at g=5 (ornate winged guard with ruby gem for gold)
+        px4(m, 0, 0, hexc("#1b5fa8"), hexc("#4fb6ff"), hexc("#c7ecff"))  # sapphire pommel
+    elif tier == "gold":
+        px4(m, 0, 0, hexc("#8a1120"), hexc("#d8283c"), hexc("#ff99a6"))  # ruby pommel
+    # Ornate tiered crossguard at g=5
     g = 5
     span = 5 if tier == "gold" else 4
     for d in range(-span, span + 1):
@@ -307,76 +484,98 @@ def sword_model(tier, wide):
         gy = g - d
         if 0 <= gx < sz and 0 <= gy < sz:
             is_end = abs(d) >= span - 1
-            c = light if (tier == "gold" and is_end) else (dark if is_end else main)
-            px_full(m, gx, gy, c)
+            if tier == "gold" and is_end:
+                px4(m, gx, gy, dark, light, spec)
+            elif is_end:
+                px4(m, gx, gy, shadow, dark, main)
+            else:
+                px4(m, gx, gy, shadow, main, light)
+            # Swept upper quillon flare / bevel
             if tier == "gold" and is_end and 0 <= gy + 1 < sz:
-                px_full(m, gx, gy + 1, light)
+                px4(m, gx, gy + 1, main, light, spec)
             elif 0 <= gy + 1 < sz:
-                px(m, gx, gy + 1, light if d <= 0 else dark)
+                px2(m, gx, gy + 1, main if d <= 0 else shadow, light if d <= 0 else dark)
             if 0 <= gy - 1 < sz:
-                px(m, gx, gy - 1, dark)
+                px2(m, gx, gy - 1, shadow, dark)
+    # Center crossguard jewel / rivet emblem
     if tier == "gold":
-        px_full(m, 5, 5, hexc("#d8283c"))  # ruby gem in guard
-    # Ricasso
-    px_full(m, 5, 6, dark)
-    px_full(m, 6, 5, dark)
-    px_full(m, 6, 6, main)
-    # Shaped fuller & beveled cutting edges
+        px4(m, 5, 5, hexc("#8a1120"), hexc("#d8283c"), hexc("#ff99a6"))  # ruby in guard
+    elif tier == "silver":
+        px4(m, 5, 5, hexc("#1b5fa8"), hexc("#4fb6ff"), hexc("#c7ecff"))  # sapphire in guard
+    else:
+        px4(m, 5, 5, dark, main, spec)  # riveted boss
+    # Sculpted ricasso & collar bolts
+    px4(m, 5, 6, shadow, dark, light)
+    px4(m, 6, 5, shadow, dark, main)
+    px4(m, 6, 6, dark, main, light)
+    # Shaped blade: recessed darker fuller flanked by bright specular cutting edge
     tip = sz - 2
     for i in range(7, tip):
-        fuller = dark if (8 <= i <= tip - 3) else main
-        px_full(m, i, i, fuller)
-        px(m, i - 1, i, main)
-        px(m, i - 1, i + 1, light)
-        px(m, i, i + 1, light)
-        px(m, i + 1, i, dark)
+        in_fuller = (8 <= i <= tip - 3)
+        if in_fuller:
+            px4(m, i, i, shadow, dark, dark)
+        else:
+            px4(m, i, i, dark, main, light)
+        # Upper-left cutting bevel + razor specular edge
+        px2(m, i - 1, i, main, light)
+        px2(m, i - 1, i + 1, light, spec)
+        px2(m, i, i + 1, light, spec if i >= tip - 5 else light)
+        # Lower-right shaded bevel
+        px2(m, i + 1, i, shadow, dark)
         if wide:
-            px(m, i + 1, i - 1, dark)
-            px(m, i, i - 1, main)
-    # Tapered point
-    px(m, tip - 1, tip, light)
-    px(m, tip, tip - 1, dark)
-    px_full(m, tip, tip, main)
-    px(m, tip, tip + 1, light)
-    px(m, tip + 1, tip, light)
-    px(m, tip + 1, tip + 1, light)
+            px2(m, i + 1, i - 1, shadow, dark)
+            px2(m, i, i - 1, dark, main)
+    # Tapered gleaming point
+    px2(m, tip - 1, tip, light, spec)
+    px2(m, tip, tip - 1, dark, main)
+    px4(m, tip, tip, main, light, spec)
+    px2(m, tip, tip + 1, light, spec)
+    px2(m, tip + 1, tip, main, light)
+    px2(m, tip + 1, tip + 1, light, spec)
     return m
 
 
 def lights_bane():
-    """Terraria Light's Bane (24x24x4): jagged asymmetric demonite greatsword with amethyst vein."""
-    main, light, dark = METAL["demonite"]
+    """Terraria Light's Bane (24x24x4): jagged asymmetric demonite greatsword with glowing amethyst fuller."""
+    shadow, dark, main, light, spec = METAL["demonite"]
     m = Model(24, 24, 4)
-    handle(m, 5)
+    handle(m, 5, metal="demonite")
+    px4(m, 0, 0, dark, light, spec)  # amethyst pommel crystal
     # Curved demonic twin-prong guard
     for d in range(-5, 6):
         gx, gy = 6 + d, 6 - d
         if 0 <= gx < 24 and 0 <= gy < 24:
-            px_full(m, gx, gy, dark if abs(d) < 4 else main)
+            if abs(d) < 4:
+                px4(m, gx, gy, shadow, dark, main)
+            else:
+                px4(m, gx, gy, dark, main, light)
             if abs(d) >= 4 and gy + 1 < 24 and gx + 1 < 24:
-                px_full(m, gx + 1, gy + 1, light)
-    px_full(m, 6, 6, light)
-    # Obsidian-purple blade with glowing amethyst central vein & jagged notches
+                px4(m, gx + 1, gy + 1, main, light, spec)
+    px4(m, 6, 6, main, light, spec)  # glowing violet eye in guard
+    # Obsidian-purple blade with glowing amethyst central fuller & jagged notches
     for i in range(7, 21):
-        px_full(m, i, i, light if i % 2 == 0 else main)  # glowing amethyst vein
-        px(m, i - 1, i, dark)
+        if i % 2 == 0:
+            px4(m, i, i, dark, light, spec)  # pulsing amethyst vein
+        else:
+            px4(m, i, i, shadow, dark, main)
+        px2(m, i - 1, i, shadow, dark)
         if i not in (11, 15, 18):  # asymmetric wicked blade notches
-            px(m, i - 1, i + 1, light)
-            px(m, i, i + 1, main)
-        px(m, i + 1, i, dark)
+            px2(m, i - 1, i + 1, light, spec)
+            px2(m, i, i + 1, main, light)
+        px2(m, i + 1, i, shadow, dark)
         if i not in (13, 17):
-            px(m, i + 1, i - 1, EBONSTONE_DD)
-            px(m, i, i - 1, dark)
-    px_full(m, 21, 21, main)
-    px(m, 21, 22, light)
-    px(m, 22, 21, light)
-    px(m, 22, 22, light)
-    px(m, 23, 23, light)
+            px2(m, i + 1, i - 1, shadow, shadow)
+            px2(m, i, i - 1, shadow, dark)
+    px4(m, 21, 21, main, light, spec)
+    px2(m, 21, 22, light, spec)
+    px2(m, 22, 21, main, light)
+    px2(m, 22, 22, light, spec)
+    px2(m, 23, 23, light, spec)
     save(m, 46)
 
 
 def wooden_sword():
-    """Carved oak broadsword with 4-voxel crossguard and beveled wood blade."""
+    """Carved oak broadsword with riveted 4-voxel crossguard, wood grain fuller, and beveled oak blade."""
     m = Model(N, N, 4)
     handle(m, 4)
     g = 5
@@ -385,65 +584,87 @@ def wooden_sword():
         gy = g - d
         if 0 <= gx < N and 0 <= gy < N:
             is_end = abs(d) >= 3
-            px_full(m, gx, gy, HANDLE_D if is_end else HANDLE)
+            if is_end:
+                px4(m, gx, gy, HANDLE_DD, HANDLE_D, HANDLE)
+            else:
+                px4(m, gx, gy, HANDLE_D, HANDLE, HANDLE_L)
             if 0 <= gy + 1 < N:
-                px(m, gx, gy + 1, HANDLE_L if d <= 0 else HANDLE_D)
+                px2(m, gx, gy + 1, HANDLE if d <= 0 else HANDLE_DD, HANDLE_L if d <= 0 else HANDLE_D)
             if 0 <= gy - 1 < N:
-                px(m, gx, gy - 1, HANDLE_D)
-    px_full(m, 5, 6, HANDLE_D)
-    px_full(m, 6, 5, HANDLE_D)
-    px_full(m, 6, 6, HANDLE)
+                px2(m, gx, gy - 1, HANDLE_DD, HANDLE_D)
+    # Iron rivet pin at crossguard center
+    px4(m, 5, 5, FERRULE_D, FERRULE, FERRULE_L)
+    px4(m, 5, 6, HANDLE_DD, HANDLE_D, HANDLE)
+    px4(m, 6, 5, HANDLE_DD, HANDLE_D, HANDLE)
+    px4(m, 6, 6, HANDLE_D, HANDLE, HANDLE_L)
     for i in range(7, 17):
-        px_full(m, i, i, HANDLE)
-        px(m, i - 1, i, HANDLE)
-        px(m, i - 1, i + 1, HANDLE_L)
-        px(m, i, i + 1, HANDLE_L)
-        px(m, i + 1, i, HANDLE_D)
-        px(m, i + 1, i - 1, HANDLE_D)
-        px(m, i, i - 1, HANDLE)
-    px(m, 16, 17, HANDLE_L)
-    px(m, 17, 16, HANDLE_D)
-    px_full(m, 17, 17, HANDLE)
-    px(m, 17, 18, HANDLE_L)
-    px(m, 18, 17, HANDLE_L)
-    px(m, 18, 18, HANDLE_L)
+        # Carved wood fuller groove with alternating wood grain
+        px4(m, i, i, HANDLE_DD, HANDLE_D if (8 <= i <= 14) else HANDLE, HANDLE if i % 2 == 0 else HANDLE_L)
+        px2(m, i - 1, i, HANDLE, HANDLE_L)
+        px2(m, i - 1, i + 1, HANDLE_L, HANDLE_LL)
+        px2(m, i, i + 1, HANDLE_L, HANDLE_LL if i >= 12 else HANDLE_L)
+        px2(m, i + 1, i, HANDLE_DD, HANDLE_D)
+        px2(m, i + 1, i - 1, HANDLE_DD, HANDLE_D)
+        px2(m, i, i - 1, HANDLE_D, HANDLE)
+    px2(m, 16, 17, HANDLE_L, HANDLE_LL)
+    px2(m, 17, 16, HANDLE_DD, HANDLE_D)
+    px4(m, 17, 17, HANDLE, HANDLE_L, HANDLE_LL)
+    px2(m, 17, 18, HANDLE_L, HANDLE_LL)
+    px2(m, 18, 17, HANDLE, HANDLE_L)
+    px2(m, 18, 18, HANDLE_L, HANDLE_LL)
     save(m, WOOD_SWORD)
 
 
 def wooden_bow():
-    """Upright 3D bow: the limb bulges toward +x, the string runs at x = 0."""
+    """Upright 3D hardwood bow: sculpted wood-grain limbs, leather riser grip, ferrule rings, and metal nock caps."""
     m = Model(9, N, 4)
     for y in range(N):
         off = round(5 * math.sin(math.pi * y / (N - 1)))
-        c = GRIP if 8 <= y <= 10 else (HANDLE_L if y % 4 else HANDLE)
-        px_full(m, 1 + off, y, c)
-        px(m, 2 + off, y, HANDLE_D)
+        if 8 <= y <= 10:
+            # Leather cross-wrapped riser grip
+            px4(m, 1 + off, y, LEATHER_D, LEATHER, LEATHER_L if y == 9 else LEATHER)
+            px2(m, 2 + off, y, LEATHER_D, HANDLE_DD)
+        elif y in (7, 11):
+            # Metal ferrule collars flanking the grip
+            px4(m, 1 + off, y, FERRULE_D, FERRULE, FERRULE_L)
+            px2(m, 2 + off, y, FERRULE_D, FERRULE)
+        else:
+            # Varied oak wood grain along bow limbs
+            front = HANDLE_LL if y % 3 == 0 else HANDLE_L
+            px4(m, 1 + off, y, HANDLE_DD, HANDLE, front)
+            px2(m, 2 + off, y, HANDLE_DD, HANDLE_D)
     for y in range(1, N - 1):
-        m.set(0, y, 1, STRING)
+        m.set(0, y, 1, STRING_D if y % 3 == 0 else STRING)
         m.set(0, y, 2, STRING)
-    px_full(m, 1, 0, GRIP)
-    px_full(m, 1, N - 1, GRIP)
+    # Metal nock caps at top and bottom tips
+    px4(m, 1, 0, FERRULE_D, FERRULE, FERRULE_L)
+    px4(m, 1, N - 1, FERRULE_D, FERRULE, FERRULE_L)
     save(m, WOOD_BOW)
 
 
 def arrow():
-    m = Model(N, N, 2)
-    # Shaft on the diagonal, shaded on one side, with a steel head at the tip.
+    """3D wooden arrow with 5-tone forged steel broadhead and layered fletching (19x19x4)."""
+    shadow, dark, main, light, spec = METAL["iron"]
+    m = Model(N, N, 4)
+    # Wood-grain shaft on the diagonal
     for i in range(3, 14):
-        px(m, i, i, HANDLE_L)
-        px(m, i + 1, i, HANDLE)
-    # Steel head: shaded base, bright edge toward the tip.
-    steel, steel_d = hexc("#e3e7ee"), hexc("#8a8f9c")
-    px(m, 14, 14, steel_d)
-    px(m, 15, 14, steel_d)
-    px(m, 14, 15, steel_d)
-    px(m, 15, 15, steel)
-    px(m, 16, 16, steel)
-    px(m, 17, 17, hexc("#aeb3bf"))
-    # Two-tone fletching at the nock.
+        px2(m, i, i, HANDLE, HANDLE_L if i % 2 == 0 else HANDLE_LL)
+        px2(m, i + 1, i, HANDLE_DD, HANDLE_D)
+    # 5-tone forged steel broadhead with central ridge & specular tip
+    px4(m, 14, 14, shadow, dark, main)
+    px2(m, 15, 14, shadow, dark)
+    px2(m, 14, 15, main, light)
+    px4(m, 15, 15, dark, main, light)
+    px2(m, 16, 15, dark, main)
+    px2(m, 15, 16, light, spec)
+    px4(m, 16, 16, main, light, spec)
+    px2(m, 17, 17, light, spec)
+    # Two-tone layered fletching at the nock with leather binding
+    px4(m, 2, 2, LEATHER_D, LEATHER, LEATHER_L)
     for x, y in ((1, 3), (3, 1), (0, 4), (4, 0)):
-        px(m, x, y, FEATHER)
-    px(m, 2, 2, FEATHER_D)
+        px2(m, x, y, FEATHER_D, FEATHER)
+    px2(m, 1, 2, FEATHER_D, FEATHER)
+    px2(m, 2, 1, FEATHER_D, FEATHER)
     save(m, WOOD_ARROW)
 
 
@@ -812,25 +1033,30 @@ def shiny_red_balloon():
 
 
 def spear():
-    """Proper long polearm shaft with broad flanged steel spearhead (26x26x4)."""
+    """Proper long polearm shaft with riveted socket, winged flanges, and broad 5-tone steel spearhead (26x26x4)."""
+    shadow, dark, main, light, spec = METAL["iron"]
     m = Model(26, 26, 4)
-    handle(m, 16)
-    # Iron socket collar & side flanges
+    handle(m, 16, metal="iron")
+    # Riveted iron socket collar & ornate side flanges
     for x in range(16, 19):
         for y in range(16, 19):
-            px_full(m, x, y, IRON_D)
-    px_full(m, 17, 17, IRON)
-    px_full(m, 16, 18, IRON_L)
-    px_full(m, 18, 16, IRON_D)
-    # Broad flanged spearhead (18..25)
+            px4(m, x, y, shadow, dark, main)
+    px4(m, 17, 17, dark, main, spec)   # center collar rivet
+    px4(m, 16, 18, dark, light, spec)  # upper flange wing
+    px4(m, 18, 16, shadow, dark, main) # lower flange wing
+    # Broad flanged spearhead (18..25) with recessed fuller & specular edges
     for i in range(18, 25):
-        px_full(m, i, i, IRON_L)
-        px(m, i + 1, i, IRON)
-        px(m, i, i + 1, IRON_D)
         if 19 <= i <= 22:
-            px(m, i + 2, i, IRON_D)
-            px(m, i, i + 2, IRON_L)
-    px(m, 25, 25, IRON_L)
+            px4(m, i, i, shadow, dark, main)  # central fuller groove
+        else:
+            px4(m, i, i, dark, main, light)
+        px2(m, i + 1, i, shadow, dark)
+        px2(m, i, i + 1, light, spec if i >= 21 else light)
+        if 19 <= i <= 22:
+            px2(m, i + 2, i, shadow, dark)
+            px2(m, i, i + 2, light, spec)
+    px4(m, 24, 24, main, light, spec)
+    px2(m, 25, 25, light, spec)
     save(m, 274)
 
 
@@ -888,30 +1114,30 @@ def demonite_bar():
 
 
 def vilethorn():
-    """Twisted purple thorny branch wand (20x20x3)."""
-    m = Model(20, 20, 3)
+    """Twisted purple thorny corruption branch wand with glowing demonite thorns (20x20x4)."""
+    shadow, dark, main, light, spec = METAL["demonite"]
+    m = Model(20, 20, 4)
     spine = [
         (1, 1), (2, 2), (3, 2), (4, 3), (4, 4), (5, 5), (6, 5), (7, 6),
         (8, 7), (8, 8), (9, 9), (10, 9), (11, 10), (12, 11), (12, 12),
         (13, 13), (14, 14), (15, 14), (16, 15), (17, 16), (17, 17), (18, 18),
     ]
-    for x, y in spine:
-        for z in (0, 1):
-            c = EBONSTONE_DD if z == 0 else (EBONSTONE_D if (x + y) % 2 == 0 else CORRUPT_D)
-            m.set(x, y, z, c)
+    for idx, (x, y) in enumerate(spine):
+        front = main if idx % 3 == 0 else CORRUPT_D
+        px4(m, x, y, shadow, EBONSTONE_D if idx % 2 == 0 else dark, front)
     thorns = [
-        ([(5, 6), (5, 7), (4, 8)], DEMONITE_L),
-        ([(8, 6), (9, 5), (10, 5)], DEMONITE),
-        ([(12, 13), (11, 14), (11, 15)], DEMONITE_L),
-        ([(15, 13), (16, 12), (17, 12)], DEMONITE),
-        ([(18, 19), (19, 19)], DEMONITE_L),
-        ([(19, 18)], DEMONITE),
-        ([(17, 18)], DEMONITE_L),
+        ([(5, 6), (5, 7), (4, 8)], light),
+        ([(8, 6), (9, 5), (10, 5)], main),
+        ([(12, 13), (11, 14), (11, 15)], light),
+        ([(15, 13), (16, 12), (17, 12)], main),
+        ([(18, 19), (19, 19)], spec),
+        ([(19, 18)], light),
+        ([(17, 18)], spec),
     ]
     for pts, col in thorns:
-        for x, y in pts:
-            m.set(x, y, 1, col)
-            m.set(x, y, 0, DEMONITE_D)
+        for k, (x, y) in enumerate(pts):
+            tip_c = spec if k == len(pts) - 1 else col
+            px2(m, x, y, dark, tip_c)
     save(m, 64)
 
 
@@ -1155,24 +1381,27 @@ def shadow_helmet():
 
 
 def the_breaker():
-    """Heavy brutal demonic war hammer on a dark shaft (20x20x4)."""
+    """Heavy brutal demonic war hammer on a dark shaft with 5-tone demonite detailing (20x20x4)."""
+    shadow, dark, main, light, spec = METAL["demonite"]
     m = Model(20, 20, 4)
-    handle(m, 11)
+    handle(m, 11, metal="demonite")
     for x in range(10, 14):
         for y in range(10, 14):
-            for z in (0, 1, 2, 3):
-                m.set(x, y, z, DEMONITE_D)
-    m.box(11, 13, 0, 17, 18, 3, DEMONITE)
-    for x in range(12, 17):
-        for y in range(14, 18):
-            m.set(x, y, 3, DEMONITE_L if (x + y) % 2 == 0 else DEMONITE)
-            m.set(x, y, 0, EBONSTONE_DD)
+            px4(m, x, y, shadow, dark, main)
+    px4(m, 12, 12, light, light, spec)  # glowing demonic eye in socket
+    m.box(11, 13, 0, 17, 18, 3, main)
+    for x in range(11, 18):
+        for y in range(13, 19):
+            is_rim = (x in (11, 17) or y in (13, 18))
+            is_core = (13 <= x <= 15 and 15 <= y <= 16)
+            m.set(x, y, 0, shadow)
+            m.set(x, y, 1, dark if is_core else main)
+            m.set(x, y, 2, light if is_rim else main)
+            m.set(x, y, 3, spec if (x == 17 and y in (14, 16, 18)) else (light if is_rim else (dark if is_core else main)))
     for tooth in [(18, 14), (18, 16), (18, 18), (17, 19), (15, 19)]:
-        for z in (1, 2):
-            m.set(tooth[0], tooth[1], z, DEMONITE_L)
+        px2(m, tooth[0], tooth[1], light, spec)
     for beak in [(10, 17), (9, 18), (8, 18)]:
-        for z in (1, 2):
-            m.set(beak[0], beak[1], z, DEMONITE_L if beak[0] == 8 else DEMONITE_D)
+        px2(m, beak[0], beak[1], dark if beak[0] > 8 else light, spec if beak[0] == 8 else main)
     save(m, 104)
 
 
@@ -1274,9 +1503,10 @@ def ball_o_hurt():
 
 
 def wooden_hammer():
-    """Traditional wooden mallet (19x19x4)."""
+    """Traditional oak mallet with iron reinforcing hoops, rivets, and end-grain rings (19x19x4)."""
+    fe_sh, fe_d, fe_m, fe_l, fe_sp = METAL["iron"]
     m = Model(19, 19, 4)
-    handle(m, 13)
+    handle(m, 13, metal="iron")
     for i in range(-5, 6):
         hx = 13 + i
         hy = 13 - i
@@ -1286,11 +1516,24 @@ def wooden_hammer():
                     x = hx + dx
                     y = hy + dy
                     if abs(i) == 5:
-                        c = RING_D if (dx == 0 and z in (1, 2)) else RING
+                        c = RING_D if (dx == 0 and z in (1, 2)) else (RING if z >= 2 else HANDLE_D)
                     elif abs(i) == 4:
-                        c = BARK_D
+                        # Iron reinforcing bands with specular rivet glint
+                        if z == 3 and dx == 0 and dy == 0:
+                            c = fe_sp
+                        elif z == 3:
+                            c = fe_l
+                        elif z == 0:
+                            c = fe_sh
+                        else:
+                            c = fe_d
                     else:
-                        c = WOOD_L if z == 3 else (WOOD_D if z == 0 else WOOD)
+                        if z == 3:
+                            c = HANDLE_LL if (i + dx) % 2 == 0 else HANDLE_L
+                        elif z == 0:
+                            c = HANDLE_DD
+                        else:
+                            c = HANDLE if (i + dy) % 2 == 0 else HANDLE_D
                     m.set(x, y, z, c)
     save(m, 196)
 
@@ -1313,48 +1556,51 @@ AQUA_W = hexc("#caf0f8")
 
 
 def magic_missile():
-    """Slender wand with golden socket and glowing celestial blue orb (19x19x3)."""
-    m = Model(19, 19, 3)
-    # Pommel
-    px(m, 1, 1, GOLD_D)
-    px(m, 1, 2, GOLD)
-    px(m, 2, 1, GOLD)
-    px(m, 2, 2, GOLD_L)
-    # Shaft
+    """Ornate cobalt-and-gold arcane wand with flared cradle and glowing celestial orb (19x19x4)."""
+    g_sh, g_d, g_m, g_l, g_sp = METAL["gold"]
+    m = Model(19, 19, 4)
+    # Ornate golden pommel
+    px4(m, 1, 1, g_sh, g_d, g_m)
+    px2(m, 1, 2, g_m, g_l)
+    px2(m, 2, 1, g_sh, g_d)
+    px4(m, 2, 2, g_d, g_m, g_sp)
+    # Ribbed cobalt & gold shaft
     for i in range(3, 10):
-        c = GOLD if (i % 3 == 0) else COBALT_D
-        for z in (0, 1):
-            m.set(i, i, z, c)
-            m.set(i + 1, i, z, HANDLE_D if i % 3 != 0 else GOLD_D)
-            m.set(i, i + 1, z, COBALT if i % 3 != 0 else GOLD_L)
-    # Golden socket / cradle
+        if i % 3 == 0:
+            px4(m, i, i, g_sh, g_m, g_sp)
+            px2(m, i + 1, i, g_sh, g_d)
+            px2(m, i, i + 1, g_m, g_l)
+        else:
+            px4(m, i, i, COBALT_D, COBALT, COBALT_L)
+            px2(m, i + 1, i, HANDLE_DD, COBALT_D)
+            px2(m, i, i + 1, COBALT, COBALT_L)
+    # Flared golden socket / cradle
     for i in range(10, 12):
-        for z in (0, 1, 2):
-            m.set(i, i, z, GOLD)
-            m.set(i + 1, i, z, GOLD_D)
-            m.set(i, i + 1, z, GOLD_L)
-    m.set(9, 12, 1, GOLD_L)
-    m.set(10, 13, 1, GOLD_L)
-    m.set(12, 9, 1, GOLD_D)
-    m.set(13, 10, 1, GOLD_D)
-    # Glowing orb
+        px4(m, i, i, g_sh, g_m, g_sp)
+        px4(m, i + 1, i, g_sh, g_d, g_m)
+        px4(m, i, i + 1, g_d, g_l, g_sp)
+    px2(m, 9, 12, g_l, g_sp)
+    px2(m, 10, 13, g_l, g_sp)
+    px2(m, 12, 9, g_sh, g_d)
+    px2(m, 13, 10, g_d, g_m)
+    # Glowing celestial crystal orb
     for x in range(11, 17):
         for y in range(11, 17):
-            for z in range(3):
-                d2 = (x - 14.0) ** 2 + (y - 14.0) ** 2 + (z - 1.0) ** 2
-                if d2 <= 2.6 ** 2:
-                    if d2 <= 1.2 ** 2:
-                        c = FLAME_W if (x + y + z) % 2 == 0 else GOLD_L
-                    elif (x == 14 and y == 14) or d2 >= 2.2 ** 2:
-                        c = COBALT_L if (x + y > 28) else COBALT
+            for z in range(4):
+                d2 = (x - 14.0) ** 2 + (y - 14.0) ** 2 + (z - 1.5) ** 2
+                if d2 <= 2.65 ** 2:
+                    if d2 <= 1.25 ** 2:
+                        c = FEATHER if (z == 2 and x == 14 and y == 14) else (FLAME_W if (x + y + z) % 2 == 0 else g_sp)
+                    elif d2 >= 2.2 ** 2:
+                        c = COBALT_W if (x + y > 28 and z >= 2) else (COBALT_L if z >= 2 else COBALT_D)
                     else:
-                        c = ICE_L if z == 2 else ICE
+                        c = ICE_L if z >= 2 else ICE
                     m.set(x, y, z, c)
-    # Gold orb trim
-    m.set(14, 16, 1, GOLD_L)
-    m.set(16, 14, 1, GOLD_L)
-    m.set(12, 14, 1, GOLD_D)
-    m.set(14, 12, 1, GOLD_D)
+    # Gold orb prongs
+    px2(m, 14, 16, g_l, g_sp)
+    px2(m, 16, 14, g_l, g_sp)
+    px2(m, 12, 14, g_sh, g_d)
+    px2(m, 14, 12, g_sh, g_d)
     save(m, 113)
 
 
@@ -1390,41 +1636,54 @@ def bone():
 
 
 def muramasa():
-    """Terraria Muramasa (26x26x4): sleek curved cobalt-blue katana with glowing cyan-white edge."""
+    """Terraria Muramasa (26x26x4): sleek curved cobalt-blue katana with braided tsuka,
+    ornate gold tsuba, dark mune spine, hamon fuller, and glowing cyan-white razor edge."""
+    g_sh, g_d, g_m, g_l, g_sp = METAL["gold"]
     m = Model(26, 26, 4)
-    # Pommel (kashira)
-    px_full(m, 0, 0, GOLD)
-    px(m, 1, 0, GOLD_D)
-    px(m, 0, 1, GOLD_D)
-    # Dark blue-wrapped long tsuka hilt (1..6)
+    indigo = hexc("#0a1128")
+    # Ornate golden kashira pommel
+    px4(m, 0, 0, g_sh, g_m, g_sp)
+    px2(m, 1, 0, g_sh, g_d)
+    px2(m, 0, 1, g_d, g_l)
+    # Braided dark-indigo & cobalt tsuka-ito hilt (1..6)
     for i in range(1, 7):
-        px_full(m, i, i, COBALT_D if i % 2 == 0 else hexc("#0a1128"))
-        px(m, i + 1, i, hexc("#0a1128"))
-        px(m, i, i + 1, COBALT_D)
-    # Golden circular tsuba guard at (7, 7)
+        if i % 2 == 0:
+            px4(m, i, i, indigo, COBALT_D, COBALT_L)
+        else:
+            px4(m, i, i, indigo, indigo, COBALT_D)
+        px2(m, i + 1, i, indigo, COBALT_D)
+        px2(m, i, i + 1, COBALT_D, COBALT if i % 2 == 0 else COBALT_D)
+    # Ornate golden circular tsuba guard at (7, 7)
     for dx in (-2, -1, 0, 1, 2):
         for dy in (-2, -1, 0, 1, 2):
-            if abs(dx) + abs(dy) <= 2:
-                px_full(m, 7 + dx, 7 + dy, GOLD if abs(dx) + abs(dy) < 2 else GOLD_L)
-    # Habaki collar
-    px_full(m, 8, 8, GOLD)
-    # Sleek curving single-edged blade (9..24)
+            dist = abs(dx) + abs(dy)
+            if dist <= 2:
+                if dist == 0:
+                    px4(m, 7 + dx, 7 + dy, g_d, g_m, g_sp)
+                elif dist == 2:
+                    px4(m, 7 + dx, 7 + dy, g_sh, g_l, g_sp)
+                else:
+                    px4(m, 7 + dx, 7 + dy, g_sh, g_m, g_l)
+    # Golden habaki blade collar
+    px4(m, 8, 8, g_d, g_m, g_sp)
+    # Sleek curving single-edged blade (9..24) with mune shadow, cobalt body, and cyan-white ha
     for i in range(9, 25):
         curve = round(1.4 * math.sin(math.pi * (i - 8) / 17.0))
         bx = i - curve
         by = i + curve
         if 0 <= bx < 26 and 0 <= by < 26:
-            px_full(m, bx, by, COBALT)
+            # Central blade fuller / hamon wave
+            px4(m, bx, by, COBALT_D, COBALT, COBALT_L if i % 3 == 0 else COBALT)
             if bx + 1 < 26 and by - 1 >= 0:
-                px(m, bx + 1, by - 1, COBALT_D)
-            if bx - 1 >= 0 and by + 1 < 26:
-                px(m, bx - 1, by + 1, ICE_L)  # glowing cyan-white razor edge
+                px2(m, bx + 1, by - 1, indigo, COBALT_D)  # dark mune back spine
             if bx - 1 >= 0:
-                px(m, bx - 1, by, COBALT_L)
+                px2(m, bx - 1, by, COBALT, COBALT_W)      # bright hamon bevel
+            if bx - 1 >= 0 and by + 1 < 26:
+                px2(m, bx - 1, by + 1, ICE_L, FEATHER)    # gleaming cyan-white razor edge
     # Kissaki tip
-    px_full(m, 25, 25, ICE_L)
-    px(m, 24, 25, ICE_L)
-    px(m, 25, 24, COBALT_L)
+    px4(m, 25, 25, COBALT_L, ICE_L, FEATHER)
+    px2(m, 24, 25, ICE_L, FEATHER)
+    px2(m, 25, 24, COBALT, COBALT_L)
     save(m, 155)
 
 
@@ -1460,32 +1719,37 @@ def cobalt_shield():
 
 
 def aqua_scepter():
-    """Slender silver wand discharging a spiraling aqua stream (18x18x3)."""
-    m = Model(18, 18, 3)
-    # Handle
+    """Ornate 5-tone silver-and-gold scepter discharging a spiraling aqua crystal jet (18x18x4)."""
+    s_sh, s_d, s_m, s_l, s_sp = METAL["silver"]
+    g_sh, g_d, g_m, g_l, g_sp = METAL["gold"]
+    m = Model(18, 18, 4)
+    # Pommel
+    px4(m, 0, 0, g_sh, g_m, g_sp)
+    # Silver & gold ribbed handle
     for i in range(1, 10):
-        for z in (0, 1):
-            m.set(i, i, z, SILVER if i % 4 != 0 else GOLD)
-            m.set(i + 1, i, z, SILVER_D if i % 4 != 0 else GOLD_D)
-            m.set(i, i + 1, z, SILVER_L if i % 4 != 0 else GOLD_L)
-    # Golden nozzle
+        if i % 3 == 0:
+            px4(m, i, i, g_sh, g_m, g_sp)
+            px2(m, i + 1, i, g_sh, g_d)
+            px2(m, i, i + 1, g_m, g_l)
+        else:
+            px4(m, i, i, s_sh, s_m, s_l)
+            px2(m, i + 1, i, s_sh, s_d)
+            px2(m, i, i + 1, s_l, s_sp)
+    # Ornate flared golden nozzle
     for x in (9, 10, 11):
         for y in (9, 10, 11):
-            for z in (0, 1, 2):
-                if x + y >= 19:
-                    m.set(x, y, z, GOLD if (x + y) % 2 == 0 else GOLD_L)
-    # Aqua crystal stream
+            if x + y >= 19:
+                px4(m, x, y, g_sh, g_m if (x + y) % 2 == 0 else g_l, g_sp)
+    # Swirling aqua crystal stream with white-foam specular highlights
     for i in range(11, 17):
-        for z in (0, 1, 2):
-            c = AQUA_W if z == 2 and i >= 14 else (AQUA_L if z == 2 else AQUA)
-            m.set(i, i, z, c)
-            m.set(i + 1, i, z, AQUA_D)
-            m.set(i, i + 1, z, AQUA_L)
+        px4(m, i, i, AQUA_D, AQUA, AQUA_W if i >= 14 else AQUA_L)
+        px2(m, i + 1, i, AQUA_D, AQUA)
+        px2(m, i, i + 1, AQUA_L, FEATHER if i >= 15 else AQUA_W)
     splashes = [
-        (13, 15, 1, AQUA_L), (12, 16, 1, AQUA_W), (13, 16, 2, AQUA_L),
+        (13, 15, 1, AQUA_L), (12, 16, 2, AQUA_W), (13, 16, 2, FEATHER),
         (15, 13, 1, AQUA_D), (16, 12, 1, AQUA), (16, 13, 0, AQUA_D),
-        (15, 17, 1, AQUA_W), (16, 17, 2, AQUA_L), (17, 16, 1, AQUA_W),
-        (17, 17, 1, AQUA_W), (16, 16, 2, AQUA_W), (17, 15, 0, AQUA_L),
+        (15, 17, 2, AQUA_W), (16, 17, 3, FEATHER), (17, 16, 2, AQUA_W),
+        (17, 17, 2, FEATHER), (16, 16, 3, AQUA_W), (17, 15, 1, AQUA_L),
     ]
     for sx, sy, sz, sc in splashes:
         m.set(sx, sy, sz, sc)
@@ -2198,7 +2462,8 @@ def flamarang():
 
 
 def molten_fury():
-    """Sweeping volcanic recurve bow (12x22x4) with blazing orange-yellow tips and basalt grip."""
+    """Sweeping volcanic recurve bow (12x22x4) with blazing orange-yellow tips, magma veins, and basalt grip."""
+    shadow, dark, main, light, spec = METAL["molten"]
     m = Model(12, 22, 4)
     for y in range(22):
         t = y / 21.0
@@ -2206,51 +2471,66 @@ def molten_fury():
         off = round(6.5 * math.sin(math.pi * t) - 1.5 * math.sin(3 * math.pi * t))
         bx = max(1, min(9, 2 + off))
         if y in (0, 1, 20, 21):
-            c, back = FLAME_Y, FLAME_O
+            px4(m, bx, y, FLAME_R, FLAME_O, FLAME_Y)
+            px2(m, bx + 1, y, FLAME_O, spec)
         elif y in (2, 3, 18, 19):
-            c, back = FLAME_O, FLAME_R
+            px4(m, bx, y, dark, FLAME_R, FLAME_O)
+            px2(m, bx + 1, y, FLAME_R, FLAME_Y)
         elif 9 <= y <= 12:
-            c, back = GRIP, MOLT_D
+            # Leather-wrapped basalt riser grip with glowing center ember
+            if y in (9, 12):
+                px4(m, bx, y, shadow, dark, FLAME_O)
+            else:
+                px4(m, bx, y, LEATHER_D, LEATHER, LEATHER_L if y == 10 else LEATHER)
+            px2(m, bx + 1, y, shadow, main)
         else:
-            c = MOLT_M if y % 2 else MOLT_L
-            back = MOLT_D
-        px_full(m, bx, y, c)
-        px(m, bx + 1, y, back)
+            # Basalt limb with glowing magma vein flecks
+            px4(m, bx, y, shadow, main, FLAME_O if y % 3 == 0 else MOLT_L)
+            px2(m, bx + 1, y, shadow, dark if y % 2 == 0 else main)
     for y in range(1, 21):
-        m.set(1, y, 1, STRING)
+        m.set(1, y, 1, STRING_D if y % 3 == 0 else STRING)
         m.set(1, y, 2, STRING)
-    px_full(m, 1, 0, FLAME_W)
-    px_full(m, 1, 21, FLAME_W)
+    px4(m, 1, 0, FLAME_O, FLAME_Y, spec)
+    px4(m, 1, 21, FLAME_O, FLAME_Y, spec)
     save(m, 120)
 
 
 def fiery_greatsword():
-    """Terraria Fiery Greatsword / Volcano (28x28x4): massive jagged volcanic greatsword."""
+    """Terraria Fiery Greatsword / Volcano (28x28x4): massive jagged volcanic greatsword
+    with molten pommel gem, horned basalt crossguard, magma fuller, and serrated flame edges."""
+    shadow, dark, main, light, spec = METAL["molten"]
     m = Model(28, 28, 4)
-    handle(m, 5)
-    # Horned demon-iron crossguard
+    handle(m, 5, metal="molten")
+    px4(m, 0, 0, FLAME_R, FLAME_O, spec)  # incandescent ember pommel gem
+    # Horned tiered demon-iron crossguard
     for d in range(-5, 6):
         gx, gy = 6 + d, 6 - d
         if 0 <= gx < 28 and 0 <= gy < 28:
-            px_full(m, gx, gy, MOLT_D if abs(d) < 4 else FLAME_R)
+            if abs(d) < 4:
+                px4(m, gx, gy, shadow, main, dark)
+            else:
+                px4(m, gx, gy, dark, FLAME_R, FLAME_O)
             if abs(d) >= 4 and gx + 1 < 28 and gy + 1 < 28:
-                px_full(m, gx + 1, gy + 1, FLAME_O)
-    px_full(m, 6, 6, FLAME_O)
-    # Wide charred basalt core, white-hot magma spine, blazing serrated flame-tooth edges
+                px4(m, gx + 1, gy + 1, FLAME_R, FLAME_O, FLAME_Y)
+    px4(m, 6, 6, FLAME_R, FLAME_Y, spec)  # blazing guard core
+    # Wide charred basalt core, white-hot magma fuller spine, blazing serrated flame-tooth edges
     for i in range(7, 25):
-        px_full(m, i, i, FLAME_W if i % 3 == 0 else FLAME_Y)  # white-hot magma spine
-        px(m, i - 1, i, MOLT_M)
-        px(m, i, i - 1, MOLT_D)
-        px(m, i - 1, i + 1, FLAME_O)
-        px(m, i + 1, i - 1, FLAME_R)
+        if i % 3 == 0:
+            px4(m, i, i, FLAME_O, FLAME_Y, spec)
+        else:
+            px4(m, i, i, FLAME_R, FLAME_O, FLAME_Y)
+        px2(m, i - 1, i, shadow, main)
+        px2(m, i, i - 1, shadow, dark)
+        px2(m, i - 1, i + 1, FLAME_O, FLAME_Y)
+        px2(m, i + 1, i - 1, dark, FLAME_R)
         if i % 2 == 0 and i < 24:  # serrated flame-tooth edges
-            px(m, i - 2, i + 1, FLAME_Y)
-            px(m, i + 1, i - 2, FLAME_O)
+            px2(m, i - 2, i + 1, FLAME_Y, spec)
+            px2(m, i + 1, i - 2, FLAME_R, FLAME_O)
     for x, y in ((24, 25), (25, 24), (25, 26), (26, 25)):
-        px_full(m, x, y, FLAME_O)
-    px_full(m, 25, 25, FLAME_Y)
-    px_full(m, 26, 26, FLAME_W)
-    px(m, 27, 27, FLAME_W)
+        px4(m, x, y, FLAME_R, FLAME_O, FLAME_Y)
+    px4(m, 25, 25, FLAME_O, FLAME_Y, spec)
+    px4(m, 26, 26, FLAME_Y, spec, spec)
+    px2(m, 27, 27, FLAME_Y, spec)
     save(m, 121)
 
 
@@ -2397,9 +2677,10 @@ EMERALD_L = hexc("#8affb8")
 
 
 def pwnhammer():
-    """Hallowed golden-pink warhammer (20x20x4)."""
+    """Hallowed golden-pink warhammer with gold reinforcing bands and beveled crystal strike faces (20x20x4)."""
+    g_sh, g_d, g_m, g_l, g_sp = METAL["gold"]
     m = Model(20, 20, 4)
-    handle(m, 14)
+    handle(m, 14, metal="gold")
     for i in range(-5, 6):
         hx = 14 + i
         hy = 14 - i
@@ -2408,26 +2689,35 @@ def pwnhammer():
                 for z in (0, 1, 2, 3):
                     x, y = hx + dx, hy + dy
                     if abs(i) == 5:
-                        c = PWN_PINK_L if z >= 2 else PWN_PINK_D
+                        c = FEATHER if (z == 3 and dx == 0) else (PWN_PINK_L if z >= 2 else PWN_PINK_D)
                     elif abs(i) == 4:
-                        c = GOLD_L if z == 3 else GOLD_D
+                        c = g_sp if (z == 3 and dx == 0) else (g_l if z == 3 else (g_sh if z == 0 else g_d))
+                    elif i == 0 and z == 3 and dx == 0 and dy == 0:
+                        c = g_sp  # center hallowed emblem stud
                     else:
-                        c = PWN_PINK if z in (1, 2) else (GOLD_L if z == 3 else PWN_PINK_D)
+                        c = PWN_PINK if z in (1, 2) else (g_l if z == 3 else PWN_PINK_D)
                     m.set(x, y, z, c)
     save(m, 367)
 
 
 def breaker_blade():
-    """Colossal wide Terraria Buster-style greatsword (32x32x4)."""
+    """Colossal wide Terraria Buster-style greatsword (32x32x4) with 5-tone iron/silver slab,
+    tiered gold crossguard, deep dark fuller, recessed gold studs, and mirror-silver cutting edge."""
+    fe_sh, fe_d, fe_m, fe_l, fe_sp = METAL["iron"]
+    g_sh, g_d, g_m, g_l, g_sp = METAL["gold"]
     m = Model(32, 32, 4)
-    handle(m, 7)
+    handle(m, 7, metal="gold")
     g = 8
     for d in range(-6, 7):
         gx, gy = g + d, g - d
         if 0 <= gx < 32 and 0 <= gy < 32:
-            px_full(m, gx, gy, GOLD_D if abs(d) >= 5 else GOLD)
+            if abs(d) >= 5:
+                px4(m, gx, gy, g_sh, g_d, g_l)
+            else:
+                px4(m, gx, gy, g_sh, g_m, g_l)
             if gy + 1 < 32:
-                px_full(m, gx, gy + 1, GOLD_L if d <= 0 else GOLD_D)
+                px4(m, gx, gy + 1, g_d if d <= 0 else g_sh, g_l if d <= 0 else g_d, g_sp if d <= 0 else g_m)
+    px4(m, 8, 8, g_d, g_m, g_sp)  # center guard boss
     # Massive broad steel slab (width 5-6 voxels) with dark iron fuller, gold studs & bright silver edge
     for k in range(9, 29):
         w = 3 if k < 25 else (2 if k < 27 else (1 if k < 28 else 0))
@@ -2435,22 +2725,25 @@ def breaker_blade():
             bx, by = k + d, k - d
             if 0 <= bx < 32 and 0 <= by < 32:
                 if d == -w:
-                    c = SILVER_L
+                    px2(m, bx, by, fe_l, fe_sp)
+                elif d == -w + 1:
+                    px2(m, bx, by, fe_m, fe_l)
                 elif d == w:
-                    c = IRON_D
+                    px2(m, bx, by, fe_sh, fe_d)
                 elif d == 0:
-                    c = GOLD_L if k in (12, 16, 20, 24) else IRON_D
+                    if k in (12, 16, 20, 24):
+                        px4(m, bx, by, g_d, g_l, g_sp)
+                    else:
+                        px4(m, bx, by, fe_sh, fe_sh, fe_d)  # deep dark fuller
+                elif abs(d) <= 1:
+                    px4(m, bx, by, fe_d, fe_m, fe_l if d < 0 else fe_m)
                 else:
-                    c = IRON
-                if abs(d) <= 1:
-                    px_full(m, bx, by, c)
-                else:
-                    px(m, bx, by, c)
-    px_full(m, 29, 29, SILVER_L)
-    px(m, 29, 30, SILVER_L)
-    px(m, 30, 29, SILVER_L)
-    px(m, 30, 30, SILVER_L)
-    px(m, 31, 31, SILVER_L)
+                    px2(m, bx, by, fe_d, fe_m)
+    px4(m, 29, 29, fe_m, fe_l, fe_sp)
+    px2(m, 29, 30, fe_l, fe_sp)
+    px2(m, 30, 29, fe_m, fe_l)
+    px2(m, 30, 30, fe_l, fe_sp)
+    px2(m, 31, 31, fe_l, fe_sp)
     save(m, 426)
 
 
@@ -2521,14 +2814,13 @@ def firecracker():
 
 
 def bug_net():
-    """Wooden-handled bug net with iron hoop and woven mesh bag (19x19x4)."""
+    """Wooden-handled bug net with 5-tone iron hoop, riveted collar, and woven mesh bag (19x19x4)."""
     m = Model(N, N, 4)
-    handle(m, 9)
-    rim_m, rim_l, rim_d = METAL["iron"]
-    # Collar joining handle to hoop
+    handle(m, 9, metal="iron")
+    rim_sh, rim_d, rim_m, rim_l, rim_sp = METAL["iron"]
+    # Riveted collar joining handle to hoop
     m.box(9, 9, 0, 11, 11, 3, rim_d)
-    m.set(10, 10, 1, rim_m)
-    m.set(10, 10, 2, rim_m)
+    px4(m, 10, 10, rim_sh, rim_m, rim_sp)
     # Circular/oval metal hoop from (10,10) to (18,18)
     hoop_pts = [
         (10, 12), (10, 13), (10, 14),
@@ -2539,7 +2831,12 @@ def bug_net():
         (14, 10), (13, 10), (12, 10), (11, 11),
     ]
     for x, y in hoop_pts:
-        px_full(m, x, y, rim_l if (x + y) >= 29 else rim_m)
+        if (x + y) >= 31:
+            px4(m, x, y, rim_m, rim_l, rim_sp)
+        elif (x + y) >= 27:
+            px4(m, x, y, rim_d, rim_m, rim_l)
+        else:
+            px4(m, x, y, rim_sh, rim_d, rim_m)
     # Woven net mesh filling the hoop and tapering back in z
     for x in range(11, 18):
         for y in range(11, 18):
@@ -2721,33 +3018,58 @@ def potion_item(item_id, liquid_d, liquid, liquid_l, tall=False):
 
 
 def nights_edge():
-    """Night's Edge: broad dark-obsidian & glowing violet notched greatsword."""
-    m = Model(N, N, 4)
+    """Terraria Night's Edge (25x25x4): iconic dark-obsidian & glowing violet notched greatsword
+    with amethyst pommel, swept horned crossguard, recessed obsidian fuller, and neon-violet edge."""
+    sz = 25
+    m = Model(sz, sz, 4)
+    blade_sh = hexc("#180a29")
     blade_d = hexc("#2b1644")
     blade = hexc("#5a258c")
     edge = hexc("#b05cff")
     edge_l = hexc("#e2b3ff")
+    edge_sp = hexc("#f9e8ff")
+    guard_d = hexc("#26103b")
     guard = hexc("#3c1b59")
-    # Pommel & grip
-    px_full(m, 1, 1, guard)
-    px_full(m, 2, 2, GRIP)
-    px_full(m, 3, 3, GRIP)
-    # Swept crossguard
-    for dx, dy in [(-2, 2), (-1, 1), (0, 0), (1, -1), (2, -2)]:
-        px_full(m, 4 + dx, 4 + dy, guard)
-    px_full(m, 2, 7, edge)
-    px_full(m, 7, 2, edge)
-    # Broad curved/notched dark-violet blade
-    for i in range(5, N - 1):
-        px_full(m, i, i, blade_d)
-        px(m, i - 1, i, blade)
-        px(m, i, i - 1, blade)
-        if i >= 7:
-            px(m, i - 2, i, edge if i < N - 3 else edge_l)
-            px(m, i, i - 2, edge if i < N - 3 else edge_l)
-    px_full(m, N - 1, N - 1, edge_l)
-    px(m, N - 2, N - 1, edge_l)
-    px(m, N - 1, N - 2, edge_l)
+    # Ornate pommel with glowing amethyst stud & wrapped dark-violet grip (0..5)
+    px4(m, 0, 0, guard_d, edge, edge_sp)
+    px2(m, 1, 0, guard_d, guard)
+    px2(m, 0, 1, guard, edge)
+    for i in range(1, 6):
+        px4(m, i, i, LEATHER_D, guard_d if i % 2 == 0 else LEATHER, blade if i % 2 == 0 else LEATHER_L)
+        px2(m, i + 1, i, LEATHER_D, guard_d)
+        px2(m, i, i + 1, guard_d, guard)
+    # Swept horned crossguard at g=6
+    g = 6
+    for d in range(-5, 6):
+        gx, gy = g + d, g - d
+        if 0 <= gx < sz and 0 <= gy < sz:
+            if abs(d) >= 4:
+                px4(m, gx, gy, guard_d, blade, edge)
+            else:
+                px4(m, gx, gy, blade_sh, guard, blade)
+            if abs(d) >= 4 and gx + 1 < sz and gy + 1 < sz:
+                px4(m, gx + 1, gy + 1, blade, edge, edge_l)
+    px4(m, 6, 6, blade, edge, edge_sp)  # glowing violet rune core
+    # Broad notched obsidian-violet blade (7..22)
+    for i in range(7, sz - 2):
+        # Deep obsidian fuller groove along the center spine
+        px4(m, i, i, blade_sh, blade_d, blade if i % 3 == 0 else blade_d)
+        # Inner royal-violet bevels
+        px2(m, i - 1, i, blade_d, blade)
+        px2(m, i, i - 1, blade_sh, blade_d)
+        # Glowing violet cutting edges with signature asymmetric notches
+        if i >= 8 and i not in (13, 18):
+            px2(m, i - 2, i, edge, edge_l if i < sz - 5 else edge_sp)
+            px2(m, i - 1, i + 1, edge, edge_sp if i >= sz - 6 else edge_l)
+        if i >= 8 and i not in (15, 20):
+            px2(m, i, i - 2, blade, edge)
+            px2(m, i + 1, i - 1, blade_d, blade)
+    # Gleaming tapered point
+    px4(m, sz - 3, sz - 3, blade, edge, edge_l)
+    px4(m, sz - 2, sz - 2, edge, edge_l, edge_sp)
+    px2(m, sz - 2, sz - 1, edge_l, edge_sp)
+    px2(m, sz - 1, sz - 2, edge, edge_l)
+    px2(m, sz - 1, sz - 1, edge_l, edge_sp)
     save(m, 273)
 
 
