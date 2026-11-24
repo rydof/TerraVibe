@@ -1,0 +1,19 @@
+[package]
+name = "terravibe_lobby"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "terravibe-lobby"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+rand = "0.10"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
+
+[dev-dependencies]
+serde_json = "1"
+tower = { version = "0.5", features = ["util"] }
