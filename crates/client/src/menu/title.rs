@@ -5,8 +5,9 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 use super::style::{
-    BUTTON_HEIGHT, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG, COLOR_PANEL_BORDER,
-    COLOR_TEXT_GOLD, COLOR_TEXT_MUTED, spawn_button_sized, viewport_size,
+    BORDER_W, BUTTON_HEIGHT, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
+    COLOR_PANEL_BORDER, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED, RADIUS_PANEL, spawn_button_sized,
+    viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
 use super::{Action, Screen};
@@ -314,8 +315,8 @@ pub fn setup_title(
                 top: Val::Px(card_top),
                 width: Val::Px(card_w),
                 height: Val::Px(card_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::top(Val::Px(12.0)),

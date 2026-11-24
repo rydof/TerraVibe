@@ -8,9 +8,9 @@ use terravibe_server::characters::{
 };
 
 use super::style::{
-    BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
-    COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_TEXT_GOLD, spawn_button_ext, spawn_button_sized,
-    viewport_size,
+    BORDER_W, BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
+    COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_TEXT_GOLD, RADIUS_BTN, RADIUS_PANEL,
+    spawn_button_ext, spawn_button_sized, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
 use super::{Action, MenuFocus, Screen};
@@ -117,8 +117,8 @@ pub fn setup_characters(
                 top: Val::Px(panel_top),
                 width: Val::Px(panel_w),
                 height: Val::Px(panel_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::all(Val::Px(22.0)),
@@ -215,8 +215,8 @@ pub fn setup_characters(
                         top: Val::Px(row_y),
                         width: Val::Px(card_w),
                         height: Val::Px(68.0),
-                        border: UiRect::all(Val::Px(2.0)),
-                        border_radius: BorderRadius::all(Val::Px(6.0)),
+                        border: UiRect::all(Val::Px(BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
                         padding: UiRect::horizontal(Val::Px(14.0)),
@@ -233,8 +233,8 @@ pub fn setup_characters(
                         Node {
                             width: Val::Px(38.0),
                             height: Val::Px(38.0),
-                            border: UiRect::all(Val::Px(2.0)),
-                            border_radius: BorderRadius::all(Val::Px(5.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                             margin: UiRect::right(Val::Px(14.0)),
                             flex_direction: FlexDirection::Column,
                             overflow: Overflow::clip(),
@@ -359,8 +359,8 @@ pub fn setup_characters(
                     left: Val::Px(center_x - 260.0),
                     top: Val::Px(modal_top),
                     width: Val::Px(520.0),
-                    border: UiRect::all(Val::Px(3.0)),
-                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(24.0)),

@@ -5,9 +5,9 @@ use bevy::prelude::*;
 use bevy::window::{Monitor, PrimaryMonitor, PrimaryWindow, Window};
 
 use super::style::{
-    BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_PANEL_BG, COLOR_PANEL_BORDER,
-    COLOR_PANEL_INNER, COLOR_SLIDER_FILL, COLOR_TEXT_GOLD, MenuSelected, spawn_button_sized,
-    spawn_slider_bar,
+    BORDER_W, BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_PANEL_BG, COLOR_PANEL_BORDER,
+    COLOR_PANEL_INNER, COLOR_SLIDER_FILL, COLOR_TEXT_GOLD, MenuSelected, RADIUS_BTN, RADIUS_PANEL,
+    spawn_button_sized, spawn_slider_bar,
 };
 use super::text::{MenuText, MenuTextColor};
 use super::{Action, Setting};
@@ -297,8 +297,8 @@ impl UiSpawnCtx {
                     top: Val::Px(pos.1),
                     width: Val::Px(label_w),
                     height: Val::Px(row_h),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     padding: UiRect::bottom(Val::Px(6.0)),
@@ -412,8 +412,8 @@ pub fn setup_options_with_state(
                 top: Val::Px(154.0),
                 width: Val::Px(760.0),
                 height: Val::Px(532.0),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 ..default()
             },
             BackgroundColor(COLOR_PANEL_BG),
@@ -429,8 +429,8 @@ pub fn setup_options_with_state(
                 left: Val::Px(center_x - 380.0),
                 top: Val::Px(24.0),
                 width: Val::Px(760.0),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(6.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::axes(Val::Px(20.0), Val::Px(10.0)),

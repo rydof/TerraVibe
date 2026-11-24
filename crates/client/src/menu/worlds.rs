@@ -11,9 +11,9 @@ use terravibe_server::save::{has_world_backup, restore_world_backup};
 use terravibe_server::worlds::{WorldInfo, delete_world, list_worlds};
 
 use super::style::{
-    BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
+    BORDER_W, BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
     COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_TEXT_ERROR, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED,
-    spawn_button_ext, spawn_button_sized, viewport_size,
+    RADIUS_PANEL, spawn_button_ext, spawn_button_sized, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
 use super::{Action, MenuFocus, Screen};
@@ -175,8 +175,8 @@ pub fn rebuild_worlds_ui(
                 top: Val::Px(panel_top),
                 width: Val::Px(panel_w),
                 height: Val::Px(panel_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::all(Val::Px(22.0)),
@@ -280,8 +280,8 @@ pub fn rebuild_worlds_ui(
                         top: Val::Px(row_y),
                         width: Val::Px(card_w),
                         height: Val::Px(68.0),
-                        border: UiRect::all(Val::Px(2.0)),
-                        border_radius: BorderRadius::all(Val::Px(6.0)),
+                        border: UiRect::all(Val::Px(BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::Center,
                         padding: UiRect::horizontal(Val::Px(16.0)),
@@ -435,8 +435,8 @@ pub fn rebuild_worlds_ui(
                     left: Val::Px(center_x - 260.0),
                     top: Val::Px(modal_top),
                     width: Val::Px(520.0),
-                    border: UiRect::all(Val::Px(3.0)),
-                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(24.0)),

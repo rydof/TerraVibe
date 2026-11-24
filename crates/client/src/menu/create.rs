@@ -10,9 +10,9 @@ use terravibe_server::worlds::{NameError, create_world, validate_name};
 use terravibe_sim::WorldSize;
 
 use super::style::{
-    BUTTON_HEIGHT, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_INPUT_ACTIVE_BORDER, COLOR_INPUT_BG,
-    COLOR_INPUT_IDLE_BORDER, COLOR_PANEL_BG, COLOR_PANEL_BORDER, COLOR_PANEL_INNER,
-    COLOR_TEXT_GOLD, MenuSelected, spawn_button_sized, viewport_size,
+    BORDER_W, BUTTON_HEIGHT, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_INPUT_ACTIVE_BORDER,
+    COLOR_INPUT_BG, COLOR_INPUT_IDLE_BORDER, COLOR_PANEL_BG, COLOR_PANEL_BORDER, COLOR_PANEL_INNER,
+    COLOR_TEXT_GOLD, MenuSelected, RADIUS_BTN, RADIUS_PANEL, spawn_button_sized, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
 use super::{Action, MenuFocus};
@@ -221,8 +221,8 @@ pub fn setup_create_screen(
                 top: Val::Px(panel_top),
                 width: Val::Px(panel_w),
                 height: Val::Px(panel_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::all(Val::Px(22.0)),
@@ -265,8 +265,8 @@ pub fn setup_create_screen(
                 Node {
                     width: Val::Px(640.0),
                     height: Val::Px(38.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(5.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                     align_items: AlignItems::Center,
                     padding: UiRect::horizontal(Val::Px(12.0)),
                     margin: UiRect::bottom(Val::Px(2.0)),
@@ -341,8 +341,8 @@ pub fn setup_create_screen(
                 Node {
                     width: Val::Px(640.0),
                     height: Val::Px(34.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    border_radius: BorderRadius::all(Val::Px(5.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::SpaceBetween,
                     padding: UiRect::horizontal(Val::Px(14.0)),

@@ -8,27 +8,31 @@ use bevy::input::mouse::{MouseButton, MouseWheel};
 use bevy::prelude::*;
 use bevy::ui::UiGlobalTransform;
 use bevy::window::{CursorOptions, PrimaryWindow, Window};
+use terravibe_sim::inventory::ItemStack;
 use terravibe_sim::item::{
-    BUG_NET, GUIDE_VOODOO_DOLL, ItemClass, ItemId, SUSPICIOUS_LOOKING_EYE, WORM_FOOD, all_item_ids,
-    item_data,
+    ABEEMINATION, BUG_NET, GOBLIN_BATTLE_STANDARD, GUIDE_VOODOO_DOLL, ItemClass, ItemId,
+    SLIME_CROWN, SUSPICIOUS_LOOKING_EYE, WORM_FOOD, all_item_ids, item_data,
 };
 use terravibe_sim::net::{ClientMsg, CreativeCmd};
 
 use super::style::{
-    COLOR_BACKDROP, COLOR_BORDER_NORMAL, COLOR_BORDER_SELECTED, COLOR_BUTTON_NORMAL,
-    COLOR_BUTTON_SELECTED, COLOR_HEADER_DIVIDER, COLOR_INPUT_ACTIVE_BORDER, COLOR_INPUT_BG,
-    COLOR_PANEL_BG, COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED,
-    COLOR_TEXT_PRIMARY, COLOR_TEXT_SUCCESS, viewport_size,
+    BORDER_W, BTN_BG_HOVER, COLOR_BACKDROP, COLOR_BORDER_NORMAL, COLOR_BORDER_SELECTED,
+    COLOR_BUTTON_NORMAL, COLOR_BUTTON_SELECTED, COLOR_HEADER_DIVIDER, COLOR_INPUT_ACTIVE_BORDER,
+    COLOR_INPUT_BG, COLOR_PANEL_BG, COLOR_PANEL_BORDER, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED,
+    COLOR_TEXT_PRIMARY, COLOR_TEXT_SUCCESS, PANEL_BG_SOLID, RADIUS_BTN, RADIUS_PANEL, RADIUS_SLOT,
+    SLOT_BG, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
 use crate::hud::inventory::IconAssets;
+use crate::hud::tooltip::{format_item_tooltip_for, rarity_color_for};
 use crate::net::{ClientGodMode, Net};
 use crate::session::{AppState, SessionError};
 use crate::view::camera::set_grab;
 
-const GRID_COLS: usize = 5;
+const GRID_COLS: usize = 9;
 const GRID_ROWS: usize = 5;
 const ITEMS_PER_PAGE: usize = GRID_COLS * GRID_ROWS;
+const TOOLTIP_MAX_LINES: usize = 8;
 const DAY_TIME_TICKS: u32 = 16_200;
 const NIGHT_TIME_TICKS: u32 = terravibe_sim::time::DAY_TICKS + 5_400;
 const SEARCH_MAX_CHARS: usize = 32;
@@ -83,7 +87,15 @@ impl CreativeCategory {
 /// Returns true if `id` belongs to `category`.
 pub fn item_matches_category(id: ItemId, category: CreativeCategory) -> bool {
     let d = item_data(id);
-    let is_boss_summon = matches!(id, SUSPICIOUS_LOOKING_EYE | WORM_FOOD | GUIDE_VOODOO_DOLL);
+    let is_boss_summon = matches!(
+        id,
+        SLIME_CROWN
+            | SUSPICIOUS_LOOKING_EYE
+            | WORM_FOOD
+            | ABEEMINATION
+            | GOBLIN_BATTLE_STANDARD
+            | GUIDE_VOODOO_DOLL
+    );
     let is_potion = d.class == ItemClass::Consumable
         && (d.buff_secs > 0 || d.name.contains("Potion") || d.name == "Mushroom");
     let is_tool = d.class == ItemClass::Tool || id == BUG_NET;
@@ -144,7 +156,13 @@ pub fn creative_give_count(id: ItemId, right_click: bool) -> u32 {
     }
     if matches!(
         id,
-        SUSPICIOUS_LOOKING_EYE | WORM_FOOD | GUIDE_VOODOO_DOLL | BUG_NET
+        SLIME_CROWN
+            | SUSPICIOUS_LOOKING_EYE
+            | WORM_FOOD
+            | ABEEMINATION
+            | GOBLIN_BATTLE_STANDARD
+            | GUIDE_VOODOO_DOLL
+            | BUG_NET
     ) {
         return 1;
     }
@@ -210,6 +228,12 @@ struct CreativeCellIcon(usize);
 
 #[derive(Component)]
 struct CreativeCellLabel(usize);
+
+#[derive(Component)]
+struct CreativeHoverTooltip;
+
+#[derive(Component)]
+struct CreativeTooltipLine(usize);
 
 fn total_pages(item_count: usize) -> usize {
     item_count.max(1).div_ceil(ITEMS_PER_PAGE)
@@ -416,8 +440,8 @@ fn handle_creative_clicks(
 
 fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
     let (win_w, win_h) = viewport;
-    let panel_w = (win_w - 80.0).clamp(640.0, 920.0);
-    let panel_h = (win_h - 60.0).clamp(480.0, 660.0);
+    let panel_w = (win_w - 80.0).clamp(640.0, 960.0);
+    let panel_h = (win_h - 50.0).clamp(480.0, 680.0);
     let panel_x = (win_w - panel_w) * 0.5;
     let panel_y = (win_h - panel_h) * 0.5;
 
@@ -443,8 +467,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                 top: Val::Px(panel_y),
                 width: Val::Px(panel_w),
                 height: Val::Px(panel_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(14.0)),
                 row_gap: Val::Px(8.0),
@@ -492,8 +516,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                         bar.spawn((
                             Node {
                                 padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
-                                border: UiRect::all(Val::Px(1.5)),
-                                border_radius: BorderRadius::all(Val::Px(4.0)),
+                                border: UiRect::all(Val::Px(BORDER_W)),
+                                border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 ..default()
@@ -531,8 +555,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                     width: Val::Percent(100.0),
                     height: Val::Px(32.0),
                     padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
-                    border: UiRect::all(Val::Px(1.5)),
-                    border_radius: BorderRadius::all(Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                     align_items: AlignItems::Center,
                     ..default()
                 },
@@ -566,8 +590,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                     tabs.spawn((
                         Node {
                             padding: UiRect::axes(Val::Px(9.0), Val::Px(5.0)),
-                            border: UiRect::all(Val::Px(1.5)),
-                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                             ..default()
                         },
                         BackgroundColor(COLOR_BUTTON_NORMAL),
@@ -582,7 +606,7 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                 }
             });
 
-            // 5x5 Item Grid
+            // 9x5 Item Grid (icon-first cards)
             root.spawn((
                 Node {
                     width: Val::Percent(100.0),
@@ -600,15 +624,16 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                 for idx in 0..ITEMS_PER_PAGE {
                     grid.spawn((
                         Node {
-                            padding: UiRect::all(Val::Px(6.0)),
-                            border: UiRect::all(Val::Px(1.5)),
-                            border_radius: BorderRadius::all(Val::Px(4.0)),
-                            flex_direction: FlexDirection::Row,
+                            padding: UiRect::all(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_SLOT)),
+                            flex_direction: FlexDirection::Column,
+                            justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
-                            column_gap: Val::Px(6.0),
+                            row_gap: Val::Px(2.0),
                             ..default()
                         },
-                        BackgroundColor(COLOR_PANEL_INNER),
+                        BackgroundColor(SLOT_BG),
                         BorderColor::all(COLOR_BORDER_NORMAL),
                         GlobalZIndex(1301),
                         CreativeControl::ItemCell(idx),
@@ -617,8 +642,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                     .with_children(|cell| {
                         cell.spawn((
                             Node {
-                                width: Val::Px(24.0),
-                                height: Val::Px(24.0),
+                                width: Val::Px(32.0),
+                                height: Val::Px(32.0),
                                 flex_shrink: 0.0,
                                 ..default()
                             },
@@ -627,7 +652,7 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                             CreativeUiRoot,
                         ));
                         cell.spawn((
-                            MenuText::new("", 0.72),
+                            MenuText::new("", 0.64),
                             MenuTextColor(COLOR_TEXT_PRIMARY),
                             CreativeCellLabel(idx),
                             CreativeUiRoot,
@@ -661,8 +686,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                     pg.spawn((
                         Node {
                             padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
-                            border: UiRect::all(Val::Px(1.5)),
-                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                             ..default()
                         },
                         BackgroundColor(COLOR_BUTTON_NORMAL),
@@ -685,8 +710,8 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                     pg.spawn((
                         Node {
                             padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
-                            border: UiRect::all(Val::Px(1.5)),
-                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                             ..default()
                         },
                         BackgroundColor(COLOR_BUTTON_NORMAL),
@@ -708,6 +733,40 @@ fn spawn_creative_ui(commands: &mut Commands, viewport: (f32, f32)) {
                 ));
             });
         });
+
+    // Floating hover tooltip above CreativeUiRoot (GlobalZIndex 1350)
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                padding: UiRect::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                max_width: Val::Px(280.0),
+                ..default()
+            },
+            BackgroundColor(PANEL_BG_SOLID),
+            BorderColor::all(COLOR_BORDER_NORMAL),
+            GlobalZIndex(1350),
+            Visibility::Hidden,
+            CreativeHoverTooltip,
+            CreativeUiRoot,
+        ))
+        .with_children(|tt| {
+            for line_idx in 0..TOOLTIP_MAX_LINES {
+                tt.spawn((
+                    MenuText::new("", if line_idx == 0 { 0.86 } else { 0.76 }),
+                    MenuTextColor(COLOR_TEXT_PRIMARY),
+                    Visibility::Hidden,
+                    CreativeTooltipLine(line_idx),
+                    CreativeUiRoot,
+                ));
+            }
+        });
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -721,63 +780,51 @@ fn sync_creative_ui(
     roots: Query<Entity, With<CreativeUiRoot>>,
     mut cache: ResMut<CreativeIconCache>,
     mut icon_assets: IconAssets,
-    mut search_q: Query<
-        &mut MenuText,
+    mut text_q: Query<
         (
-            With<CreativeSearchText>,
-            Without<CreativeGodModeText>,
-            Without<CreativePageText>,
-            Without<CreativeStatusText>,
-            Without<CreativeCellLabel>,
+            &mut MenuText,
+            Option<&mut MenuTextColor>,
+            Option<&mut Visibility>,
+            Option<&CreativeSearchText>,
+            Option<&CreativeGodModeText>,
+            Option<&CreativePageText>,
+            Option<&CreativeStatusText>,
+            Option<&CreativeCellLabel>,
+            Option<&CreativeTooltipLine>,
+        ),
+        (
+            With<CreativeUiRoot>,
+            Without<CreativeControl>,
+            Without<CreativeCellIcon>,
+            Without<CreativeHoverTooltip>,
         ),
     >,
-    mut god_q: Query<
-        &mut MenuText,
+    mut ctrl_q: Query<
         (
-            With<CreativeGodModeText>,
-            Without<CreativeSearchText>,
-            Without<CreativePageText>,
-            Without<CreativeStatusText>,
-            Without<CreativeCellLabel>,
+            &CreativeControl,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &mut Visibility,
         ),
+        Without<MenuText>,
     >,
-    mut page_q: Query<
-        &mut MenuText,
-        (
-            With<CreativePageText>,
-            Without<CreativeSearchText>,
-            Without<CreativeGodModeText>,
-            Without<CreativeStatusText>,
-            Without<CreativeCellLabel>,
-        ),
-    >,
-    mut status_q: Query<
-        &mut MenuText,
-        (
-            With<CreativeStatusText>,
-            Without<CreativeSearchText>,
-            Without<CreativeGodModeText>,
-            Without<CreativePageText>,
-            Without<CreativeCellLabel>,
-        ),
-    >,
-    mut ctrl_q: Query<(
-        &CreativeControl,
-        &mut BackgroundColor,
-        &mut BorderColor,
-        &mut Visibility,
-    )>,
     mut icon_q: Query<
         (&CreativeCellIcon, &mut ImageNode, &mut Visibility),
-        Without<CreativeControl>,
-    >,
-    mut label_q: Query<
-        (&CreativeCellLabel, &mut MenuText),
         (
-            Without<CreativeSearchText>,
-            Without<CreativeGodModeText>,
-            Without<CreativePageText>,
-            Without<CreativeStatusText>,
+            Without<CreativeControl>,
+            Without<CreativeHoverTooltip>,
+            Without<MenuText>,
+        ),
+    >,
+    mut tooltip_q: Query<
+        (&mut Node, &mut BorderColor, &mut Visibility),
+        (
+            With<CreativeHoverTooltip>,
+            Without<CreativeControl>,
+            Without<CreativeCellIcon>,
+            Without<MenuText>,
         ),
     >,
 ) {
@@ -803,37 +850,19 @@ fn sync_creative_ui(
     let pages = total_pages(items.len());
     let page = state.page.min(pages - 1);
     let start = page * ITEMS_PER_PAGE;
-
-    for mut t in &mut search_q {
-        t.text = if state.search.is_empty() {
-            "Search: (type to filter items...)".into()
-        } else {
-            format!("Search: {}_", state.search)
-        };
-    }
-
     let god_on = god_mode.as_ref().is_some_and(|g| g.0);
-    for mut t in &mut god_q {
-        t.text = if god_on {
-            "God Mode: ON".into()
-        } else {
-            "God Mode: OFF".into()
-        };
-    }
 
-    for mut t in &mut page_q {
-        t.text = format!("Page {} / {} ({} items)", page + 1, pages, items.len());
-    }
+    let cursor_logical = primary_window
+        .as_ref()
+        .and_then(|q| q.single().ok())
+        .and_then(|w| {
+            w.cursor_position()
+                .map(|p| (p, p * w.scale_factor(), w.width(), w.height()))
+        });
 
-    for mut t in &mut status_q {
-        t.text = if state.status.is_empty() {
-            "Left-Click: Give  |  Right-Click: Max Stack".into()
-        } else {
-            state.status.clone()
-        };
-    }
+    let mut hovered_item: Option<(ItemId, Vec2, f32, f32)> = None;
 
-    for (ctrl, mut bg, mut border, mut vis) in &mut ctrl_q {
+    for (ctrl, node, xform, mut bg, mut border, mut vis) in &mut ctrl_q {
         match *ctrl {
             CreativeControl::ToggleGodMode => {
                 bg.0 = if god_on {
@@ -861,12 +890,39 @@ fn sync_creative_ui(
                 });
             }
             CreativeControl::ItemCell(slot_idx) => {
-                let has_item = start + slot_idx < items.len();
-                *vis = if has_item {
+                let item_opt = items.get(start + slot_idx).copied();
+                *vis = if item_opt.is_some() {
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
                 };
+                let is_hovered =
+                    if let (Some(item), Some((cursor_log, cursor_phys, win_w, win_h))) =
+                        (item_opt, cursor_logical)
+                    {
+                        let center = xform.translation;
+                        let half = node.size() * 0.5;
+                        let hit = half.x > 0.0
+                            && (cursor_phys.x - center.x).abs() <= half.x
+                            && (cursor_phys.y - center.y).abs() <= half.y;
+                        if hit {
+                            hovered_item = Some((item, cursor_log, win_w, win_h));
+                        }
+                        hit
+                    } else {
+                        false
+                    };
+                bg.0 = if is_hovered { BTN_BG_HOVER } else { SLOT_BG };
+                *border = BorderColor::all(if is_hovered {
+                    rarity_color_for(
+                        item_opt.map_or(terravibe_sim::item::Rarity::White, |id| {
+                            item_data(id).rarity
+                        }),
+                        false,
+                    )
+                } else {
+                    COLOR_BORDER_NORMAL
+                });
             }
             _ => {}
         }
@@ -885,12 +941,78 @@ fn sync_creative_ui(
         }
     }
 
-    for (lbl_slot, mut text) in &mut label_q {
-        text.text = if let Some(&id) = items.get(start + lbl_slot.0) {
-            truncate_label(item_data(id).name, 16)
-        } else {
-            String::new()
-        };
+    let tooltip_lines = hovered_item.map(|(item, _, _, _)| {
+        format_item_tooltip_for(
+            &ItemStack {
+                id: item,
+                count: 1,
+                prefix: terravibe_sim::item::Prefix(0),
+            },
+            None,
+            None,
+            false,
+        )
+    });
+
+    if let Some((item, cursor_log, win_w, win_h)) = hovered_item {
+        let rarity_col = rarity_color_for(item_data(item).rarity, false);
+        for (mut node, mut border, mut vis) in &mut tooltip_q {
+            node.left = Val::Px((cursor_log.x + 14.0).clamp(8.0, (win_w - 290.0).max(8.0)));
+            node.top = Val::Px((cursor_log.y + 14.0).clamp(8.0, (win_h - 170.0).max(8.0)));
+            *border = BorderColor::all(rarity_col);
+            *vis = Visibility::Inherited;
+        }
+    } else {
+        for (_, _, mut vis) in &mut tooltip_q {
+            *vis = Visibility::Hidden;
+        }
+    }
+
+    for (mut text, color_opt, vis_opt, is_search, is_god, is_page, is_status, cell_lbl, tt_line) in
+        &mut text_q
+    {
+        if is_search.is_some() {
+            text.text = if state.search.is_empty() {
+                "Search: (type to filter items...)".into()
+            } else {
+                format!("Search: {}_", state.search)
+            };
+        } else if is_god.is_some() {
+            text.text = if god_on {
+                "God Mode: ON".into()
+            } else {
+                "God Mode: OFF".into()
+            };
+        } else if is_page.is_some() {
+            text.text = format!("Page {} / {} ({} items)", page + 1, pages, items.len());
+        } else if is_status.is_some() {
+            text.text = if state.status.is_empty() {
+                "Left-Click: Give  |  Right-Click: Max Stack".into()
+            } else {
+                state.status.clone()
+            };
+        } else if let Some(lbl_slot) = cell_lbl {
+            text.text = if let Some(&id) = items.get(start + lbl_slot.0) {
+                truncate_label(item_data(id).name, 10)
+            } else {
+                String::new()
+            };
+        } else if let Some(line_cmp) = tt_line {
+            if let Some(line) = tooltip_lines.as_ref().and_then(|l| l.get(line_cmp.0)) {
+                text.text = line.text.clone();
+                if let Some(mut c) = color_opt {
+                    c.0 = line.color;
+                }
+                if let Some(mut v) = vis_opt {
+                    *v = Visibility::Inherited;
+                }
+            } else {
+                text.text.clear();
+                if let Some(mut v) = vis_opt {
+                    *v = Visibility::Hidden;
+                }
+            }
+        }
     }
 }
 
@@ -1025,8 +1147,8 @@ mod tests {
             .world_mut()
             .query_filtered::<(&CreativeControl, Option<&GlobalZIndex>), With<CreativeUiRoot>>();
         let controls: Vec<_> = ctrl_q.iter(app.world()).collect();
-        // 5 quick actions + 9 categories + 2 pagination + 25 item cells = 41 controls
-        assert_eq!(controls.len(), 41);
+        // 5 quick actions + 9 categories + 2 pagination + 45 item cells = 61 controls
+        assert_eq!(controls.len(), 61);
         for (ctrl, maybe_z) in controls {
             let z = maybe_z
                 .map(|z| z.0)
@@ -1036,6 +1158,39 @@ mod tests {
                 "Creative control {ctrl:?} (z={z}) must be > panel (z={panel_z})"
             );
         }
+    }
+
+    #[test]
+    fn creative_all_category_includes_all_225_items() {
+        let all = filter_creative_items("", CreativeCategory::All);
+        assert_eq!(all.len(), 225);
+    }
+
+    #[test]
+    fn creative_boss_summons_includes_all_six() {
+        use terravibe_sim::item::{ABEEMINATION, GOBLIN_BATTLE_STANDARD, SLIME_CROWN};
+        let summons = filter_creative_items("", CreativeCategory::BossSummon);
+        for id in [
+            SLIME_CROWN,
+            SUSPICIOUS_LOOKING_EYE,
+            WORM_FOOD,
+            ABEEMINATION,
+            GOBLIN_BATTLE_STANDARD,
+            GUIDE_VOODOO_DOLL,
+        ] {
+            assert!(
+                summons.contains(&id),
+                "BossSummon missing {:?}",
+                item_data(id).name
+            );
+        }
+    }
+
+    #[test]
+    fn creative_grid_shows_45_items_per_page() {
+        assert_eq!(GRID_COLS, 9);
+        assert_eq!(GRID_ROWS, 5);
+        assert_eq!(ITEMS_PER_PAGE, 45);
     }
 
     #[test]

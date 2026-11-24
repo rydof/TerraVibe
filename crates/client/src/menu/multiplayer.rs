@@ -5,8 +5,9 @@ use bevy::window::{PrimaryWindow, Window};
 
 use super::Action;
 use super::style::{
-    BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG, COLOR_PANEL_BORDER,
-    COLOR_PANEL_INNER, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED, spawn_button_ext, viewport_size,
+    BORDER_W, BUTTON_WIDTH, COLOR_BACKDROP, COLOR_HEADER_DIVIDER, COLOR_PANEL_BG,
+    COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_TEXT_GOLD, COLOR_TEXT_MUTED, RADIUS_PANEL,
+    spawn_button_ext, viewport_size,
 };
 use super::text::{MenuText, MenuTextColor};
 use crate::session::MenuScreen;
@@ -45,8 +46,8 @@ pub fn setup_multiplayer(
                 top: Val::Px(panel_top),
                 width: Val::Px(panel_w),
                 height: Val::Px(panel_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::all(Val::Px(24.0)),
@@ -82,8 +83,8 @@ pub fn setup_multiplayer(
             p.spawn((
                 Node {
                     width: Val::Px(560.0),
-                    border: UiRect::all(Val::Px(1.5)),
-                    border_radius: BorderRadius::all(Val::Px(6.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     padding: UiRect::axes(Val::Px(16.0), Val::Px(12.0)),
                     margin: UiRect::bottom(Val::Px(20.0)),
                     justify_content: JustifyContent::Center,

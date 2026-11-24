@@ -7,9 +7,9 @@ use bevy::window::{CursorGrabMode, CursorOptions, Monitor, PrimaryMonitor, Prima
 use super::nav::MenuFocus;
 use super::options::{OptionsHost, OptionsUiRoot, setup_options};
 use super::style::{
-    BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BORDER_NORMAL, COLOR_BUTTON_NORMAL, COLOR_HEADER_DIVIDER,
-    COLOR_PANEL_BG, COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_SLIDER_FILL, COLOR_TEXT_GOLD,
-    COLOR_TEXT_MUTED, spawn_button, spawn_slider_bar,
+    BACKDROP, BORDER_W, BUTTON_HEIGHT, BUTTON_WIDTH, COLOR_BORDER_NORMAL, COLOR_BUTTON_NORMAL,
+    COLOR_HEADER_DIVIDER, COLOR_PANEL_BG, COLOR_PANEL_BORDER, COLOR_PANEL_INNER, COLOR_SLIDER_FILL,
+    COLOR_TEXT_GOLD, COLOR_TEXT_MUTED, RADIUS_BTN, RADIUS_PANEL, spawn_button, spawn_slider_bar,
 };
 use super::text::{MenuText, MenuTextColor};
 use super::{Action, MenuButton};
@@ -391,7 +391,7 @@ fn spawn_game_root_ui(commands: &mut Commands, advice: &str, viewport: (f32, f32
             height: Val::Percent(100.0),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.02, 0.03, 0.05, 0.55)),
+        BackgroundColor(BACKDROP),
         GlobalZIndex(1299),
         GameRootUi,
     ));
@@ -404,8 +404,8 @@ fn spawn_game_root_ui(commands: &mut Commands, advice: &str, viewport: (f32, f32
                 top: Val::Px(panel_y),
                 width: Val::Px(panel_w),
                 height: Val::Px(panel_h),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(6.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::all(Val::Px(20.0)),
@@ -567,7 +567,7 @@ fn spawn_confirm_quit(commands: &mut Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.05, 0.55)),
+            BackgroundColor(BACKDROP),
             GlobalZIndex(1299),
             ConfirmQuitUi,
         ))
@@ -575,8 +575,8 @@ fn spawn_confirm_quit(commands: &mut Commands) {
             p.spawn((
                 Node {
                     width: Val::Px(560.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(28.0)),
@@ -616,8 +616,8 @@ fn spawn_confirm_quit(commands: &mut Commands) {
                             Node {
                                 width: Val::Px(220.0),
                                 height: Val::Px(BUTTON_HEIGHT),
-                                border: UiRect::all(Val::Px(2.0)),
-                                border_radius: BorderRadius::all(Val::Px(4.0)),
+                                border: UiRect::all(Val::Px(BORDER_W)),
+                                border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 margin: UiRect::right(Val::Px(if i == 0 { 16.0 } else { 0.0 })),
@@ -715,7 +715,7 @@ fn spawn_controls_ui(commands: &mut Commands, bindings: &crate::input_map::Input
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.06, 0.62)),
+            BackgroundColor(BACKDROP),
             GlobalZIndex(1299),
             ControlsUiRoot,
         ))
@@ -723,8 +723,8 @@ fn spawn_controls_ui(commands: &mut Commands, bindings: &crate::input_map::Input
             p.spawn((
                 Node {
                     width: Val::Px(740.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(24.0)),
@@ -781,8 +781,8 @@ fn spawn_controls_ui(commands: &mut Commands, bindings: &crate::input_map::Input
                     cols.spawn((
                         Node {
                             flex_grow: 1.0,
-                            border: UiRect::all(Val::Px(1.5)),
-                            border_radius: BorderRadius::all(Val::Px(6.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                             flex_direction: FlexDirection::Column,
                             padding: UiRect::all(Val::Px(14.0)),
                             row_gap: Val::Px(5.0),
@@ -806,8 +806,8 @@ fn spawn_controls_ui(commands: &mut Commands, bindings: &crate::input_map::Input
                     cols.spawn((
                         Node {
                             flex_grow: 1.0,
-                            border: UiRect::all(Val::Px(1.5)),
-                            border_radius: BorderRadius::all(Val::Px(6.0)),
+                            border: UiRect::all(Val::Px(BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                             flex_direction: FlexDirection::Column,
                             padding: UiRect::all(Val::Px(14.0)),
                             row_gap: Val::Px(5.0),
@@ -828,8 +828,8 @@ fn spawn_controls_ui(commands: &mut Commands, bindings: &crate::input_map::Input
                         width: Val::Px(BUTTON_WIDTH),
                         height: Val::Px(BUTTON_HEIGHT),
                         margin: UiRect::top(Val::Px(12.0)),
-                        border: UiRect::all(Val::Px(2.0)),
-                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        border: UiRect::all(Val::Px(BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         ..default()
@@ -876,15 +876,15 @@ fn spawn_loading_card(
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.04, 0.06, 0.10, 0.80)),
+            BackgroundColor(BACKDROP),
             LoadingCardUi,
         ))
         .with_children(|p| {
             p.spawn((
                 Node {
                     width: Val::Px(520.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(28.0)),
@@ -1016,15 +1016,15 @@ fn spawn_saving_overlay(commands: &mut Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.05, 0.85)),
+            BackgroundColor(BACKDROP),
             SavingOverlayUi,
         ))
         .with_children(|p| {
             p.spawn((
                 Node {
                     width: Val::Px(420.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(6.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(24.0)),
@@ -1073,8 +1073,8 @@ fn spawn_error_modal_button(
             width: Val::Px(BUTTON_WIDTH),
             height: Val::Px(BUTTON_HEIGHT),
             margin: UiRect::bottom(Val::Px(bottom_margin)),
-            border: UiRect::all(Val::Px(2.0)),
-            border_radius: BorderRadius::all(Val::Px(4.0)),
+            border: UiRect::all(Val::Px(BORDER_W)),
+            border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
@@ -1118,7 +1118,7 @@ fn spawn_error_modal(commands: &mut Commands, message: &str, is_disconnect: bool
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.05, 0.85)),
+            BackgroundColor(BACKDROP),
             ErrorModalUi,
             GlobalZIndex(2),
         ))
@@ -1126,8 +1126,8 @@ fn spawn_error_modal(commands: &mut Commands, message: &str, is_disconnect: bool
             p.spawn((
                 Node {
                     width: Val::Px(560.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(8.0)),
+                    border: UiRect::all(Val::Px(BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     padding: UiRect::all(Val::Px(28.0)),
