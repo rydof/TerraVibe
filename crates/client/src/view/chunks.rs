@@ -37,19 +37,19 @@ use crate::session::AppState;
 /// Only chunk layers `0..CHUNK_LAYERS` have blocks.
 const CHUNK_LAYERS: i32 = terravibe_sim::WORLD_CHUNK_LAYERS;
 /// Max meshing tasks spawned per frame.
-const SPAWN_BUDGET: usize = 24;
+const SPAWN_BUDGET: usize = 12;
 /// Max light tasks spawned per frame. Lighting is cheap enough to run on the
 /// same compute pool as meshing, but a frame never queues more than this.
-const LIGHT_SPAWN_BUDGET: usize = 16;
+const LIGHT_SPAWN_BUDGET: usize = 8;
 /// Quads per mesh part (16384 quads = 65536 vertices, u16 indices).
 const PART_QUADS: usize = 16_384;
 /// Mesh parts and vertex budget handed to the GPU per frame. Always uploads at
 /// least one part per frame so large chunks never stall, while allowing many
 /// small/medium chunks to finish in a single frame.
-const UPLOAD_PARTS_PER_FRAME: usize = 8;
-const UPLOAD_VERTS_PER_FRAME: usize = 131_072;
+const UPLOAD_PARTS_PER_FRAME: usize = 4;
+const UPLOAD_VERTS_PER_FRAME: usize = 65_536;
 /// Max finished light volumes uploaded to GPU (`images.add`) per frame.
-const LIGHT_UPLOADS_PER_FRAME: usize = 3;
+const LIGHT_UPLOADS_PER_FRAME: usize = 2;
 
 const NEIGHBOURS: [[i32; 3]; 6] = [
     [1, 0, 0],

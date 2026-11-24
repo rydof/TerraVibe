@@ -348,6 +348,8 @@ pub fn compute_tp_arm_rot(kind: HeldAnimKind, state: &HeldAnimState) -> Quat {
 
     let base_pitch = match kind {
         HeldAnimKind::TorchHold => -1.20 + idle_bob + walk_swing * 0.35,
+        HeldAnimKind::BowDraw => -FRAC_PI_2 + idle_bob * 0.5 + walk_swing * 0.25,
+        HeldAnimKind::GunFire => -1.35 + idle_bob * 0.5 + walk_swing * 0.25,
         _ => walk_swing + idle_bob,
     };
     Quat::from_rotation_x(base_pitch + unequip_pitch + recoil + kick)

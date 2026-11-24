@@ -242,6 +242,19 @@ ITEM_FILES = [
     "166.vox",   # bomb
     "167.vox",   # dynamite
     "168.vox",   # grenade
+    # Pass P2 iconic bespoke items
+    "71.vox",    # copper coin
+    "72.vox",    # silver coin
+    "73.vox",    # gold coin
+    "74.vox",    # platinum coin
+    "188.vox",   # healing potion
+    "189.vox",   # mana potion
+    "273.vox",   # night's edge
+    "127.vox",   # space gun
+    "165.vox",   # water bolt
+    "560.vox",   # slime crown
+    "1133.vox",  # abeemination
+    "361.vox",   # goblin battle standard
 ]
 FAMILIES["items"]["models"] = [f"models/items/{f}" for f in ITEM_FILES]
 

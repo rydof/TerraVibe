@@ -2674,6 +2674,189 @@ def cave_critter_item():
     save(m, 2007)
 
 
+def coin_item(item_id, base, light, dark):
+    """Sculpted circular coin disc with raised rim and center slot."""
+    m = Model(11, 11, 4)
+    cx, cy = 5, 5
+    for y in range(11):
+        for x in range(11):
+            d2 = (x - cx) ** 2 + (y - cy) ** 2
+            if d2 <= 22:
+                if d2 >= 13:
+                    px_full(m, x, y, light if x + y < 10 else dark)
+                else:
+                    px(m, x, y, base)
+    # Center vertical slot / emblem
+    for y in range(3, 8):
+        px(m, cx, y, dark)
+        m.set(cx, y, 2, light)
+    save(m, item_id)
+
+
+def potion_item(item_id, liquid_d, liquid, liquid_l, tall=False):
+    """Glass potion flask with cork, neck, and colored liquid."""
+    h = 15 if tall else 14
+    m = Model(12, h, 4)
+    cork = HANDLE
+    cork_l = HANDLE_L
+    # Cork & neck
+    m.box(5, h - 2, 1, 6, h - 1, 2, cork)
+    m.set(5, h - 1, 2, cork_l)
+    m.box(4, h - 4, 1, 7, h - 3, 2, GLASS_F)
+    m.box(5, h - 4, 1, 6, h - 3, 2, GLASS_G)
+    # Bulbous body
+    by_top = h - 5
+    for y in range(1, by_top + 1):
+        w = 4 if (y >= 2 and y <= by_top - 1) else 3
+        for x in range(6 - w, 6 + w):
+            is_edge = x == 6 - w or x == 6 + w - 1 or y == 1 or y == by_top
+            if is_edge:
+                px_full(m, x, y, GLASS_F)
+            elif y <= by_top - 2:
+                col = liquid_l if (x <= 4 and y >= 4) else (liquid_d if x >= 7 else liquid)
+                px(m, x, y, col)
+            else:
+                px(m, x, y, GLASS_G)
+    save(m, item_id)
+
+
+def nights_edge():
+    """Night's Edge: broad dark-obsidian & glowing violet notched greatsword."""
+    m = Model(N, N, 4)
+    blade_d = hexc("#2b1644")
+    blade = hexc("#5a258c")
+    edge = hexc("#b05cff")
+    edge_l = hexc("#e2b3ff")
+    guard = hexc("#3c1b59")
+    # Pommel & grip
+    px_full(m, 1, 1, guard)
+    px_full(m, 2, 2, GRIP)
+    px_full(m, 3, 3, GRIP)
+    # Swept crossguard
+    for dx, dy in [(-2, 2), (-1, 1), (0, 0), (1, -1), (2, -2)]:
+        px_full(m, 4 + dx, 4 + dy, guard)
+    px_full(m, 2, 7, edge)
+    px_full(m, 7, 2, edge)
+    # Broad curved/notched dark-violet blade
+    for i in range(5, N - 1):
+        px_full(m, i, i, blade_d)
+        px(m, i - 1, i, blade)
+        px(m, i, i - 1, blade)
+        if i >= 7:
+            px(m, i - 2, i, edge if i < N - 3 else edge_l)
+            px(m, i, i - 2, edge if i < N - 3 else edge_l)
+    px_full(m, N - 1, N - 1, edge_l)
+    px(m, N - 2, N - 1, edge_l)
+    px(m, N - 1, N - 2, edge_l)
+    save(m, 273)
+
+
+def space_gun():
+    """Space Gun: meteorite-bronze sci-fi raygun with glowing cyan energy coils."""
+    m = Model(16, 11, 4)
+    body = COPPER
+    body_d = COPPER_D
+    body_l = COPPER_L
+    glow = hexc("#33e6ff")
+    glow_l = hexc("#b8f7ff")
+    # Grip
+    m.box(2, 1, 1, 4, 4, 2, body_d)
+    m.box(3, 2, 1, 4, 4, 2, GRIP)
+    # Receiver & barrel
+    m.box(2, 5, 1, 12, 8, 2, body)
+    m.box(3, 8, 1, 10, 8, 2, body_l)
+    m.box(12, 6, 1, 14, 7, 2, body_d)
+    # Glowing cyan energy coils & muzzle tip
+    for x in (6, 8, 10):
+        px_full(m, x, 6, glow)
+        px_full(m, x, 7, glow_l)
+    px_full(m, 15, 6, glow_l)
+    px_full(m, 15, 7, glow)
+    save(m, 127)
+
+
+def water_bolt():
+    """Water Bolt: sapphire spellbook with gold trim, pages, and water crest."""
+    m = Model(12, 14, 4)
+    pages = hexc("#efe6cf")
+    # Book cover
+    m.box(2, 1, 0, 10, 12, 3, DB_BLUE)
+    m.box(2, 1, 0, 3, 12, 3, DB_BLUE_D)
+    m.box(3, 11, 0, 10, 12, 3, DB_BLUE_L)
+    # Exposed cream pages on right edge
+    m.box(9, 2, 1, 10, 11, 2, pages)
+    # Gold clasp & water-crest emblem on front face
+    m.box(5, 5, 3, 7, 8, 3, hexc("#5cc8ff"))
+    m.set(6, 9, 3, hexc("#b8ecff"))
+    m.box(9, 6, 3, 10, 7, 3, GOLD)
+    save(m, 165)
+
+
+def slime_crown():
+    """Slime Crown: golden 3-peaked crown set with blue gel jewel."""
+    m = Model(13, 10, 4)
+    gel = hexc("#3b9eff")
+    gel_l = hexc("#9ed4ff")
+    ruby = hexc("#e62e3e")
+    # Crown band
+    m.box(2, 2, 1, 10, 4, 2, GOLD)
+    m.box(2, 2, 1, 10, 2, 2, GOLD_D)
+    # Three peaks
+    m.box(2, 5, 1, 3, 7, 2, GOLD_L)
+    m.box(5, 5, 1, 7, 8, 2, GOLD_L)
+    m.box(9, 5, 1, 10, 7, 2, GOLD_L)
+    # Center slime jewel & side gems
+    px_full(m, 6, 3, gel)
+    m.set(6, 4, 2, gel_l)
+    px_full(m, 3, 3, ruby)
+    px_full(m, 9, 3, ruby)
+    save(m, 560)
+
+
+def abeemination():
+    """Abeemination: honey-amber & black-striped Queen Bee summon with wings."""
+    m = Model(14, 12, 4)
+    amber = FLAME_Y
+    amber_d = FLAME_O
+    wing = GLASS_G
+    wing_rim = GLASS_F
+    # Wings
+    m.box(2, 7, 1, 5, 10, 2, wing)
+    m.box(8, 7, 1, 11, 10, 2, wing)
+    m.set(2, 10, 1, wing_rim)
+    m.set(11, 10, 1, wing_rim)
+    # Striped bee-medallion body
+    m.box(3, 2, 1, 10, 7, 2, amber)
+    m.box(4, 1, 1, 9, 8, 2, amber_d)
+    for x in (5, 8):
+        m.box(x, 2, 0, x, 7, 3, GRIP)
+    # Glowing eyes
+    px_full(m, 4, 5, FLAME_R)
+    px_full(m, 9, 5, FLAME_R)
+    save(m, 1133)
+
+
+def goblin_battle_standard():
+    """Goblin Battle Standard: iron-tipped wooden pole with tattered crimson war banner."""
+    m = Model(13, 18, 4)
+    crimson = hexc("#c82828")
+    crimson_d = hexc("#8a1818")
+    # Pole
+    m.box(2, 1, 1, 3, 16, 2, HANDLE)
+    m.box(2, 16, 1, 3, 17, 2, IRON_L)
+    # Crossbar
+    m.box(2, 14, 1, 11, 15, 2, HANDLE_D)
+    px_full(m, 11, 14, GOLD)
+    # Crimson banner cloth with gold trim & tattered bottom
+    m.box(4, 6, 1, 10, 13, 2, crimson)
+    m.box(4, 12, 1, 10, 13, 2, GOLD)
+    m.box(6, 8, 1, 8, 10, 2, crimson_d)
+    m.box(4, 4, 1, 5, 5, 2, crimson_d)
+    m.box(7, 5, 1, 8, 5, 2, crimson_d)
+    m.box(9, 4, 1, 10, 5, 2, crimson_d)
+    save(m, 361)
+
+
 for tier in ("copper", "iron", "silver", "gold", "demonite"):
     pickaxe(tier, PICK[tier])
     axe(tier, AXE[tier])
@@ -2755,3 +2938,16 @@ bunny_item()
 bird_item()
 squirrel_item()
 cave_critter_item()
+# Pass P2 iconic bespoke items
+coin_item(71, COPPER, COPPER_L, COPPER_D)
+coin_item(72, SILVER, SILVER_L, SILVER_D)
+coin_item(73, GOLD, GOLD_L, GOLD_D)
+coin_item(74, hexc("#dcebf7"), hexc("#ffffff"), hexc("#8fa8be"))
+potion_item(188, hexc("#961824"), hexc("#e62e3e"), hexc("#ff8a95"), tall=False)
+potion_item(189, hexc("#18459e"), hexc("#2a75f3"), hexc("#8cd2ff"), tall=True)
+nights_edge()
+space_gun()
+water_bolt()
+slime_crown()
+abeemination()
+goblin_battle_standard()

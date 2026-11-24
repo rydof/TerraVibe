@@ -298,7 +298,11 @@ impl Plugin for DioramaPlugin {
             .add_systems(OnEnter(AppState::Menu), setup_diorama)
             .add_systems(
                 Update,
-                (setup_diorama, orbit_diorama_camera).run_if(in_state(AppState::Menu)),
+                (
+                    setup_diorama.before(orbit_diorama_camera),
+                    orbit_diorama_camera,
+                )
+                    .run_if(in_state(AppState::Menu)),
             );
     }
 }
