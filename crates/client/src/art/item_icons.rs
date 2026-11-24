@@ -33,6 +33,8 @@ use crate::view::block_models;
 
 const SIZE: u32 = 32;
 const OUTLINE_COLOR: [u8; 4] = [12, 14, 20, 235];
+const DARK_ITEM_OUTLINE_COLOR: [u8; 4] = [76, 86, 118, 220];
+const DARK_LUMA_THRESHOLD: f32 = 72.0;
 
 /// Renders crisp 32x32 RGBA8 icons for all 225 registered items from `BlockArt`
 /// and `assets/models/{items,blocks}/*.vox`.
@@ -85,7 +87,15 @@ pub fn render_all_item_icons(block_art: &BlockArt, models_dir: &Path) -> HashMap
         };
 
         apply_variant_details(id, &mut img);
-        add_outline(&mut img);
+        let dark_silhouette = enhance_dark_silhouette(&mut img);
+        add_outline(
+            &mut img,
+            if dark_silhouette {
+                DARK_ITEM_OUTLINE_COLOR
+            } else {
+                OUTLINE_COLOR
+            },
+        );
         out.insert(id.0, img);
     }
 
@@ -219,12 +229,185 @@ fn render_isometric_wall(tex: &[[u8; 4]]) -> RgbaImage {
     img
 }
 
+/// Returns `true` when a `.vox` model is a flat XY sprite (in game coords,
+/// stored in MagicaVoxel file axes as `(x, depth, y)` where `size[1]` is the
+/// thin depth axis).
+fn is_flat_sprite_model(model: &VoxModel) -> bool {
+    let fx = model.size[0].max(1) as usize;
+    let fy = model.size[1].max(1) as usize;
+    let fz = model.size[2].max(1) as usize;
+    fy <= 6 && fx.max(fz) >= fy * 2
+}
+
 fn render_vox_icon(model: &VoxModel, tint: [f32; 4]) -> RgbaImage {
-    let mut img = RgbaImage::new(SIZE, SIZE);
     if model.voxels.is_empty() {
         return fallback_square();
     }
+    if is_flat_sprite_model(model) {
+        return render_flat_vox_icon(model, tint);
+    }
+    render_isometric_vox_icon(model, tint)
+}
 
+/// Renders a flat XY sprite `.vox` model front-on orthographically (file X -> right,
+/// file Z -> up, file Y -> depth with Y=0 closest to viewer) so tools, weapons,
+/// bows, and accessories fill ~85% of the 32x32 icon with crisp 2.5D bevel shading.
+fn render_flat_vox_icon(model: &VoxModel, tint: [f32; 4]) -> RgbaImage {
+    let mut img = RgbaImage::new(SIZE, SIZE);
+    let fx = model.size[0].max(1) as usize;
+    let fy = model.size[1].max(1) as usize;
+    let fz = model.size[2].max(1) as usize;
+
+    let mut occ = vec![false; fx * fy * fz];
+    // For each (vx, vz) column, keep the frontmost (smallest vy) opaque voxel
+    // and count occupied layers along vy for relief/thickness shading.
+    let mut front: Vec<Option<(u8, u8)>> = vec![None; fx * fz];
+    let mut thickness: Vec<u8> = vec![0; fx * fz];
+
+    let mut min_x = usize::MAX;
+    let mut max_x = 0usize;
+    let mut min_z = usize::MAX;
+    let mut max_z = 0usize;
+
+    for &[vx, vy, vz, cidx] in &model.voxels {
+        let base = model.palette[cidx as usize];
+        if base[3] == 0 {
+            continue;
+        }
+        let (x, y, z) = (vx as usize, vy as usize, vz as usize);
+        if x >= fx || y >= fy || z >= fz {
+            continue;
+        }
+        occ[(z * fy + y) * fx + x] = true;
+        let col_idx = z * fx + x;
+        thickness[col_idx] = thickness[col_idx].saturating_add(1);
+        match front[col_idx] {
+            Some((best_y, _)) if vy >= best_y => {}
+            _ => front[col_idx] = Some((vy, cidx)),
+        }
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_z = min_z.min(z);
+        max_z = max_z.max(z);
+    }
+
+    if min_x > max_x || min_z > max_z {
+        return fallback_square();
+    }
+
+    let is_occ = |x: i32, y: i32, z: i32| -> bool {
+        if x < 0 || y < 0 || z < 0 || x >= fx as i32 || y >= fy as i32 || z >= fz as i32 {
+            return false;
+        }
+        occ[(z as usize * fy + y as usize) * fx + x as usize]
+    };
+
+    let span_x = (max_x - min_x + 1) as f32;
+    let span_z = (max_z - min_z + 1) as f32;
+    let span = span_x.max(span_z).max(1.0);
+    // Fill ~85% of 32x32 (27px) while leaving room for the 1px outer outline.
+    let scale = (27.0 / span).min(2.5);
+    let mid_x = (min_x + max_x + 1) as f32 * 0.5;
+    let mid_z = (min_z + max_z + 1) as f32 * 0.5;
+    let max_depth = (fy.saturating_sub(1).max(1)) as f32;
+
+    let shade_voxel = |x: usize, vy: u8, z: usize, cidx: u8| -> [u8; 4] {
+        let base = model.palette[cidx as usize];
+        let (xi, yi, zi) = (x as i32, vy as i32, z as i32);
+
+        // 2.5D bevel shading derived from Z-depth (vy=0 is raised ridge) and XY neighbors.
+        let front_frac = 1.0 - (vy as f32 / max_depth);
+        let mut shade: f32 = 0.98 + (front_frac - 0.75) * 0.24;
+        let top_open = !is_occ(xi, yi, zi + 1);
+        let left_open = !is_occ(xi - 1, yi, zi);
+        let bottom_open = !is_occ(xi, yi, zi - 1);
+        let right_open = !is_occ(xi + 1, yi, zi);
+
+        if top_open {
+            shade += 0.10;
+        }
+        if left_open {
+            shade += 0.07;
+        }
+        if bottom_open {
+            shade -= 0.08;
+        }
+        if right_open {
+            shade -= 0.05;
+        }
+        let shade = shade.clamp(0.82, 1.22);
+        let spec_lift = if (top_open && left_open) || (vy == 0 && top_open) {
+            8.0
+        } else {
+            0.0
+        };
+
+        [
+            (base[0] as f32 * tint[0] * shade + spec_lift)
+                .clamp(0.0, 255.0)
+                .round() as u8,
+            (base[1] as f32 * tint[1] * shade + spec_lift)
+                .clamp(0.0, 255.0)
+                .round() as u8,
+            (base[2] as f32 * tint[2] * shade + spec_lift)
+                .clamp(0.0, 255.0)
+                .round() as u8,
+            (base[3] as f32 * tint[3]).clamp(0.0, 255.0).round() as u8,
+        ]
+    };
+
+    if scale >= 1.0 {
+        // Inverse nearest-neighbor mapping: zero gaps, razor-sharp pixel art.
+        for py in 1..(SIZE - 1) {
+            let v = (16.0 - (py as f32 + 0.5)) / scale + mid_z;
+            let z = v.floor() as i32;
+            if z < min_z as i32 || z > max_z as i32 {
+                continue;
+            }
+            for px in 1..(SIZE - 1) {
+                let u = (px as f32 + 0.5 - 16.0) / scale + mid_x;
+                let x = u.floor() as i32;
+                if x < min_x as i32 || x > max_x as i32 {
+                    continue;
+                }
+                let col_idx = z as usize * fx + x as usize;
+                if let Some((vy, cidx)) = front[col_idx] {
+                    set_px(&mut img, px as i32, py as i32, shade_voxel(x as usize, vy, z as usize, cidx));
+                }
+            }
+        }
+    } else {
+        // Downscaling (e.g. 28-32 voxel greatswords): forward project every occupied
+        // column so thin 1-voxel diagonal blades never drop pixels.
+        let mut best_priority = [(u8::MAX, 0u8); (SIZE * SIZE) as usize];
+        for z in min_z..=max_z {
+            for x in min_x..=max_x {
+                let col_idx = z * fx + x;
+                let Some((vy, cidx)) = front[col_idx] else {
+                    continue;
+                };
+                let px = (16.0 + (x as f32 + 0.5 - mid_x) * scale)
+                    .floor()
+                    .clamp(1.0, (SIZE - 2) as f32) as usize;
+                let py = (16.0 - (z as f32 + 0.5 - mid_z) * scale)
+                    .floor()
+                    .clamp(1.0, (SIZE - 2) as f32) as usize;
+                let idx = py * SIZE as usize + px;
+                let (cur_vy, cur_thick) = best_priority[idx];
+                let thick = thickness[col_idx];
+                if vy < cur_vy || (vy == cur_vy && thick >= cur_thick) {
+                    best_priority[idx] = (vy, thick);
+                    img.pixels[idx] = shade_voxel(x, vy, z, cidx);
+                }
+            }
+        }
+    }
+
+    img
+}
+
+fn render_isometric_vox_icon(model: &VoxModel, tint: [f32; 4]) -> RgbaImage {
+    let mut img = RgbaImage::new(SIZE, SIZE);
     let sx = model.size[0].max(1) as usize;
     let sy = model.size[1].max(1) as usize;
     let sz = model.size[2].max(1) as usize;
@@ -245,7 +428,7 @@ fn render_vox_icon(model: &VoxModel, tint: [f32; 4]) -> RgbaImage {
         occ[(z as usize * sy + y as usize) * sx + x as usize]
     };
 
-    // 3/4 isometric/angled projection
+    // 3/4 isometric/angled projection for volumetric 3D models
     let yaw: f32 = 0.58;
     let pitch: f32 = 0.40;
     let (cy, sy_ang) = (yaw.cos(), yaw.sin());
@@ -279,7 +462,7 @@ fn render_vox_icon(model: &VoxModel, tint: [f32; 4]) -> RgbaImage {
     }
 
     let span = (max_x - min_x).max(max_y - min_y).max(1.0);
-    let scale = (23.0 / span).min(3.2);
+    let scale = (25.0 / span).min(3.2);
     let mid_x = (min_x + max_x) * 0.5;
     let mid_y = (min_y + max_y) * 0.5;
     let radius = (scale * 0.62).ceil().max(1.0) as i32;
@@ -294,17 +477,17 @@ fn render_vox_icon(model: &VoxModel, tint: [f32; 4]) -> RgbaImage {
         let cx = 16.0 + (rx - mid_x) * scale;
         let cy_scr = 16.0 + (ry - mid_y) * scale;
 
-        let mut shade: f32 = 0.74;
+        let mut shade: f32 = 0.86;
         if !is_occ(vx as i32, vy as i32, vz as i32 + 1) {
-            shade += 0.20;
+            shade += 0.18;
         }
         if !is_occ(vx as i32, vy as i32 - 1, vz as i32) {
-            shade += 0.08;
+            shade += 0.10;
         }
         if !is_occ(vx as i32 + 1, vy as i32, vz as i32) {
-            shade += 0.05;
+            shade += 0.06;
         }
-        let shade = shade.clamp(0.55, 1.06);
+        let shade = shade.clamp(0.72, 1.18);
 
         let col = [
             (base[0] as f32 * tint[0] * shade).clamp(0.0, 255.0).round() as u8,
@@ -340,7 +523,68 @@ fn fallback_square() -> RgbaImage {
     img
 }
 
-fn add_outline(img: &mut RgbaImage) {
+/// Lifts very dark silhouettes (e.g. Shadow, Obsidian, Molten, Ninja armor) and
+/// adds a subtle 1px top-left inner rim so they read cleanly against dark navy slots.
+/// Returns `true` if the silhouette was classified as dark.
+fn enhance_dark_silhouette(img: &mut RgbaImage) -> bool {
+    let mut sum_luma = 0.0f32;
+    let mut count = 0u32;
+    for p in &img.pixels {
+        if p[3] > 32 {
+            sum_luma += 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32;
+            count += 1;
+        }
+    }
+    if count == 0 {
+        return false;
+    }
+    let avg_luma = sum_luma / count as f32;
+    if avg_luma >= DARK_LUMA_THRESHOLD {
+        return false;
+    }
+
+    let lift = ((DARK_LUMA_THRESHOLD - avg_luma) / DARK_LUMA_THRESHOLD) * 28.0;
+    let orig = img.pixels.clone();
+    let w = img.width as i32;
+    let h = img.height as i32;
+    let is_opaque = |x: i32, y: i32| -> bool {
+        x >= 0 && y >= 0 && x < w && y < h && orig[(y * w + x) as usize][3] > 32
+    };
+
+    for y in 0..h {
+        for x in 0..w {
+            let idx = (y * w + x) as usize;
+            let p = orig[idx];
+            if p[3] <= 32 {
+                continue;
+            }
+            let lift_chan = |c: u8| -> f32 {
+                let cf = c as f32;
+                cf + lift * (1.0 - cf / 255.0)
+            };
+            let mut r = lift_chan(p[0]);
+            let mut g = lift_chan(p[1]);
+            let mut b = lift_chan(p[2]);
+
+            // Subtle 1px top-left inner light rim along silhouette edge.
+            if !is_opaque(x, y - 1) || !is_opaque(x - 1, y) {
+                r = r * 0.68 + 185.0 * 0.32;
+                g = g * 0.68 + 195.0 * 0.32;
+                b = b * 0.68 + 230.0 * 0.32;
+            }
+
+            img.pixels[idx] = [
+                r.clamp(0.0, 255.0).round() as u8,
+                g.clamp(0.0, 255.0).round() as u8,
+                b.clamp(0.0, 255.0).round() as u8,
+                p[3],
+            ];
+        }
+    }
+    true
+}
+
+fn add_outline(img: &mut RgbaImage, outline_color: [u8; 4]) {
     let orig = img.pixels.clone();
     let w = img.width as i32;
     let h = img.height as i32;
@@ -356,7 +600,7 @@ fn add_outline(img: &mut RgbaImage) {
                     || is_opaque(x, y - 1)
                     || is_opaque(x, y + 1))
             {
-                img.pixels[idx] = OUTLINE_COLOR;
+                img.pixels[idx] = outline_color;
             }
         }
     }
@@ -910,5 +1154,79 @@ mod tests {
         diff(IRON_CHAIN, HOOK);
         diff(AGLET, ANKLET_OF_THE_WIND);
         diff(ABEEMINATION, BEE_WAX);
+    }
+
+    #[test]
+    fn flat_xy_tools_render_diagonally_and_fill_icon() {
+        use terravibe_sim::item::{BREAKER_BLADE, GOLD_BROADSWORD, IRON_PICKAXE};
+
+        let art = BlockArt::load(&art_dir());
+        let map = render_all_item_icons(&art, &art_dir().join("models"));
+
+        for id in [GOLD_BROADSWORD, IRON_PICKAXE, BREAKER_BLADE] {
+            let img = &map[&id.0];
+            let mut min_x = u32::MAX;
+            let mut max_x = 0u32;
+            let mut min_y = u32::MAX;
+            let mut max_y = 0u32;
+            let mut bottom_left_hits = 0u32;
+            let mut top_right_hits = 0u32;
+
+            for y in 0..img.height {
+                for x in 0..img.width {
+                    if img.pixels[(y * img.width + x) as usize][3] > 32 {
+                        min_x = min_x.min(x);
+                        max_x = max_x.max(x);
+                        min_y = min_y.min(y);
+                        max_y = max_y.max(y);
+                        if x < 12 && y >= 20 {
+                            bottom_left_hits += 1;
+                        }
+                        if x >= 20 && y < 12 {
+                            top_right_hits += 1;
+                        }
+                    }
+                }
+            }
+
+            let span_x = max_x - min_x + 1;
+            let span_y = max_y - min_y + 1;
+            assert!(
+                span_x >= 24 && span_y >= 24,
+                "flat item {} should fill ~85% of icon, got {span_x}x{span_y}",
+                id.0
+            );
+            assert!(
+                bottom_left_hits > 0 && top_right_hits > 0,
+                "flat item {} should orient grip bottom-left and tip top-right (bl={bottom_left_hits}, tr={top_right_hits})",
+                id.0
+            );
+        }
+    }
+
+    #[test]
+    fn dark_items_have_readable_luminance() {
+        use terravibe_sim::item::{MOLTEN_HELMET, NINJA_HOOD, SHADOW_HELMET};
+
+        let art = BlockArt::load(&art_dir());
+        let map = render_all_item_icons(&art, &art_dir().join("models"));
+
+        for id in [SHADOW_HELMET, MOLTEN_HELMET, NINJA_HOOD] {
+            let img = &map[&id.0];
+            let mut sum = 0.0f32;
+            let mut count = 0u32;
+            for p in &img.pixels {
+                if p[3] > 32 {
+                    sum += 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32;
+                    count += 1;
+                }
+            }
+            let avg = sum / count.max(1) as f32;
+            assert!(
+                avg >= 55.0,
+                "dark item {} average luminance {avg:.1} is too dim against dark slots",
+                id.0
+            );
+        }
     }
 }

@@ -54,7 +54,7 @@ pub(crate) const AVATAR_SCALE: f32 = 0.9;
 pub struct LocalAppearance(pub Option<Appearance>);
 /// Held item scale on the avatar, and the hand's rest spot in `arm_r` space
 /// (blocks, below the shoulder pivot).
-const HELD_SCALE: f32 = 0.55;
+const HELD_SCALE: f32 = 0.72;
 const HAND_POS: Vec3 = Vec3::new(0.0, -11.0 / VOXELS_PER_UNIT, 0.0);
 /// First-person size of a held model, blocks across its longest side.
 const FP_SIZE: f32 = 0.55;
