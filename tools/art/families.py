@@ -301,10 +301,20 @@ FAMILIES["characters"]["models"] = (
     + [f"models/guide/{p}.vox" for p in PLAYER_PARTS]
     + [f"models/merchant/{p}.vox" for p in PLAYER_PARTS]
     + [f"models/arms_dealer/{p}.vox" for p in PLAYER_PARTS]
+    + [f"models/nurse/{p}.vox" for p in PLAYER_PARTS]
+    + [f"models/demolitionist/{p}.vox" for p in PLAYER_PARTS]
+    + [f"models/dryad/{p}.vox" for p in PLAYER_PARTS]
+    + [f"models/goblin_tinkerer/{p}.vox" for p in PLAYER_PARTS]
+    + [f"models/old_man/{p}.vox" for p in PLAYER_PARTS]
 )
 FAMILIES["characters"]["rigs"] = [
     "models/player/rig.ron",
     "models/guide/rig.ron",
     "models/merchant/rig.ron",
     "models/arms_dealer/rig.ron",
+    "models/nurse/rig.ron",
+    "models/demolitionist/rig.ron",
+    "models/dryad/rig.ron",
+    "models/goblin_tinkerer/rig.ron",
+    "models/old_man/rig.ron",
 ]

@@ -1,0 +1,38 @@
+(
+    parts: [
+        (name: "torso", file: "torso.vox", pivot: (6.000, 0.000, 3.000), offset: (0.000, 8.000, 0.000), parent: None),
+        (name: "head", file: "head.vox", pivot: (6.000, 0.000, 6.000), offset: (0.000, 20.000, 0.000), parent: None),
+        (name: "arm_l", file: "arm_l.vox", pivot: (2.000, 12.000, 2.000), offset: (8.000, 20.000, 0.000), parent: None),
+        (name: "arm_r", file: "arm_r.vox", pivot: (2.000, 12.000, 2.000), offset: (-8.000, 20.000, 0.000), parent: None),
+        (name: "leg_l", file: "leg_l.vox", pivot: (2.500, 12.000, 2.500), offset: (2.500, 12.000, 0.000), parent: None),
+        (name: "leg_r", file: "leg_r.vox", pivot: (2.500, 12.000, 2.500), offset: (-2.500, 12.000, 0.000), parent: None),
+    ],
+    anims: {
+        "idle": (len: 2.0, looping: true, keys: [
+            (t: 0.0, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 1.0, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.800, 0.000)),
+            (t: 2.0, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_l", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_r", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+        "walk": (len: 0.6, looping: true, keys: [
+            (t: 0.0, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.15, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 1.000, 0.000)),
+            (t: 0.3, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.44999999999999996, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 1.000, 0.000)),
+            (t: 0.6, part: "torso", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_l", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.3, part: "arm_l", rot_deg: (-35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.6, part: "arm_l", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "arm_r", rot_deg: (-35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.3, part: "arm_r", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.6, part: "arm_r", rot_deg: (-35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_l", rot_deg: (-35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.3, part: "leg_l", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.6, part: "leg_l", rot_deg: (-35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_r", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.3, part: "leg_r", rot_deg: (-35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.6, part: "leg_r", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)
