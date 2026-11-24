@@ -109,12 +109,21 @@ pub fn armor_parts(item: ItemId) -> Parts {
         MOLTEN_HELMET => set!(head "molten"),
         MOLTEN_BREASTPLATE => set!(body "molten"),
         MOLTEN_GREAVES => set!(legs "molten"),
-        METEOR_HELMET | JUNGLE_HAT | BEE_HEADGEAR | NINJA_HOOD => set!(head "shadow"),
-        METEOR_SUIT | JUNGLE_SHIRT | BEE_BREASTPLATE | NINJA_SHIRT => set!(body "shadow"),
-        METEOR_LEGGINGS | JUNGLE_PANTS | BEE_GREAVES | NINJA_PANTS => set!(legs "shadow"),
-        NECRO_HELMET => set!(head "silver"),
-        NECRO_BREASTPLATE => set!(body "silver"),
-        NECRO_GREAVES => set!(legs "silver"),
+        METEOR_HELMET => set!(head "meteor"),
+        METEOR_SUIT => set!(body "meteor"),
+        METEOR_LEGGINGS => set!(legs "meteor"),
+        JUNGLE_HAT => set!(head "jungle"),
+        JUNGLE_SHIRT => set!(body "jungle"),
+        JUNGLE_PANTS => set!(legs "jungle"),
+        BEE_HEADGEAR => set!(head "bee"),
+        BEE_BREASTPLATE => set!(body "bee"),
+        BEE_GREAVES => set!(legs "bee"),
+        NINJA_HOOD => set!(head "ninja"),
+        NINJA_SHIRT => set!(body "ninja"),
+        NINJA_PANTS => set!(legs "ninja"),
+        NECRO_HELMET => set!(head "necro"),
+        NECRO_BREASTPLATE => set!(body "necro"),
+        NECRO_GREAVES => set!(legs "necro"),
         _ => &[],
     }
 }
@@ -1035,6 +1044,38 @@ fn is_molten_armor(id: ItemId) -> bool {
     matches!(id, MOLTEN_HELMET | MOLTEN_BREASTPLATE | MOLTEN_GREAVES)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ArmorSetFx {
+    Shadow,
+    Molten,
+    Meteor,
+    Jungle,
+    Bee,
+    Necro,
+    Ninja,
+}
+
+pub(crate) fn active_armor_set_fx(armor: [Option<ItemId>; 3]) -> Option<ArmorSetFx> {
+    let any = |pred: fn(ItemId) -> bool| armor.iter().flatten().any(|&id| pred(id));
+    if any(is_molten_armor) {
+        Some(ArmorSetFx::Molten)
+    } else if any(is_shadow_armor) {
+        Some(ArmorSetFx::Shadow)
+    } else if any(|id| matches!(id, METEOR_HELMET | METEOR_SUIT | METEOR_LEGGINGS)) {
+        Some(ArmorSetFx::Meteor)
+    } else if any(|id| matches!(id, JUNGLE_HAT | JUNGLE_SHIRT | JUNGLE_PANTS)) {
+        Some(ArmorSetFx::Jungle)
+    } else if any(|id| matches!(id, BEE_HEADGEAR | BEE_BREASTPLATE | BEE_GREAVES)) {
+        Some(ArmorSetFx::Bee)
+    } else if any(|id| matches!(id, NECRO_HELMET | NECRO_BREASTPLATE | NECRO_GREAVES)) {
+        Some(ArmorSetFx::Necro)
+    } else if any(|id| matches!(id, NINJA_HOOD | NINJA_SHIRT | NINJA_PANTS)) {
+        Some(ArmorSetFx::Ninja)
+    } else {
+        None
+    }
+}
+
 fn drive_armor_effects(
     time: Res<Time<Real>>,
     av: Res<Avatar>,
@@ -1101,6 +1142,8 @@ fn drive_armor_effects(
         (t * 19.0).sin() * 0.35,
     );
 
+    let set_fx = active_armor_set_fx(av.armor);
+
     if has_molten {
         p.spawn(
             pos + jitter,
@@ -1123,6 +1166,60 @@ fn drive_armor_effects(
             0.11,
             0.40,
             -0.5,
+            &s,
+        );
+    } else if matches!(set_fx, Some(ArmorSetFx::Meteor)) {
+        p.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.9, 0.0),
+            Color::srgb(0.25, 0.85, 1.0),
+            0.08,
+            0.35,
+            -0.6,
+            &s,
+        );
+    } else if matches!(set_fx, Some(ArmorSetFx::Jungle)) {
+        p.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.5, 0.0),
+            Color::srgb(0.35, 0.90, 0.40),
+            0.07,
+            0.45,
+            -0.2,
+            &s,
+        );
+    } else if matches!(set_fx, Some(ArmorSetFx::Bee)) {
+        p.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.7, 0.0),
+            Color::srgb(1.0, 0.85, 0.20),
+            0.07,
+            0.35,
+            -0.3,
+            &s,
+        );
+    } else if matches!(set_fx, Some(ArmorSetFx::Necro)) {
+        p.spawn(
+            pos + jitter,
+            Vec3::new(0.0, 0.6, 0.0),
+            Color::srgb(0.85, 0.85, 0.78),
+            0.07,
+            0.35,
+            -0.2,
+            &s,
+        );
+    } else if matches!(set_fx, Some(ArmorSetFx::Ninja)) && vel.length() > WALK_SPEED {
+        p.spawn(
+            pos + jitter,
+            Vec3::new(
+                -player.0.body.vel[0] * 0.2,
+                0.4,
+                -player.0.body.vel[2] * 0.2,
+            ),
+            Color::srgb(0.22, 0.25, 0.42),
+            0.10,
+            0.30,
+            -0.4,
             &s,
         );
     } else if has_silver_gold && ((t * 10.0) as u32).is_multiple_of(3) {

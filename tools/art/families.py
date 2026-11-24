@@ -523,7 +523,19 @@ FAMILIES["boss"]["rigs"] = [
 # taller to fit the hat.
 PLAYER_PARTS = ("head", "torso", "arm_l", "arm_r", "leg_l", "leg_r")
 ARMOR_PARTS = ("head", "body", "arm_l", "arm_r", "leg_l", "leg_r")
-ARMOR_TIERS = ("copper", "iron", "silver", "gold", "shadow", "molten")
+ARMOR_TIERS = (
+    "copper",
+    "iron",
+    "silver",
+    "gold",
+    "shadow",
+    "molten",
+    "meteor",
+    "jungle",
+    "bee",
+    "ninja",
+    "necro",
+)
 FAMILIES["characters"]["models"] = (
     [f"models/player/{p}.vox" for p in PLAYER_PARTS]
     + [f"models/armor/{t}_{p}.vox" for t in ARMOR_TIERS for p in ARMOR_PARTS]

@@ -75,6 +75,11 @@ SILVER_T = Tier("silver", SILVER, SILVER_L, SILVER_D, hexc("#5a6a86"))
 GOLD_T = Tier("gold", GOLD, GOLD_L, GOLD_D, hexc("#7d5f0a"))
 SHADOW_T = Tier("shadow", DEMONITE, DEMONITE_L, DEMONITE_D, EBONSTONE_DD)
 MOLTEN_T = Tier("molten", MOLT_BASALT, MOLT_BASALT_L, MOLT_CRUST, LAVA_R)
+METEOR_T = Tier("meteor", hexc("#5a4468"), hexc("#8b6ea0"), hexc("#2f2238"), hexc("#39d8ff"))
+JUNGLE_T = Tier("jungle", hexc("#2e7d32"), hexc("#66bb6a"), hexc("#1b4d20"), hexc("#e94b7a"))
+BEE_T = Tier("bee", hexc("#d4a017"), hexc("#ffe066"), hexc("#241c14"), hexc("#1a140e"))
+NINJA_T = Tier("ninja", hexc("#22253a"), hexc("#3b4166"), hexc("#121422"), hexc("#c62828"))
+NECRO_T = Tier("necro", hexc("#d8d0be"), hexc("#f2ecdc"), hexc("#8c8372"), hexc("#26222c"))
 
 
 def helmet(t):
@@ -407,7 +412,19 @@ def leg_piece(t, outer_x):
     return s
 
 
-for t in (COPPER_T, IRON_T, SILVER_T, GOLD_T, SHADOW_T, MOLTEN_T):
+for t in (
+    COPPER_T,
+    IRON_T,
+    SILVER_T,
+    GOLD_T,
+    SHADOW_T,
+    MOLTEN_T,
+    METEOR_T,
+    JUNGLE_T,
+    BEE_T,
+    NINJA_T,
+    NECRO_T,
+):
     helmet(t).save(f"{t.name}_head")
     body(t).save(f"{t.name}_body")
     arm_piece(t, 3).save(f"{t.name}_arm_l")
