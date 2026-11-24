@@ -7,42 +7,44 @@ use super::nav::MenuFocus;
 use super::text::MenuText;
 use super::{Action, MenuButton};
 
+pub use crate::ui_theme::*;
+
 pub const BUTTON_WIDTH: f32 = 260.0;
 pub const BUTTON_HEIGHT: f32 = 42.0;
 
-// Button color constants (deep navy-slate & warm parchment/gold)
-pub const COLOR_BUTTON_NORMAL: Color = Color::srgba(0.10, 0.13, 0.22, 0.96);
-pub const COLOR_BUTTON_FOCUSED: Color = Color::srgba(0.20, 0.26, 0.42, 0.98);
-pub const COLOR_BUTTON_SELECTED: Color = Color::srgba(0.15, 0.28, 0.27, 0.98);
-pub const COLOR_BUTTON_DISABLED: Color = Color::srgba(0.07, 0.08, 0.12, 0.62);
+// Button color aliases mapped to ui_theme tokens
+pub const COLOR_BUTTON_NORMAL: Color = BTN_BG;
+pub const COLOR_BUTTON_FOCUSED: Color = BTN_BG_HOVER;
+pub const COLOR_BUTTON_SELECTED: Color = BTN_BG_ACTIVE;
+pub const COLOR_BUTTON_DISABLED: Color = BTN_BG_DISABLED;
 
-// Border color constants (burnished bronze, warm gold & emerald accent)
-pub const COLOR_BORDER_NORMAL: Color = Color::srgba(0.68, 0.56, 0.30, 0.95);
-pub const COLOR_BORDER_FOCUSED: Color = Color::srgba(1.00, 0.87, 0.34, 1.00);
-pub const COLOR_BORDER_SELECTED: Color = Color::srgba(0.40, 0.88, 0.62, 1.00);
-pub const COLOR_BORDER_DISABLED: Color = Color::srgba(0.26, 0.26, 0.30, 0.50);
+// Border color aliases mapped to ui_theme tokens
+pub const COLOR_BORDER_NORMAL: Color = BORDER_IDLE;
+pub const COLOR_BORDER_FOCUSED: Color = BORDER_GOLD;
+pub const COLOR_BORDER_SELECTED: Color = BORDER_SELECTED;
+pub const COLOR_BORDER_DISABLED: Color = BORDER_DISABLED;
 
-// Panel background constants (deep twilight navy-slate & warm gold/parchment frame)
-pub const COLOR_BACKDROP: Color = Color::srgba(0.03, 0.05, 0.10, 0.58);
-pub const COLOR_PANEL_BG: Color = Color::srgba(0.07, 0.09, 0.16, 0.94);
-pub const COLOR_PANEL_INNER: Color = Color::srgba(0.11, 0.14, 0.23, 0.92);
-pub const COLOR_PANEL_BORDER: Color = Color::srgba(0.82, 0.66, 0.32, 0.96);
-pub const COLOR_HEADER_DIVIDER: Color = Color::srgba(0.82, 0.66, 0.32, 0.48);
+// Panel background aliases mapped to ui_theme tokens
+pub const COLOR_BACKDROP: Color = BACKDROP;
+pub const COLOR_PANEL_BG: Color = PANEL_BG;
+pub const COLOR_PANEL_INNER: Color = PANEL_INNER;
+pub const COLOR_PANEL_BORDER: Color = BORDER_IDLE;
+pub const COLOR_HEADER_DIVIDER: Color = HEADER_DIVIDER;
 
-// Text input field constants
-pub const COLOR_INPUT_BG: Color = Color::srgba(0.05, 0.06, 0.11, 0.98);
-pub const COLOR_INPUT_ACTIVE_BORDER: Color = Color::srgba(1.00, 0.87, 0.34, 1.00);
-pub const COLOR_INPUT_IDLE_BORDER: Color = Color::srgba(0.40, 0.45, 0.60, 0.85);
+// Text input field aliases mapped to ui_theme tokens
+pub const COLOR_INPUT_BG: Color = INPUT_BG;
+pub const COLOR_INPUT_ACTIVE_BORDER: Color = BORDER_GOLD;
+pub const COLOR_INPUT_IDLE_BORDER: Color = BORDER_IDLE;
 
-// Semantic text & slider colors
-pub const COLOR_TEXT_PRIMARY: Color = Color::srgb(0.96, 0.95, 0.91);
-pub const COLOR_TEXT_GOLD: Color = Color::srgb(0.99, 0.85, 0.42);
-pub const COLOR_TEXT_MUTED: Color = Color::srgb(0.72, 0.77, 0.86);
-pub const COLOR_TEXT_ERROR: Color = Color::srgb(0.98, 0.44, 0.42);
-pub const COLOR_TEXT_SUCCESS: Color = Color::srgb(0.46, 0.90, 0.60);
-pub const COLOR_SLIDER_TRACK: Color = Color::srgba(0.04, 0.06, 0.10, 0.96);
-pub const COLOR_SLIDER_FILL: Color = Color::srgba(0.88, 0.70, 0.30, 0.98);
-pub const COLOR_SLIDER_BORDER: Color = Color::srgba(0.44, 0.48, 0.62, 0.85);
+// Semantic text & slider aliases mapped to ui_theme tokens
+pub const COLOR_TEXT_PRIMARY: Color = TEXT_PRIMARY;
+pub const COLOR_TEXT_GOLD: Color = TEXT_GOLD;
+pub const COLOR_TEXT_MUTED: Color = TEXT_MUTED;
+pub const COLOR_TEXT_ERROR: Color = TEXT_ERROR;
+pub const COLOR_TEXT_SUCCESS: Color = TEXT_SUCCESS;
+pub const COLOR_SLIDER_TRACK: Color = SLIDER_TRACK;
+pub const COLOR_SLIDER_FILL: Color = SLIDER_FILL;
+pub const COLOR_SLIDER_BORDER: Color = BORDER_IDLE;
 
 /// Marks a `MenuButton` that is currently active/selected (e.g. chosen world size or tab).
 #[derive(Component, Clone, Copy, Debug, Default)]
@@ -111,8 +113,8 @@ pub fn spawn_button_sized(
                 top: Val::Px(pos.1),
                 width: Val::Px(size.0),
                 height: Val::Px(size.1),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(4.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
@@ -183,7 +185,7 @@ pub fn spawn_slider_bar(
             Node {
                 width: Val::Px(width),
                 height: Val::Px(height),
-                border: UiRect::all(Val::Px(1.0)),
+                border: UiRect::all(Val::Px(BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(height * 0.5)),
                 overflow: Overflow::clip(),
                 ..default()

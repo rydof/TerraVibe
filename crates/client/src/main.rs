@@ -23,6 +23,7 @@ mod net;
 pub mod qa;
 pub mod session;
 mod settings;
+pub mod ui_theme;
 mod view;
 
 const USAGE: &str = "usage: terravibe [--terraria-dir PATH] [--assets-dir PATH] [--bench] [--liquid-stress] [--input-debug] [--music-debug]\n       \
