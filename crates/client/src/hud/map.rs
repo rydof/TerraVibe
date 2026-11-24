@@ -954,7 +954,7 @@ pub fn setup_map_ui(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                     left: Val::Px(-120.0),
                     ..default()
                 },
-                border: UiRect::all(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                 overflow: Overflow::clip(),
                 align_items: AlignItems::Center,
@@ -1013,7 +1013,7 @@ pub fn setup_map_ui(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 right: Val::Px(56.0),
                 width: Val::Px(168.0),
                 height: Val::Px(168.0),
-                border: UiRect::all(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                 overflow: Overflow::clip(),
                 ..default()
@@ -1059,7 +1059,7 @@ pub fn setup_map_ui(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 right: Val::Px(56.0),
                 min_width: Val::Px(168.0),
                 padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                border: UiRect::all(Val::Px(1.5)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
@@ -1143,7 +1143,7 @@ pub fn setup_map_ui(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                         flex_direction: FlexDirection::Row,
                         justify_content: JustifyContent::SpaceBetween,
                         align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         ..default()
                     },
@@ -1192,7 +1192,7 @@ pub fn setup_map_ui(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                     wrap.spawn((
                         Node {
                             padding: UiRect::axes(Val::Px(16.0), Val::Px(6.0)),
-                            border: UiRect::all(Val::Px(1.5)),
+                            border: UiRect::all(Val::Px(super::style::BORDER_W)),
                             border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,

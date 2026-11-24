@@ -194,11 +194,11 @@ pub fn update(
                             flex_direction: FlexDirection::Row,
                             align_items: AlignItems::Center,
                             padding: UiRect::axes(Val::Px(10.0), Val::Px(5.0)),
-                            border: UiRect::all(Val::Px(1.0)),
-                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                            border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_SLOT)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgba(0.06, 0.08, 0.14, 0.88 * alpha)),
+                        BackgroundColor(super::style::PANEL_BG.with_alpha(0.90 * alpha)),
                         BorderColor::all(base_color.with_alpha(0.65 * alpha)),
                     ))
                     .with_children(|p| {
@@ -253,7 +253,7 @@ pub fn update(
             continue;
         }
         row.last_alpha = alpha;
-        *bg = BackgroundColor(Color::srgba(0.06, 0.08, 0.14, 0.88 * alpha));
+        *bg = BackgroundColor(super::style::PANEL_BG.with_alpha(0.90 * alpha));
         *border = BorderColor::all(row.base_color.with_alpha(0.65 * alpha));
         for child in children.iter() {
             if let Ok(mut label_color) = labels.get_mut(child) {

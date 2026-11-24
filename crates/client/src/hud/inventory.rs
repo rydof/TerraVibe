@@ -636,7 +636,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
                 p.spawn((
                     card,
                     Node {
-                        border: UiRect::all(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                         ..abs()
                     },
@@ -650,7 +650,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
             p.spawn((
                 Part::HammerBtn,
                 Node {
-                    border: UiRect::all(Val::Px(1.5)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..abs()
                 },
@@ -687,7 +687,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
                 p.spawn((
                     Part::EquipTab(tab),
                     Node {
-                        border: UiRect::all(Val::Px(1.5)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         ..abs()
                     },
@@ -699,7 +699,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
             p.spawn((
                 Part::RulerBtn,
                 Node {
-                    border: UiRect::all(Val::Px(1.5)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..abs()
                 },
@@ -710,7 +710,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
             p.spawn((
                 Part::BuildGridBtn,
                 Node {
-                    border: UiRect::all(Val::Px(1.5)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..abs()
                 },
@@ -721,7 +721,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
             p.spawn((
                 Part::HousingQueryBtn,
                 Node {
-                    border: UiRect::all(Val::Px(1.5)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..abs()
                 },
@@ -732,7 +732,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
             p.spawn((
                 Part::HousingStatusBox,
                 Node {
-                    border: UiRect::all(Val::Px(1.5)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..abs()
                 },
@@ -748,7 +748,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
                 p.spawn((
                     Part::HousingNpcBtn(i),
                     Node {
-                        border: UiRect::all(Val::Px(1.5)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         ..abs()
                     },
@@ -828,7 +828,7 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
             p.spawn((
                 Part::SettingsBack,
                 Node {
-                    border: UiRect::all(Val::Px(2.0)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..abs()
                 },

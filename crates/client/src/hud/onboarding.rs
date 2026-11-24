@@ -68,7 +68,7 @@ pub fn setup(mut commands: Commands) {
                 },
                 Node {
                     padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)),
-                    border: UiRect::all(Val::Px(2.0)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
@@ -239,7 +239,7 @@ pub fn sync_onboarding_ui(
                     padding: UiRect::all(Val::Px(16.0)),
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(8.0),
-                    border: UiRect::all(Val::Px(2.0)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
                     border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                     ..default()
                 },
@@ -284,7 +284,7 @@ pub fn sync_onboarding_ui(
                         Node {
                             margin: UiRect::top(Val::Px(8.0)),
                             padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
-                            border: UiRect::all(Val::Px(1.5)),
+                            border: UiRect::all(Val::Px(super::style::BORDER_W)),
                             border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,

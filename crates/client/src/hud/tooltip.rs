@@ -496,12 +496,12 @@ pub fn setup(mut commands: Commands) {
                 top: Val::Px(0.0),
                 width: Val::Px(0.0),
                 height: Val::Px(0.0),
-                border: UiRect::all(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                 ..default()
             },
             BackgroundColor(super::style::PANEL_BG_SOLID),
-            BorderColor::all(super::style::PANEL_BORDER),
+            BorderColor::all(super::style::BORDER_IDLE),
             Visibility::Hidden,
             GlobalZIndex(610),
             DespawnOnExit(AppState::InGame),
@@ -538,7 +538,7 @@ pub fn render_tooltip(
     fonts: Res<HudFonts>,
     settings: Option<Res<crate::settings::Settings>>,
     mut overlay: ResMut<TooltipOverlay>,
-    mut root: Query<(&mut Node, &mut Visibility), With<TooltipRoot>>,
+    mut root: Query<(&mut Node, &mut Visibility, &mut BorderColor), With<TooltipRoot>>,
     mut line_q: Query<
         (
             &TooltipLineNode,
@@ -550,7 +550,7 @@ pub fn render_tooltip(
         Without<TooltipRoot>,
     >,
 ) {
-    let Ok((mut root_node, mut root_vis)) = root.single_mut() else {
+    let Ok((mut root_node, mut root_vis, mut root_border)) = root.single_mut() else {
         return;
     };
     let target = overlay.candidate.as_ref().map(|c| c.target_id);
@@ -562,10 +562,12 @@ pub fn render_tooltip(
         .update_with_delay(target, time.delta_secs(), delay_secs);
     let (Some(cand), Some(cursor)) = (overlay.candidate.as_ref(), window.cursor_position()) else {
         *root_vis = Visibility::Hidden;
+        *root_border = BorderColor::all(super::style::BORDER_IDLE);
         return;
     };
     if !show {
         *root_vis = Visibility::Hidden;
+        *root_border = BorderColor::all(super::style::BORDER_IDLE);
         return;
     }
 
@@ -588,6 +590,13 @@ pub fn render_tooltip(
     root_node.top = Val::Px(pos.y);
     root_node.width = Val::Px(box_size.x);
     root_node.height = Val::Px(box_size.y);
+    let rarity = item_data(cand.stack.id).rarity;
+    let border_col = if rarity == Rarity::White {
+        super::style::BORDER_IDLE
+    } else {
+        rarity_color(rarity).with_alpha(0.55)
+    };
+    *root_border = BorderColor::all(border_col);
     *root_vis = Visibility::Inherited;
 
     for (idx, mut node, mut text, mut color, mut vis) in &mut line_q {

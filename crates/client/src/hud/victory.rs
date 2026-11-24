@@ -39,7 +39,7 @@ pub fn setup(mut commands: Commands) {
                 row_gap: Val::Px(16.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.01, 0.03, 0.78)),
+            BackgroundColor(super::style::BACKDROP),
             Visibility::Hidden,
             GlobalZIndex(1250),
             DespawnOnExit(AppState::InGame),
@@ -49,7 +49,7 @@ pub fn setup(mut commands: Commands) {
                 .spawn((
                     Node {
                         padding: UiRect::axes(Val::Px(36.0), Val::Px(28.0)),
-                        border: UiRect::all(Val::Px(3.0)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                         flex_direction: FlexDirection::Column,
                         justify_content: JustifyContent::Center,
@@ -85,7 +85,7 @@ pub fn setup(mut commands: Commands) {
                             min_width: Val::Px(220.0),
                             margin: UiRect::top(Val::Px(6.0)),
                             padding: UiRect::axes(Val::Px(24.0), Val::Px(10.0)),
-                            border: UiRect::all(Val::Px(2.0)),
+                            border: UiRect::all(Val::Px(super::style::BORDER_W)),
                             border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
@@ -109,7 +109,7 @@ pub fn setup(mut commands: Commands) {
                         Node {
                             min_width: Val::Px(220.0),
                             padding: UiRect::axes(Val::Px(24.0), Val::Px(10.0)),
-                            border: UiRect::all(Val::Px(2.0)),
+                            border: UiRect::all(Val::Px(super::style::BORDER_W)),
                             border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,

@@ -196,7 +196,7 @@ pub fn setup(mut commands: Commands, src: Res<HotbarSource>, mut images: ResMut<
         commands.spawn((
             SlotKeybind,
             StackText,
-            HudTextColor(Color::srgba(0.92, 0.92, 0.96, 0.85)),
+            HudTextColor(super::style::TEXT_PRIMARY),
             HudText {
                 text: key_label,
                 death: false,

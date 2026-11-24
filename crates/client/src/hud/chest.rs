@@ -137,8 +137,8 @@ pub struct UtilityButtonBg(pub usize);
 pub struct UtilityButtonText(pub usize);
 
 const BG: Color = super::style::PANEL_BG_SOLID;
-const CELL_BG: Color = Color::srgba(0.17, 0.23, 0.48, 0.85);
-const CELL_FULL: Color = Color::srgba(0.35, 0.42, 0.8, 0.9);
+const CELL_BG: Color = super::style::SLOT_BG;
+const CELL_FULL: Color = super::style::PANEL_INNER;
 
 fn abs(x: f32, y: f32, w: f32, h: f32) -> Node {
     Node {
@@ -174,7 +174,7 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
         .spawn((
             PanelRoot,
             Node {
-                border: UiRect::all(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                 ..abs(pos[0], pos[1], size[0], size[1])
             },
@@ -194,8 +194,8 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                 p.spawn((
                     CellBg(i),
                     Node {
-                        border: UiRect::all(Val::Px(1.5)),
-                        border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_SLOT)),
                         ..abs(x, y, cell, cell)
                     },
                     BackgroundColor(CELL_BG),
@@ -219,7 +219,7 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                 p.spawn((
                     UtilityButtonBg(idx),
                     Node {
-                        border: UiRect::all(Val::Px(2.0)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         ..abs(bx, by, BTN_W * s, BTN_H * s)
                     },

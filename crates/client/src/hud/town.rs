@@ -253,7 +253,7 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                 top: Val::Px(pos[1]),
                 width: Val::Px(460.0 * s),
                 height: Val::Px(260.0 * s),
-                border: UiRect::all(Val::Px(3.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                 ..default()
             },
@@ -291,8 +291,8 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                         top: Val::Px(8.0 * s),
                         width: Val::Px(w_px * s),
                         height: Val::Px(24.0 * s),
-                        border: UiRect::all(Val::Px(1.5)),
-                        border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         ..default()
@@ -319,13 +319,13 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                     top: Val::Px(44.0 * s),
                     width: Val::Px(44.0 * s),
                     height: Val::Px(44.0 * s),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_SLOT)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.08, 0.10, 0.18, 0.92)),
+                BackgroundColor(super::style::SLOT_BG),
                 BorderColor::all(super::style::GOLD_BORDER),
                 Visibility::Hidden,
             ))

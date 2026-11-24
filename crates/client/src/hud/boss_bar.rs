@@ -132,7 +132,7 @@ pub fn setup(mut commands: Commands) {
                 width: Val::Percent(BAR_WIDTH_PERCENT),
                 height: Val::Px(BAR_HEIGHT),
                 padding: UiRect::all(Val::Px(2.0)),
-                border: UiRect::all(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                 ..default()
             },
