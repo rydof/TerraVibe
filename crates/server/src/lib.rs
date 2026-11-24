@@ -4798,7 +4798,7 @@ impl Server {
                             } else {
                                 EnemyKind::Drippler
                             };
-                        } else if p_y >= 310 {
+                        } else if p_y >= terravibe_sim::worldgen::sky_island::SKY_ISLAND_Y - 5 {
                             kind = EnemyKind::Harpy;
                         } else if self.bounds.edge_distance(px, pz)
                             < terravibe_sim::world_bounds::OCEAN_WIDTH

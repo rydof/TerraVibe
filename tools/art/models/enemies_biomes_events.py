@@ -677,32 +677,63 @@ def man_eater():
 # ---- 18. harpy --------------------------------------------------------------
 def harpy():
     skin = hexc("#f2c8b6")
+    skin_d = hexc("#d49e8a")
+    feather_d = hexc("#214d96")
     feather = hexc("#3a7bd5")
     feather_l = hexc("#7eb6ff")
+    hair_d = hexc("#163266")
     hair = hexc("#234b8c")
+    hair_l = hexc("#4478c4")
+    talon = hexc("#e09828")
+    talon_l = hexc("#ffd060")
 
-    torso = Model(8, 12, 6)
-    torso.box(0, 0, 0, 7, 11, 5, feather)
-    torso.set(3, 10, 5, feather_l)
-    head = Model(8, 8, 8)
-    head.box(0, 0, 0, 7, 7, 7, skin)
-    head.box(0, 5, 0, 7, 7, 7, hair)
-    head.set(2, 4, 7, hexc("#111111"))
-    head.set(5, 4, 7, hexc("#111111"))
+    # Torso: feathered bodice, pale sky-blue belly plume, tail feathers at back
+    torso = Model(8, 12, 8)
+    torso.box(1, 2, 2, 6, 10, 6, feather)
+    torso.box(2, 3, 6, 5, 9, 6, feather_l)  # front chest plume
+    torso.box(1, 0, 2, 6, 2, 6, feather_d)  # waist sash
+    torso.box(2, 0, 0, 5, 4, 2, feather_d)  # tail feathers
+    torso.box(2, 0, 0, 2, 2, 1, feather_l)
+    torso.box(5, 0, 0, 5, 2, 1, feather_l)
 
-    wing_l = Model(14, 8, 3)
-    wing_l.box(0, 2, 0, 13, 7, 2, feather)
-    wing_l.box(0, 0, 0, 10, 2, 2, feather_l)
-    wing_r = Model(14, 8, 3)
-    wing_r.box(0, 2, 0, 13, 7, 2, feather)
-    wing_r.box(3, 0, 0, 13, 2, 2, feather_l)
+    # Head: sculpted face, eyes, flowing multi-layer azure hair
+    head = Model(8, 9, 9)
+    head.box(1, 0, 2, 6, 6, 7, skin)
+    head.box(1, 0, 2, 6, 1, 3, skin_d)
+    head.box(0, 5, 1, 7, 8, 8, hair)       # hair crown
+    head.box(0, 2, 0, 7, 6, 2, hair_d)     # back hair
+    head.box(0, 2, 3, 0, 6, 6, hair)       # left side lock
+    head.box(7, 2, 3, 7, 6, 6, hair)       # right side lock
+    head.box(2, 7, 3, 5, 8, 7, hair_l)     # top highlight
+    head.set(2, 3, 7, hexc("#182038"))     # eyes
+    head.set(5, 3, 7, hexc("#182038"))
+    head.set(2, 4, 7, hexc("#ffffff"))
+    head.set(5, 4, 7, hexc("#ffffff"))
 
-    leg_l = Model(4, 10, 4)
-    leg_l.box(0, 0, 0, 3, 9, 3, feather)
-    leg_l.set(1, 0, 3, feather_l)
-    leg_r = Model(4, 10, 4)
-    leg_r.box(0, 0, 0, 3, 9, 3, feather)
-    leg_r.set(2, 0, 3, feather_l)
+    # Tapered scalloped feathered wings
+    wing_l = Model(16, 10, 3)
+    wing_l.box(10, 6, 0, 15, 9, 2, feather_d)  # shoulder covert
+    wing_l.box(4, 4, 0, 14, 7, 2, feather)     # mid wing
+    wing_l.box(1, 2, 1, 10, 5, 2, feather_l)   # primary feathers
+    for i, x in enumerate((0, 3, 6, 9)):
+        wing_l.box(x, 0 + (i % 2), 1, x + 1, 3, 1, feather_l)
+
+    wing_r = Model(16, 10, 3)
+    wing_r.box(0, 6, 0, 5, 9, 2, feather_d)
+    wing_r.box(1, 4, 0, 11, 7, 2, feather)
+    wing_r.box(5, 2, 1, 14, 5, 2, feather_l)
+    for i, x in enumerate((14, 11, 8, 5)):
+        wing_r.box(x, 0 + (i % 2), 1, x + 1, 3, 1, feather_l)
+
+    # Feathered thighs + golden avian talons
+    leg_l = Model(4, 10, 5)
+    leg_l.box(0, 4, 1, 3, 9, 4, feather)
+    leg_l.box(1, 1, 2, 2, 4, 3, talon)
+    leg_l.box(0, 0, 2, 3, 0, 4, talon_l)
+    leg_r = Model(4, 10, 5)
+    leg_r.box(0, 4, 1, 3, 9, 4, feather)
+    leg_r.box(1, 1, 2, 2, 4, 3, talon)
+    leg_r.box(0, 0, 2, 3, 0, 4, talon_l)
 
     save_parts("harpy", {"torso": torso, "head": head,
                          "wing_l": wing_l, "wing_r": wing_r,
@@ -710,19 +741,30 @@ def harpy():
     write_rig(
         out("harpy"),
         [
-            ("torso", (4, 0, 3), (0, 10, 0), None),
+            ("torso", (4, 0, 4), (0, 10, 0), None),
             ("head", (4, 0, 4), (0, 12, 0), "torso"),
-            ("wing_l", (13, 6, 1), (-4, 10, -2), "torso"),
-            ("wing_r", (0, 6, 1), (4, 10, -2), "torso"),
+            ("wing_l", (15, 7, 1), (-4, 10, -2), "torso"),
+            ("wing_r", (0, 7, 1), (4, 10, -2), "torso"),
             ("leg_l", (2, 9, 2), (-2, 0, 0), "torso"),
             ("leg_r", (2, 9, 2), (2, 0, 0), "torso"),
         ],
         {
-            "idle": (0.6, True, [
-                key(0.0, "wing_l", rot=(0, 0, 0.5)),
-                key(0.3, "wing_l", rot=(0, 0, -0.4)),
-                key(0.0, "wing_r", rot=(0, 0, -0.5)),
-                key(0.3, "wing_r", rot=(0, 0, 0.4)),
+            "idle": (0.56, True, [
+                key(0.0, "torso", rot=(0.08, 0.0, 0.0)),
+                key(0.28, "torso", rot=(-0.06, 0.0, 0.0)),
+                key(0.56, "torso", rot=(0.08, 0.0, 0.0)),
+                key(0.0, "wing_l", rot=(0.0, 0.0, 0.78)),
+                key(0.28, "wing_l", rot=(0.0, 0.0, -0.68)),
+                key(0.56, "wing_l", rot=(0.0, 0.0, 0.78)),
+                key(0.0, "wing_r", rot=(0.0, 0.0, -0.78)),
+                key(0.28, "wing_r", rot=(0.0, 0.0, 0.68)),
+                key(0.56, "wing_r", rot=(0.0, 0.0, -0.78)),
+                key(0.0, "leg_l", rot=(0.25, 0.0, 0.0)),
+                key(0.28, "leg_l", rot=(-0.15, 0.0, 0.0)),
+                key(0.56, "leg_l", rot=(0.25, 0.0, 0.0)),
+                key(0.0, "leg_r", rot=(-0.15, 0.0, 0.0)),
+                key(0.28, "leg_r", rot=(0.25, 0.0, 0.0)),
+                key(0.56, "leg_r", rot=(-0.15, 0.0, 0.0)),
             ]),
         },
     )
