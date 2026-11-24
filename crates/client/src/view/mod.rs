@@ -14,6 +14,7 @@ pub(crate) mod particles;
 pub(crate) mod player;
 pub(crate) mod player_art;
 pub(crate) mod projectiles;
+pub(crate) mod remote_players;
 pub(crate) mod sky;
 pub(crate) mod stars;
 pub(crate) mod weather;
@@ -151,6 +152,7 @@ impl Plugin for ViewPlugin {
                 crate::net::NetPlugin,
                 player::PlayerPlugin { sounds },
                 avatar::AvatarPlugin,
+                remote_players::RemotePlayersPlugin,
                 hud,
                 enemies::EnemiesPlugin {
                     sounds: enemies::EnemySounds::load(c),
