@@ -32,14 +32,14 @@ pub fn surface_structure_in_chunk(
     size: WorldSize,
 ) -> Option<(i32, i32, i32, SurfaceStructureKind)> {
     let h = hash(seed ^ SALT_STRUCT, cx, 0, cz);
-    if h % 2 != 0 {
+    if h % 24 != 0 {
         return None;
     }
     let ox = 6 + ((h >> 8) % 20) as i32;
     let oz = 6 + ((h >> 16) % 20) as i32;
     let wx = cx * CHUNK_SIZE + ox;
     let wz = cz * CHUNK_SIZE + oz;
-    if wx.abs() <= 24 && wz.abs() <= 24 {
+    if wx.abs() <= 72 && wz.abs() <= 72 {
         return None;
     }
     if WorldBounds::new(size).edge_distance(wx, wz) < OCEAN_WIDTH + BEACH_WIDTH + 6 {
@@ -204,18 +204,19 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, size: WorldSize, chunk: &mut Chu
                 let h = hash(seed ^ SALT_DRESS, wx, wy, wz);
 
                 if wy < surf - 4 {
-                    if matches!(above, STONE | ICE | SANDSTONE) && h % 20 == 0 {
+                    if matches!(above, STONE | ICE | SANDSTONE) && h % 45 == 0 {
                         chunk.set(lx, ly, lz, STALACTITE);
-                    } else if matches!(below, STONE | DIRT | MUD | SANDSTONE | ICE) && h % 45 == 1 {
+                    } else if matches!(below, STONE | DIRT | MUD | SANDSTONE | ICE) && h % 110 == 1
+                    {
                         chunk.set(lx, ly, lz, POT);
-                    } else if matches!(below, STONE | MUD | DIRT) && h % 24 == 2 {
+                    } else if matches!(below, STONE | MUD | DIRT) && h % 60 == 2 {
                         chunk.set(lx, ly, lz, MOSS);
-                    } else if matches!(below, STONE | DIRT) && h % 28 == 3 {
+                    } else if matches!(below, STONE | DIRT) && h % 70 == 3 {
                         chunk.set(lx, ly, lz, SMALL_ROCK);
                     } else if wy < surf - 8
                         && (matches!(below, STONE | MUD)
                             || (lx > 0 && matches!(chunk.get(lx - 1, ly, lz), STONE | MUD)))
-                        && h % 26 == 4
+                        && h % 75 == 4
                     {
                         chunk.set(lx, ly, lz, SHELF_MUSHROOM);
                     }
@@ -223,11 +224,11 @@ pub fn apply_for_size(seed: u32, pos: ChunkPos, size: WorldSize, chunk: &mut Chu
                     && (wx.abs() > 40 || wz.abs() > 40)
                     && matches!(below, GRASS | DIRT | STONE | SAND | SNOW)
                 {
-                    if h % 18 == 5 {
+                    if h % 160 == 5 {
                         chunk.set(lx, ly, lz, SMALL_ROCK);
-                    } else if matches!(below, GRASS | STONE) && h % 24 == 6 {
+                    } else if matches!(below, GRASS | STONE) && h % 220 == 6 {
                         chunk.set(lx, ly, lz, MOSS);
-                    } else if matches!(below, GRASS | STONE | DIRT) && h % 64 == 7 {
+                    } else if matches!(below, GRASS | STONE | DIRT) && h % 480 == 7 {
                         chunk.set(lx, ly, lz, POT);
                     }
                 }

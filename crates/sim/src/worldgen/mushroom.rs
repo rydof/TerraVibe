@@ -14,7 +14,7 @@ use crate::worldgen::terrain;
 
 const SALT_MUSHROOM: u32 = 0x2B6D_93E1;
 /// One in this many grass columns carries a mushroom.
-pub const MUSHROOM_ONE_IN: u32 = 32;
+pub const MUSHROOM_ONE_IN: u32 = 180;
 
 /// Y of the mushroom cell for this column, if it has one.
 pub fn mushroom_in_column(seed: u32, x: i32, z: i32) -> Option<i32> {
@@ -113,8 +113,8 @@ mod tests {
         }
         let ratio = f64::from(mushrooms) / f64::from(grass);
         assert!(
-            (1.0 / 40.0..=1.0 / 25.0).contains(&ratio),
-            "{mushrooms} mushrooms over {grass} grass columns = 1/{:.1}, want 1/25..1/40",
+            (1.0 / 250.0..=1.0 / 130.0).contains(&ratio),
+            "{mushrooms} mushrooms over {grass} grass columns = 1/{:.1}, want 1/130..1/250",
             1.0 / ratio
         );
     }
