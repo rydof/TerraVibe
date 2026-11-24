@@ -129,12 +129,30 @@ FAMILIES["enemies"]["models"] = [
     "models/eater_of_souls/head.vox",
     "models/eater_of_souls/wing_l.vox",
     "models/eater_of_souls/wing_r.vox",
+    "models/bunny/body.vox",
+    "models/bunny/head.vox",
+    "models/bunny/leg_fl.vox",
+    "models/bunny/leg_fr.vox",
+    "models/bunny/leg_bl.vox",
+    "models/bunny/leg_br.vox",
+    "models/bird/body.vox",
+    "models/bird/wing_l.vox",
+    "models/bird/wing_r.vox",
+    "models/squirrel/body.vox",
+    "models/squirrel/tail.vox",
+    "models/cave_critter/body.vox",
+    "models/cave_critter/legs_l.vox",
+    "models/cave_critter/legs_r.vox",
 ]
 FAMILIES["enemies"]["rigs"] = [
     "models/slime/rig.ron",
     "models/zombie/rig.ron",
     "models/demon_eye/rig.ron",
     "models/eater_of_souls/rig.ron",
+    "models/bunny/rig.ron",
+    "models/bird/rig.ron",
+    "models/squirrel/rig.ron",
+    "models/cave_critter/rig.ron",
 ]
 # The two 6-voxel eye patches are detached by design (seen through the gel).
 FAMILIES["enemies"]["detached"] = {"models/slime/eyes.vox": 12}

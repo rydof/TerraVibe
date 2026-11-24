@@ -1,0 +1,34 @@
+(
+    parts: [
+        (name: "body", file: "body.vox", pivot: (5.000, 4.000, 6.000), offset: (0.000, 0.000, 0.000), parent: None),
+        (name: "head", file: "head.vox", pivot: (4.000, 2.000, 4.000), offset: (0.000, 3.500, 4.500), parent: Some("body")),
+        (name: "leg_fl", file: "leg_fl.vox", pivot: (1.500, 3.500, 1.500), offset: (-3.000, -4.000, 3.500), parent: Some("body")),
+        (name: "leg_fr", file: "leg_fr.vox", pivot: (1.500, 3.500, 1.500), offset: (3.000, -4.000, 3.500), parent: Some("body")),
+        (name: "leg_bl", file: "leg_bl.vox", pivot: (1.500, 3.500, 1.500), offset: (-3.200, -4.000, -3.000), parent: Some("body")),
+        (name: "leg_br", file: "leg_br.vox", pivot: (1.500, 3.500, 1.500), offset: (3.200, -4.000, -3.000), parent: Some("body")),
+    ],
+    anims: {
+        "idle": (len: 2.0, looping: true, keys: [
+            (t: 0.0, part: "head", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 1.0, part: "head", rot_deg: (-6.000, 0.000, 0.000), offset: (0.000, 0.300, 0.000)),
+            (t: 2.0, part: "head", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+        "hop": (len: 0.45, looping: true, keys: [
+            (t: 0.0, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.22, part: "body", rot_deg: (-12.000, 0.000, 0.000), offset: (0.000, 3.000, 0.000)),
+            (t: 0.45, part: "body", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_fl", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.22, part: "leg_fl", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "leg_fl", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_fr", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.22, part: "leg_fr", rot_deg: (35.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "leg_fr", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_bl", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.22, part: "leg_bl", rot_deg: (-40.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "leg_bl", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.0, part: "leg_br", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.22, part: "leg_br", rot_deg: (-40.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.45, part: "leg_br", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)
