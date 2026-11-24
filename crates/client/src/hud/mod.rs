@@ -508,6 +508,14 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
+            (
+                town::update_view_housing.after(town::update_view),
+                town::update_view_rows.after(town::update_view),
+            )
+                .run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
             town::draw_room_highlight
                 .after(town::update_view)
                 .run_if(in_state(AppState::InGame)),
@@ -515,8 +523,24 @@ impl Plugin for HudPlugin {
         .add_systems(
             Update,
             (
+                town::update_view_housing.after(town::update_view),
+                town::update_view_rows.after(town::update_view),
+            )
+                .run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
                 combat_feedback::consume_combat_hits,
                 combat_feedback::update_combat_feedback.after(combat_feedback::consume_combat_hits),
+            )
+                .run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                town::update_view_housing.after(town::update_view),
+                town::update_view_rows.after(town::update_view),
             )
                 .run_if(in_state(AppState::InGame)),
         )
@@ -530,6 +554,14 @@ impl Plugin for HudPlugin {
         .add_systems(
             Update,
             (
+                town::update_view_housing.after(town::update_view),
+                town::update_view_rows.after(town::update_view),
+            )
+                .run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
                 tooltip::begin_frame
                     .before(town::update_view)
                     .before(chest::update_cells)
@@ -538,6 +570,14 @@ impl Plugin for HudPlugin {
                     .after(town::update_view)
                     .after(chest::update_cells)
                     .after(inventory::update_view),
+            )
+                .run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                town::update_view_housing.after(town::update_view),
+                town::update_view_rows.after(town::update_view),
             )
                 .run_if(in_state(AppState::InGame)),
         )
@@ -568,6 +608,14 @@ impl Plugin for HudPlugin {
                 map::update_map_exploration,
                 map::update_compass,
                 map::update_minimap_rendering,
+            )
+                .run_if(in_state(AppState::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                town::update_view_housing.after(town::update_view),
+                town::update_view_rows.after(town::update_view),
             )
                 .run_if(in_state(AppState::InGame)),
         );

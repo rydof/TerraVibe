@@ -452,7 +452,6 @@ pub struct InventoryUi {
     pub near: Vec<BlockId>,
     pub feedback: String,
     pub feedback_ticks: f32,
-    pub trash: Option<ItemStack>,
     pub pending_trash_confirm: Option<ItemStack>,
     pub sort_mode: SortMode,
     pub hammer_grid: bool,
@@ -854,7 +853,17 @@ pub fn setup(mut commands: Commands, assets: Option<Res<HotbarAssets>>) {
     }
     commands.spawn((
         Part::RulerHudText,
-        label(),
+        label().0,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(44.0),
+            left: Val::Percent(50.0),
+            padding: UiRect::axes(Val::Px(12.0), Val::Px(5.0)),
+            border: UiRect::all(Val::Px(1.5)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.06, 0.08, 0.13, 0.88)),
+        BorderColor::all(Color::srgba(0.32, 0.42, 0.56, 0.85)),
         super::text::HudTextColor(Color::srgb(1.0, 0.92, 0.45)),
         GlobalZIndex(120),
         Visibility::Hidden,
@@ -1203,7 +1212,7 @@ pub fn click_input(
 
     // Trash can slot
     if left && trash_slot_at(c, win) {
-        if let Some(mut held) = held {
+        if let Some(held) = held {
             if let Some(st) = held.0 {
                 let stack_value = item_data(st.id).value.saturating_mul(st.count);
                 if stack_value >= VALUABLE_TRASH_THRESHOLD_COPPER
@@ -1219,12 +1228,19 @@ pub fn click_input(
                     return;
                 }
                 ui.pending_trash_confirm = None;
-                held.0 = None;
-                ui.trash = Some(st);
+                if let Some(net) = &net {
+                    let _ = net.send(ClientMsg::ClickSlot {
+                        at: SlotRef::Trash,
+                        kind: ClickKind::Left,
+                    });
+                }
             } else {
                 ui.pending_trash_confirm = None;
-                if let Some(tr) = ui.trash.take() {
-                    held.0 = Some(tr);
+                if let Some(net) = &net {
+                    let _ = net.send(ClientMsg::ClickSlot {
+                        at: SlotRef::Trash,
+                        kind: ClickKind::Left,
+                    });
                 }
             }
         }
@@ -1315,6 +1331,17 @@ pub fn click_input(
                     to_chest: true,
                     slot,
                 });
+            }
+            return;
+        }
+        // When chest, shop, and guide crafting are closed, Shift+left on a non-favorited bag slot quick-trashes it.
+        if left
+            && shift(&keys)
+            && let SlotRef::Inv(slot) = at
+            && (slot as usize) < BAG
+        {
+            if let Some(net) = &net {
+                let _ = net.send(ClientMsg::TrashShift { slot });
             }
             return;
         }
@@ -1468,6 +1495,7 @@ pub struct ViewPanels<'w> {
     town: Option<Res<'w, TownPanel>>,
     tooltip: Option<ResMut<'w, super::tooltip::TooltipOverlay>>,
     acc_prefixes: Option<Res<'w, LocalAccessoryPrefixes>>,
+    local_trash: Option<Res<'w, crate::net::LocalTrash>>,
     vanity: Option<Res<'w, ClientVanity>>,
     favorites: Option<Res<'w, FavoriteSlots>>,
     ruler: Option<Res<'w, RulerEnabled>>,
@@ -1522,17 +1550,17 @@ pub fn update_view(
             if panels.ruler.as_ref().is_some_and(|r| r.0) {
                 let text = match panels.ruler_readout.as_ref().and_then(|ro| ro.0) {
                     Some(([dx, dy, dz], dist)) => {
-                        format!("Ruler: dX:{dx:+} dY:{dy:+} dZ:{dz:+} ({dist:.1}m)")
+                        let w = dx.abs() + 1;
+                        let h = dy.abs() + 1;
+                        let d = dz.abs() + 1;
+                        format!(
+                            "Ruler  ΔX:{dx:+} ΔY:{dy:+} ΔZ:{dz:+}  |  {w}×{h}×{d}  |  {dist:.1}m"
+                        )
                     }
-                    None => "Ruler: ON (aim at block)".to_string(),
+                    None => "Ruler: ON (aim at block, R to pin)".to_string(),
                 };
-                place(
-                    &mut node,
-                    (win[0] - 320.0 * s) / 2.0,
-                    win[1] - 42.0 * s,
-                    0.0,
-                    0.0,
-                );
+                node.top = Val::Px(44.0 * s);
+                node.left = Val::Px((win[0] - 380.0 * s).max(8.0) / 2.0);
                 set_text(&mut t, &text);
                 set_vis(&mut vis, true);
             } else {
@@ -1609,7 +1637,7 @@ pub fn update_view(
                     prefix: vanity_acc_prefixes[n - VANITY_ACC0],
                 })
             }
-            n if n == TRASH_CELL => ui.trash,
+            n if n == TRASH_CELL => panels.local_trash.as_ref().and_then(|t| t.0),
             _ => None,
         }
     };
@@ -2849,7 +2877,10 @@ mod tests {
     #[test]
     fn trash_slot_mechanics_stores_and_retrieves_item() {
         let mut app = app();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        app.insert_resource(Net::new(Recorder(sent.clone())));
         app.init_resource::<LocalHeld>();
+        app.init_resource::<crate::net::LocalTrash>();
         app.world_mut().resource_mut::<InventoryOpen>().0 = true;
         let [win_w, win_h] = [1920.0, 1080.0];
         let [tx, ty, ts] = cell_rect(TRASH_CELL, [win_w, win_h]);
@@ -2857,23 +2888,29 @@ mod tests {
 
         assert!(trash_slot_at(trash_center, [win_w, win_h]));
 
-        // Place held item into trash
+        // Place cheap held item into trash -> sends ClickSlot(Trash, Left).
         app.world_mut()
             .insert_resource(LocalHeld(Some(stack(DIRT_BLOCK, 25))));
         click_at(&mut app, trash_center);
-        assert_eq!(app.world().resource::<LocalHeld>().0, None);
-        assert_eq!(
-            app.world().resource::<InventoryUi>().trash,
-            Some(stack(DIRT_BLOCK, 25))
-        );
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(
+            m,
+            ClientMsg::ClickSlot {
+                at: SlotRef::Trash,
+                kind: ClickKind::Left
+            }
+        )));
 
-        // Click again with empty cursor retrieves the item
+        // Click again with empty cursor -> sends ClickSlot(Trash, Left) to retrieve.
+        sent.lock().unwrap().clear();
+        app.world_mut().insert_resource(LocalHeld(None));
         click_at(&mut app, trash_center);
-        assert_eq!(
-            app.world().resource::<LocalHeld>().0,
-            Some(stack(DIRT_BLOCK, 25))
-        );
-        assert_eq!(app.world().resource::<InventoryUi>().trash, None);
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(
+            m,
+            ClientMsg::ClickSlot {
+                at: SlotRef::Trash,
+                kind: ClickKind::Left
+            }
+        )));
     }
 
     #[test]
@@ -3007,7 +3044,8 @@ mod tests {
             count: 3,
             prefix: Prefix(0),
         };
-        app.world_mut().resource_mut::<InventoryUi>().trash = Some(trash_stack);
+        app.world_mut()
+            .insert_resource(crate::net::LocalTrash(Some(trash_stack)));
         let [tx, ty, ts] = cell_rect(TRASH_CELL, [1920.0, 1080.0]);
         app.world_mut()
             .query_filtered::<&mut Window, With<PrimaryWindow>>()
@@ -3082,56 +3120,86 @@ mod tests {
     #[test]
     fn trashing_valuable_item_requires_confirmation_low_value_does_not() {
         let mut app = app();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        app.insert_resource(Net::new(Recorder(sent.clone())));
         app.init_resource::<LocalHeld>();
         app.world_mut().resource_mut::<InventoryOpen>().0 = true;
         let win = [1920.0, 1080.0];
         let [tx, ty, ts] = cell_rect(TRASH_CELL, win);
         let trash_center = [tx + ts / 2.0, ty + ts / 2.0];
 
-        // Low-value item (< 100c) trashes immediately.
+        // Low-value item (< 100c) sends ClickSlot immediately.
         assert!(item_data(DIRT_BLOCK).value < VALUABLE_TRASH_THRESHOLD_COPPER);
         app.world_mut()
             .insert_resource(LocalHeld(Some(stack(DIRT_BLOCK, 1))));
         click_at(&mut app, trash_center);
-        assert_eq!(app.world().resource::<LocalHeld>().0, None);
-        assert_eq!(
-            app.world().resource::<InventoryUi>().trash,
-            Some(stack(DIRT_BLOCK, 1))
-        );
         assert_eq!(
             app.world().resource::<InventoryUi>().pending_trash_confirm,
             None
         );
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(
+            m,
+            ClientMsg::ClickSlot {
+                at: SlotRef::Trash,
+                kind: ClickKind::Left
+            }
+        )));
 
         // High-value item (>= 100c) requires a second click to confirm.
+        sent.lock().unwrap().clear();
         assert!(item_data(ANVIL_ITEM).value >= VALUABLE_TRASH_THRESHOLD_COPPER);
         app.world_mut()
             .insert_resource(LocalHeld(Some(stack(ANVIL_ITEM, 1))));
         click_at(&mut app, trash_center);
         assert_eq!(
-            app.world().resource::<LocalHeld>().0,
-            Some(stack(ANVIL_ITEM, 1))
-        );
-        assert_eq!(
             app.world().resource::<InventoryUi>().pending_trash_confirm,
             Some(stack(ANVIL_ITEM, 1))
         );
-        assert_eq!(
-            app.world().resource::<InventoryUi>().trash,
-            Some(stack(DIRT_BLOCK, 1))
-        );
+        assert!(sent.lock().unwrap().is_empty());
 
-        // Second click confirms and moves to trash.
+        // Second click confirms and sends ClickSlot(Trash, Left).
         click_at(&mut app, trash_center);
-        assert_eq!(app.world().resource::<LocalHeld>().0, None);
         assert_eq!(
             app.world().resource::<InventoryUi>().pending_trash_confirm,
             None
         );
-        assert_eq!(
-            app.world().resource::<InventoryUi>().trash,
-            Some(stack(ANVIL_ITEM, 1))
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(
+            m,
+            ClientMsg::ClickSlot {
+                at: SlotRef::Trash,
+                kind: ClickKind::Left
+            }
+        )));
+    }
+
+    #[test]
+    fn shift_click_quick_trash_and_favorite_protection() {
+        let mut app = app();
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        app.insert_resource(Net::new(Recorder(sent.clone())));
+        app.init_resource::<FavoriteSlots>();
+        app.world_mut().resource_mut::<InventoryOpen>().0 = true;
+        let win = [1920.0, 1080.0];
+        let [x0, y0, s0] = cell_rect(0, win);
+        let slot0_center = [x0 + s0 / 2.0, y0 + s0 / 2.0];
+
+        // Non-favorited bag slot 0 with Shift+Click -> TrashShift { slot: 0 }.
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::ShiftLeft);
+        click_at(&mut app, slot0_center);
+        assert!(
+            sent.lock()
+                .unwrap()
+                .iter()
+                .any(|m| matches!(m, ClientMsg::TrashShift { slot: 0 }))
         );
+
+        // Favorited bag slot 0 with Shift+Click -> ignored.
+        sent.lock().unwrap().clear();
+        app.world_mut().resource_mut::<FavoriteSlots>().0[0] = true;
+        click_at(&mut app, slot0_center);
+        assert!(sent.lock().unwrap().is_empty());
     }
 
     #[test]

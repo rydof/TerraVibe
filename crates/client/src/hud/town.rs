@@ -159,9 +159,103 @@ pub struct GuideMaterialIcon;
 pub struct GuideMaterialCount;
 #[derive(Component)]
 pub struct GuideRecipeIcon(pub usize);
+#[derive(Component)]
+pub struct TownCloseButton;
+#[derive(Component)]
+pub struct TownNoteText;
+#[derive(Component)]
+pub struct TownTalkView;
+#[derive(Component)]
+pub struct TownDialogueText;
+#[derive(Component)]
+pub struct TownActionHints;
+#[derive(Component)]
+pub struct TownShopView;
+#[derive(Component)]
+pub struct ShopRow(pub usize);
+#[derive(Component)]
+pub struct ShopRowName(pub usize);
+#[derive(Component)]
+pub struct ShopRowPrice(pub usize);
+#[derive(Component)]
+pub struct TownGuideView;
+#[derive(Component)]
+pub struct GuideMaterialCaption;
+#[derive(Component)]
+pub struct GuideRecipeHeader;
+#[derive(Component)]
+pub struct GuideRecipeRow(pub usize);
+#[derive(Component)]
+pub struct GuideRecipeTitle(pub usize);
+#[derive(Component)]
+pub struct GuideRecipeStation(pub usize);
+#[derive(Component)]
+pub struct GuideRecipeIngredients(pub usize);
+#[derive(Component)]
+pub struct TownReforgeView;
+#[derive(Component)]
+pub struct ReforgeHeader;
+#[derive(Component)]
+pub struct ReforgeRow(pub usize);
+#[derive(Component)]
+pub struct ReforgeRowIcon(pub usize);
+#[derive(Component)]
+pub struct ReforgeRowName(pub usize);
+#[derive(Component)]
+pub struct ReforgeRowCost(pub usize);
+#[derive(Component)]
+pub struct ReforgeBanner;
+#[derive(Component)]
+pub struct TownHousingView;
+#[derive(Component)]
+pub struct HousingStatusBadge;
+#[derive(Component)]
+pub struct HousingDetailsText;
 
 const MAX_SHOP_ROWS: usize = 12;
 const MAX_GUIDE_ROWS: usize = 7;
+const MAX_REFORGE_ROWS: usize = 5;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GuideIngredientEntry {
+    pub name: &'static str,
+    pub need: u32,
+    pub have: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GuideRecipeEntry {
+    pub output_item: ItemId,
+    pub output_name: &'static str,
+    pub output_count: u32,
+    pub station: &'static str,
+    pub ingredients: Vec<GuideIngredientEntry>,
+}
+
+/// Returns structured Guide crafting recipes for `mat` without leading-space padding hacks.
+pub fn guide_crafting_recipes_for(
+    mat: ItemId,
+    inv: Option<&terravibe_sim::inventory::Inventory>,
+) -> Vec<GuideRecipeEntry> {
+    terravibe_sim::crafting::recipes_using_material(mat)
+        .into_iter()
+        .map(|r| GuideRecipeEntry {
+            output_item: r.output.item,
+            output_name: item_data(r.output.item).name,
+            output_count: r.output.count,
+            station: terravibe_sim::crafting::recipe_station_name(r.id).unwrap_or("By Hand"),
+            ingredients: r
+                .ingredients
+                .iter()
+                .map(|ing| GuideIngredientEntry {
+                    name: item_data(ing.item).name,
+                    need: ing.count,
+                    have: inv.map_or(0, |i| i.count_of(ing.item)),
+                })
+                .collect(),
+        })
+        .collect()
+}
 
 /// Reach-check radius when picking an NPC with the crosshair.
 const PICK_RADIUS: f32 = 1.0;
@@ -252,7 +346,10 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                 left: Val::Px(pos[0]),
                 top: Val::Px(pos[1]),
                 width: Val::Px(460.0 * s),
-                height: Val::Px(260.0 * s),
+                min_height: Val::Px(260.0 * s),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(12.0 * s)),
+                row_gap: Val::Px(8.0 * s),
                 border: UiRect::all(Val::Px(super::style::BORDER_W)),
                 border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_PANEL)),
                 ..default()
@@ -264,33 +361,81 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
             DespawnOnExit(AppState::InGame),
         ))
         .with_children(|p| {
+            // Header flex row: Speaker badge + Tab strip + [X] close button
             p.spawn((
-                TownSpeaker,
                 Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(16.0),
-                    top: Val::Px(12.0),
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: Val::Px(8.0 * s),
+                    width: Val::Percent(100.0),
+                    padding: UiRect::bottom(Val::Px(6.0 * s)),
+                    border: UiRect::bottom(Val::Px(super::style::BORDER_W)),
                     ..default()
                 },
-                HudText {
-                    text: String::new(),
-                    death: false,
-                },
-                super::text::HudTextColor(super::style::GOLD_TEXT),
-            ));
-            for (idx, label_str, left_px, w_px) in [
-                (0usize, "Talk", 120.0, 68.0),
-                (1usize, "Crafting", 196.0, 92.0),
-                (2usize, "Housing", 296.0, 88.0),
-            ] {
-                p.spawn((
-                    TownTabButton(idx),
+                BorderColor::all(super::style::HEADER_DIVIDER),
+            ))
+            .with_children(|hdr| {
+                hdr.spawn((
+                    TownSpeaker,
                     Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(left_px * s),
-                        top: Val::Px(8.0 * s),
-                        width: Val::Px(w_px * s),
-                        height: Val::Px(24.0 * s),
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
+                    HudText {
+                        text: String::new(),
+                        death: false,
+                    },
+                    super::text::HudTextColor(super::style::GOLD_TEXT),
+                ));
+                hdr.spawn((Node {
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(4.0 * s),
+                    flex_grow: 1.0,
+                    ..default()
+                },))
+                    .with_children(|tabs| {
+                        for (idx, label_str) in [
+                            (0usize, "Talk"),
+                            (1usize, "Crafting"),
+                            (2usize, "Reforge"),
+                            (3usize, "Housing"),
+                        ] {
+                            tabs.spawn((
+                                TownTabButton(idx),
+                                Node {
+                                    display: Display::Flex,
+                                    padding: UiRect::axes(Val::Px(8.0 * s), Val::Px(3.0 * s)),
+                                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                                    border_radius: BorderRadius::all(Val::Px(
+                                        super::style::RADIUS_BTN,
+                                    )),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                BackgroundColor(super::style::BTN_BG),
+                                BorderColor::all(super::style::PANEL_BORDER),
+                                Visibility::Hidden,
+                            ))
+                            .with_children(|btn| {
+                                btn.spawn((
+                                    HudText {
+                                        text: label_str.to_string(),
+                                        death: false,
+                                    },
+                                    Node::default(),
+                                ));
+                            });
+                        }
+                    });
+                hdr.spawn((
+                    TownCloseButton,
+                    Node {
+                        padding: UiRect::axes(Val::Px(6.0 * s), Val::Px(2.0 * s)),
                         border: UiRect::all(Val::Px(super::style::BORDER_W)),
                         border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         justify_content: JustifyContent::Center,
@@ -299,103 +444,438 @@ pub fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>
                     },
                     BackgroundColor(super::style::BTN_BG),
                     BorderColor::all(super::style::PANEL_BORDER),
-                    Visibility::Hidden,
                 ))
                 .with_children(|btn| {
                     btn.spawn((
                         HudText {
-                            text: label_str.to_string(),
+                            text: "X".to_string(),
                             death: false,
                         },
+                        super::text::HudTextColor(super::style::TEXT_MUTED),
                         Node::default(),
                     ));
                 });
-            }
+            });
+
+            // Talk & Shop View
             p.spawn((
-                GuideMaterialSlotBox,
+                TownTalkView,
                 Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(16.0 * s),
-                    top: Val::Px(44.0 * s),
-                    width: Val::Px(44.0 * s),
-                    height: Val::Px(44.0 * s),
-                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
-                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_SLOT)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(8.0 * s),
+                    width: Val::Percent(100.0),
                     ..default()
                 },
-                BackgroundColor(super::style::SLOT_BG),
-                BorderColor::all(super::style::GOLD_BORDER),
-                Visibility::Hidden,
             ))
-            .with_children(|slot| {
-                slot.spawn((
-                    GuideMaterialIcon,
+            .with_children(|talk| {
+                talk.spawn((
                     Node {
-                        width: Val::Px(30.0 * s),
-                        height: Val::Px(30.0 * s),
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(Val::Px(8.0 * s)),
+                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                         ..default()
                     },
-                    ImageNode::default(),
-                    Visibility::Hidden,
+                    BackgroundColor(super::style::PANEL_INNER),
+                    BorderColor::all(super::style::BORDER_IDLE),
+                ))
+                .with_children(|card| {
+                    card.spawn((
+                        TownDialogueText,
+                        Node::default(),
+                        HudText {
+                            text: String::new(),
+                            death: false,
+                        },
+                    ));
+                });
+
+                talk.spawn((
+                    TownShopView,
+                    Node {
+                        display: Display::None,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(3.0 * s),
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                ))
+                .with_children(|shop| {
+                    for i in 0..MAX_SHOP_ROWS {
+                        shop.spawn((
+                            ShopRow(i),
+                            Node {
+                                display: Display::None,
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Center,
+                                justify_content: JustifyContent::SpaceBetween,
+                                column_gap: Val::Px(8.0 * s),
+                                width: Val::Percent(100.0),
+                                padding: UiRect::axes(Val::Px(6.0 * s), Val::Px(3.0 * s)),
+                                border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                                border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
+                                ..default()
+                            },
+                            BackgroundColor(super::style::PANEL_INNER),
+                            BorderColor::all(super::style::BORDER_IDLE),
+                        ))
+                        .with_children(|row| {
+                            row.spawn((
+                                ShopRowIcon(i),
+                                Node {
+                                    width: Val::Px(20.0 * s),
+                                    height: Val::Px(20.0 * s),
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                },
+                                ImageNode::default(),
+                                Visibility::Hidden,
+                            ));
+                            row.spawn((
+                                ShopRowName(i),
+                                Node {
+                                    flex_grow: 1.0,
+                                    ..default()
+                                },
+                                HudText {
+                                    text: String::new(),
+                                    death: false,
+                                },
+                            ));
+                            row.spawn((
+                                ShopRowPrice(i),
+                                Node {
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                },
+                                HudText {
+                                    text: String::new(),
+                                    death: false,
+                                },
+                                super::text::HudTextColor(super::style::GOLD_TEXT),
+                            ));
+                        });
+                    }
+                });
+
+                talk.spawn((
+                    TownActionHints,
+                    Node::default(),
+                    HudText {
+                        text: String::new(),
+                        death: false,
+                    },
+                    super::text::HudTextColor(super::style::TEXT_MUTED),
                 ));
-                slot.spawn((
-                    GuideMaterialCount,
-                    Node {
-                        position_type: PositionType::Absolute,
-                        right: Val::Px(2.0),
-                        bottom: Val::Px(1.0),
+            });
+
+            // Guide Crafting View (Two-column flex layout)
+            p.spawn((
+                TownGuideView,
+                Node {
+                    display: Display::None,
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(12.0 * s),
+                    width: Val::Percent(100.0),
+                    ..default()
+                },
+            ))
+            .with_children(|guide| {
+                // Left column: 44x44 Material Slot + caption
+                guide
+                    .spawn((Node {
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: Val::Px(4.0 * s),
+                        width: Val::Px(84.0 * s),
+                        flex_shrink: 0.0,
                         ..default()
+                    },))
+                    .with_children(|left| {
+                        left.spawn((
+                            GuideMaterialSlotBox,
+                            Node {
+                                width: Val::Px(44.0 * s),
+                                height: Val::Px(44.0 * s),
+                                border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                                border_radius: BorderRadius::all(Val::Px(
+                                    super::style::RADIUS_SLOT,
+                                )),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(super::style::SLOT_BG),
+                            BorderColor::all(super::style::GOLD_BORDER),
+                        ))
+                        .with_children(|slot| {
+                            slot.spawn((
+                                GuideMaterialIcon,
+                                Node {
+                                    width: Val::Px(30.0 * s),
+                                    height: Val::Px(30.0 * s),
+                                    ..default()
+                                },
+                                ImageNode::default(),
+                                Visibility::Hidden,
+                            ));
+                            slot.spawn((
+                                GuideMaterialCount,
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    right: Val::Px(2.0),
+                                    bottom: Val::Px(1.0),
+                                    ..default()
+                                },
+                                HudText {
+                                    text: String::new(),
+                                    death: false,
+                                },
+                            ));
+                        });
+                        left.spawn((
+                            GuideMaterialCaption,
+                            Node::default(),
+                            HudText {
+                                text: String::new(),
+                                death: false,
+                            },
+                            super::text::HudTextColor(super::style::TEXT_MUTED),
+                        ));
+                    });
+
+                // Right column: Recipe header + clickable Recipe Row cards
+                guide
+                    .spawn((Node {
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(4.0 * s),
+                        flex_grow: 1.0,
+                        ..default()
+                    },))
+                    .with_children(|right| {
+                        right.spawn((
+                            GuideRecipeHeader,
+                            Node::default(),
+                            HudText {
+                                text: String::new(),
+                                death: false,
+                            },
+                            super::text::HudTextColor(super::style::TEXT_MUTED),
+                        ));
+                        for i in 0..MAX_GUIDE_ROWS {
+                            right
+                                .spawn((
+                                    GuideRecipeRow(i),
+                                    Node {
+                                        display: Display::None,
+                                        flex_direction: FlexDirection::Column,
+                                        row_gap: Val::Px(2.0 * s),
+                                        width: Val::Percent(100.0),
+                                        padding: UiRect::axes(Val::Px(6.0 * s), Val::Px(4.0 * s)),
+                                        border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                                        border_radius: BorderRadius::all(Val::Px(
+                                            super::style::RADIUS_BTN,
+                                        )),
+                                        ..default()
+                                    },
+                                    BackgroundColor(super::style::PANEL_INNER),
+                                    BorderColor::all(super::style::BORDER_IDLE),
+                                ))
+                                .with_children(|card| {
+                                    card.spawn((Node {
+                                        display: Display::Flex,
+                                        flex_direction: FlexDirection::Row,
+                                        align_items: AlignItems::Center,
+                                        column_gap: Val::Px(6.0 * s),
+                                        width: Val::Percent(100.0),
+                                        ..default()
+                                    },))
+                                        .with_children(|top| {
+                                            top.spawn((
+                                                GuideRecipeIcon(i),
+                                                Node {
+                                                    width: Val::Px(20.0 * s),
+                                                    height: Val::Px(20.0 * s),
+                                                    flex_shrink: 0.0,
+                                                    ..default()
+                                                },
+                                                ImageNode::default(),
+                                                Visibility::Hidden,
+                                            ));
+                                            top.spawn((
+                                                GuideRecipeTitle(i),
+                                                Node {
+                                                    flex_grow: 1.0,
+                                                    ..default()
+                                                },
+                                                HudText {
+                                                    text: String::new(),
+                                                    death: false,
+                                                },
+                                            ));
+                                            top.spawn((
+                                                GuideRecipeStation(i),
+                                                Node {
+                                                    flex_shrink: 0.0,
+                                                    ..default()
+                                                },
+                                                HudText {
+                                                    text: String::new(),
+                                                    death: false,
+                                                },
+                                                super::text::HudTextColor(super::style::GOLD_TEXT),
+                                            ));
+                                        });
+                                    card.spawn((
+                                        GuideRecipeIngredients(i),
+                                        Node::default(),
+                                        HudText {
+                                            text: String::new(),
+                                            death: false,
+                                        },
+                                        super::text::HudTextColor(super::style::TEXT_MUTED),
+                                    ));
+                                });
+                        }
+                    });
+            });
+
+            // Reforge View (Goblin Tinkerer)
+            p.spawn((
+                TownReforgeView,
+                Node {
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0 * s),
+                    width: Val::Percent(100.0),
+                    ..default()
+                },
+            ))
+            .with_children(|reforge| {
+                reforge.spawn((
+                    ReforgeHeader,
+                    Node::default(),
+                    HudText {
+                        text: String::new(),
+                        death: false,
                     },
+                    super::text::HudTextColor(super::style::TEXT_MUTED),
+                ));
+                for i in 0..MAX_REFORGE_ROWS {
+                    reforge
+                        .spawn((
+                            ReforgeRow(i),
+                            Node {
+                                display: Display::None,
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Center,
+                                justify_content: JustifyContent::SpaceBetween,
+                                column_gap: Val::Px(8.0 * s),
+                                width: Val::Percent(100.0),
+                                padding: UiRect::axes(Val::Px(6.0 * s), Val::Px(3.0 * s)),
+                                border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                                border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
+                                ..default()
+                            },
+                            BackgroundColor(super::style::PANEL_INNER),
+                            BorderColor::all(super::style::BORDER_IDLE),
+                        ))
+                        .with_children(|row| {
+                            row.spawn((
+                                ReforgeRowIcon(i),
+                                Node {
+                                    width: Val::Px(20.0 * s),
+                                    height: Val::Px(20.0 * s),
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                },
+                                ImageNode::default(),
+                                Visibility::Hidden,
+                            ));
+                            row.spawn((
+                                ReforgeRowName(i),
+                                Node {
+                                    flex_grow: 1.0,
+                                    ..default()
+                                },
+                                HudText {
+                                    text: String::new(),
+                                    death: false,
+                                },
+                            ));
+                            row.spawn((
+                                ReforgeRowCost(i),
+                                Node {
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                },
+                                HudText {
+                                    text: String::new(),
+                                    death: false,
+                                },
+                                super::text::HudTextColor(super::style::GOLD_TEXT),
+                            ));
+                        });
+                }
+                reforge.spawn((
+                    ReforgeBanner,
+                    Node::default(),
+                    HudText {
+                        text: String::new(),
+                        death: false,
+                    },
+                    super::text::HudTextColor(super::style::TEXT_SUCCESS),
+                ));
+            });
+
+            // Housing View
+            p.spawn((
+                TownHousingView,
+                Node {
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0 * s),
+                    width: Val::Percent(100.0),
+                    padding: UiRect::all(Val::Px(8.0 * s)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
+                    ..default()
+                },
+                BackgroundColor(super::style::PANEL_INNER),
+                BorderColor::all(super::style::BORDER_IDLE),
+            ))
+            .with_children(|housing| {
+                housing.spawn((
+                    HousingStatusBadge,
+                    Node::default(),
+                    HudText {
+                        text: String::new(),
+                        death: false,
+                    },
+                    super::text::HudTextColor(super::style::GOLD_TEXT),
+                ));
+                housing.spawn((
+                    HousingDetailsText,
+                    Node::default(),
                     HudText {
                         text: String::new(),
                         death: false,
                     },
                 ));
             });
-            for i in 0..MAX_GUIDE_ROWS {
-                p.spawn((
-                    GuideRecipeIcon(i),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(72.0 * s),
-                        top: Val::Px(44.0 * s),
-                        width: Val::Px(16.0),
-                        height: Val::Px(16.0),
-                        ..default()
-                    },
-                    ImageNode::default(),
-                    Visibility::Hidden,
-                ));
-            }
-            for i in 0..MAX_SHOP_ROWS {
-                p.spawn((
-                    ShopRowIcon(i),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(16.0),
-                        top: Val::Px(38.0),
-                        width: Val::Px(16.0),
-                        height: Val::Px(16.0),
-                        ..default()
-                    },
-                    ImageNode::default(),
-                    Visibility::Hidden,
-                ));
-            }
+
+            // Footer Note
             p.spawn((
-                TownLabel,
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(16.0),
-                    top: Val::Px(38.0),
-                    ..default()
-                },
+                TownNoteText,
+                Node::default(),
                 HudText {
                     text: String::new(),
                     death: false,
                 },
+                super::text::HudTextColor(super::style::TEXT_MUTED),
             ));
         });
 }
@@ -660,6 +1140,7 @@ pub fn shop_comparison_text(item: ItemId, equipped: Option<ItemId>) -> Option<St
 }
 
 /// Formats a single shop row with selection marker, price, equipped comparison, and `[1x] [10x] [All]`.
+#[cfg(test)]
 pub fn format_shop_row(
     item: ItemId,
     price: u32,
@@ -1214,6 +1695,11 @@ pub struct GuideViewParams<'w, 's> {
                 With<GuideMaterialSlotBox>,
                 Without<TownRoot>,
                 Without<TownTabButton>,
+                Without<TownTalkView>,
+                Without<TownGuideView>,
+                Without<TownReforgeView>,
+                Without<TownHousingView>,
+                Without<TownShopView>,
                 Without<ShopRowIcon>,
                 Without<TownLabel>,
                 Without<GuideMaterialIcon>,
@@ -1234,22 +1720,15 @@ pub struct GuideViewParams<'w, 's> {
                 With<GuideMaterialIcon>,
                 Without<TownRoot>,
                 Without<TownTabButton>,
+                Without<TownTalkView>,
+                Without<TownGuideView>,
+                Without<TownReforgeView>,
+                Without<TownHousingView>,
+                Without<TownShopView>,
                 Without<ShopRowIcon>,
                 Without<TownLabel>,
                 Without<GuideMaterialSlotBox>,
                 Without<GuideRecipeIcon>,
-            ),
-        >,
-    >,
-    guide_mat_count: Option<
-        Single<
-            'w,
-            's,
-            &'static mut HudText,
-            (
-                With<GuideMaterialCount>,
-                Without<TownLabel>,
-                Without<TownSpeaker>,
             ),
         >,
     >,
@@ -1265,10 +1744,107 @@ pub struct GuideViewParams<'w, 's> {
         (
             Without<TownRoot>,
             Without<TownTabButton>,
+            Without<TownTalkView>,
+            Without<TownGuideView>,
+            Without<TownReforgeView>,
+            Without<TownHousingView>,
+            Without<TownShopView>,
             Without<ShopRowIcon>,
             Without<TownLabel>,
             Without<GuideMaterialSlotBox>,
             Without<GuideMaterialIcon>,
+        ),
+    >,
+}
+
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct TownViewTexts<'w, 's> {
+    pub main: ParamSet<
+        'w,
+        's,
+        (
+            Query<'w, 's, &'static mut HudText, With<TownDialogueText>>,
+            Query<'w, 's, &'static mut HudText, With<TownActionHints>>,
+            Query<'w, 's, &'static mut HudText, With<TownNoteText>>,
+            Query<'w, 's, &'static mut HudText, With<GuideMaterialCaption>>,
+            Query<'w, 's, &'static mut HudText, With<GuideRecipeHeader>>,
+            Query<'w, 's, &'static mut HudText, With<ReforgeHeader>>,
+            Query<'w, 's, &'static mut HudText, With<ReforgeBanner>>,
+            Query<'w, 's, &'static mut HudText, With<TownSpeaker>>,
+        ),
+    >,
+}
+
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct TownRowQueries<'w, 's> {
+    pub rows: ParamSet<
+        'w,
+        's,
+        (
+            Query<
+                'w,
+                's,
+                (
+                    &'static ShopRow,
+                    &'static mut Node,
+                    &'static mut BorderColor,
+                ),
+            >,
+            Query<
+                'w,
+                's,
+                (
+                    &'static GuideRecipeRow,
+                    &'static mut Node,
+                    &'static mut BorderColor,
+                ),
+            >,
+            Query<
+                'w,
+                's,
+                (
+                    &'static ReforgeRow,
+                    &'static mut Node,
+                    &'static mut BorderColor,
+                ),
+            >,
+        ),
+    >,
+    pub icons: ParamSet<
+        'w,
+        's,
+        (
+            Query<
+                'w,
+                's,
+                (
+                    &'static ShopRowIcon,
+                    &'static mut ImageNode,
+                    &'static mut Visibility,
+                ),
+            >,
+            Query<
+                'w,
+                's,
+                (
+                    &'static ReforgeRowIcon,
+                    &'static mut ImageNode,
+                    &'static mut Visibility,
+                ),
+            >,
+        ),
+    >,
+    pub labels: ParamSet<
+        'w,
+        's,
+        (
+            Query<'w, 's, (&'static ShopRowName, &'static mut HudText)>,
+            Query<'w, 's, (&'static ShopRowPrice, &'static mut HudText)>,
+            Query<'w, 's, (&'static GuideRecipeTitle, &'static mut HudText)>,
+            Query<'w, 's, (&'static GuideRecipeStation, &'static mut HudText)>,
+            Query<'w, 's, (&'static GuideRecipeIngredients, &'static mut HudText)>,
+            Query<'w, 's, (&'static ReforgeRowName, &'static mut HudText)>,
+            Query<'w, 's, (&'static ReforgeRowCost, &'static mut HudText)>,
         ),
     >,
 }
@@ -1282,80 +1858,54 @@ pub fn update_view(
     armor: Option<Res<crate::net::LocalArmor>>,
     icon_assets: super::inventory::IconAssets,
     mut tooltip: Option<ResMut<super::tooltip::TooltipOverlay>>,
-    mut root: Single<&mut Visibility, With<TownRoot>>,
-    mut node: Single<&mut Node, With<TownRoot>>,
-    mut label: Single<
-        (&mut HudText, &mut Node),
-        (
-            With<TownLabel>,
-            Without<TownSpeaker>,
-            Without<TownRoot>,
-            Without<TownTabButton>,
-            Without<ShopRowIcon>,
-            Without<GuideMaterialSlotBox>,
-            Without<GuideMaterialIcon>,
-            Without<GuideMaterialCount>,
-            Without<GuideRecipeIcon>,
-        ),
-    >,
-    mut speaker: Single<&mut HudText, (With<TownSpeaker>, Without<TownLabel>)>,
-    mut tabs: Query<
-        (
+    mut root_and_views: ParamSet<(
+        Single<(&mut Visibility, &mut Node), With<TownRoot>>,
+        Query<(
             &TownTabButton,
             &mut Node,
             &mut BackgroundColor,
             &mut BorderColor,
             &mut Visibility,
-        ),
-        (
-            Without<TownRoot>,
-            Without<ShopRowIcon>,
-            Without<TownLabel>,
-            Without<GuideMaterialSlotBox>,
-            Without<GuideMaterialIcon>,
-            Without<GuideRecipeIcon>,
-        ),
-    >,
-    mut shop_icons: Query<
-        (&ShopRowIcon, &mut Node, &mut ImageNode, &mut Visibility),
-        (
-            Without<TownRoot>,
-            Without<TownTabButton>,
-            Without<TownLabel>,
-            Without<GuideMaterialSlotBox>,
-            Without<GuideMaterialIcon>,
-            Without<GuideRecipeIcon>,
-        ),
-    >,
+        )>,
+        Query<&mut Node, With<TownTalkView>>,
+        Query<&mut Node, With<TownGuideView>>,
+        Query<&mut Node, With<TownReforgeView>>,
+        Query<&mut Node, With<TownHousingView>>,
+        Query<&mut Node, With<TownShopView>>,
+    )>,
+    mut texts: TownViewTexts,
     guide: GuideViewParams,
 ) {
     let GuideViewParams {
         guide_slot,
         mut guide_box,
         mut guide_mat_icon,
-        mut guide_mat_count,
         mut guide_recipe_icons,
     } = guide;
     let win = [window.width(), window.height()];
     let k = crate::hud::inventory::scale(win);
     let pos = panel_pos(win);
-    let panel_h = if panel.guide_crafting_open() {
-        340.0
-    } else {
-        260.0
-    };
-    node.left = Val::Px(pos[0]);
-    node.top = Val::Px(pos[1]);
-    node.width = Val::Px(460.0 * k);
-    node.height = Val::Px(panel_h * k);
+    {
+        let (_, mut node) = root_and_views.p0().into_inner();
+        node.left = Val::Px(pos[0]);
+        node.top = Val::Px(pos[1]);
+        node.width = Val::Px(460.0 * k);
+    }
 
     let line_h = fonts
         .as_ref()
         .map(|f| (f.mouse.0.line_spacing as f32).max(18.0))
         .unwrap_or(20.0);
 
-    for (tab_btn, mut tnode, mut bg, mut border, mut vis) in &mut tabs {
-        let show = panel.npc.is_some() && (tab_btn.0 != 1 || panel.is_guide);
+    // Update tab strip visibility and active styling
+    for (tab_btn, mut tnode, mut bg, mut border, mut vis) in &mut root_and_views.p1() {
+        let show = panel.npc.is_some()
+            && match tab_btn.0 {
+                1 => panel.is_guide,
+                2 => panel.is_tinkerer,
+                _ => true,
+            };
+        tnode.display = if show { Display::Flex } else { Display::None };
         let want_vis = if show {
             Visibility::Inherited
         } else {
@@ -1367,19 +1917,10 @@ pub fn update_view(
         if !show {
             continue;
         }
-        let (left_px, w_px) = match tab_btn.0 {
-            0 => (120.0, 68.0),
-            1 => (196.0, 92.0),
-            _ if panel.is_guide => (296.0, 88.0),
-            _ => (200.0, 96.0),
-        };
-        tnode.left = Val::Px(left_px * k);
-        tnode.top = Val::Px(8.0 * k);
-        tnode.width = Val::Px(w_px * k);
-        tnode.height = Val::Px(24.0 * k);
         let active = (tab_btn.0 == 0 && panel.tab == TownTab::Talk)
             || (tab_btn.0 == 1 && panel.tab == TownTab::Crafting)
-            || (tab_btn.0 == 2 && panel.tab == TownTab::Housing);
+            || (tab_btn.0 == 2 && panel.tab == TownTab::Reforge)
+            || (tab_btn.0 == 3 && panel.tab == TownTab::Housing);
         let want_bg = if active {
             super::style::BTN_BG_ACTIVE
         } else {
@@ -1398,28 +1939,65 @@ pub fn update_view(
         }
     }
 
+    let show_guide = panel.guide_crafting_open();
+    let show_reforge = panel.tab == TownTab::Reforge && panel.is_tinkerer;
+    let show_housing = panel.tab == TownTab::Housing;
+    let show_talk = !show_guide && !show_reforge && !show_housing;
+
+    for mut n in &mut root_and_views.p2() {
+        n.display = if show_talk {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for mut n in &mut root_and_views.p3() {
+        n.display = if show_guide {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for mut n in &mut root_and_views.p4() {
+        n.display = if show_reforge {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for mut n in &mut root_and_views.p5() {
+        n.display = if show_housing {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    let show_shop = show_talk && !panel.shop.is_empty();
+    for mut n in &mut root_and_views.p6() {
+        n.display = if show_shop {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    let max_text_w = (460.0 * k - 36.0).max(200.0);
     let wrapped_header = fonts
         .as_ref()
-        .map(|f| wrap_text(&f.mouse.0, &panel.text, (460.0 * k - 32.0).max(200.0)))
+        .map(|f| wrap_text(&f.mouse.0, &panel.text, max_text_w))
         .unwrap_or_else(|| panel.text.clone());
 
     let super::inventory::IconAssets {
         assets,
         images: mut image_assets,
     } = icon_assets;
-    let show_shop_icons = panel.tab == TownTab::Talk && !panel.shop.is_empty();
-    let header_lines = wrapped_header.split('\n').count() + 1;
+
     let guide_stack = guide_slot.as_ref().and_then(|g| g.0);
-    let guide_recipes = guide_stack
-        .map(|st| terravibe_sim::crafting::recipes_using_material(st.id))
+    let guide_entries = guide_stack
+        .map(|st| guide_crafting_recipes_for(st.id, inv.as_ref().map(|i| &i.0)))
         .unwrap_or_default();
-    let show_guide = panel.guide_crafting_open();
 
     if let Some(ref mut gb) = guide_box {
-        gb.0.left = Val::Px(16.0 * k);
-        gb.0.top = Val::Px(44.0 * k);
-        gb.0.width = Val::Px(44.0 * k);
-        gb.0.height = Val::Px(44.0 * k);
         let want_vis = if show_guide {
             Visibility::Inherited
         } else {
@@ -1429,19 +2007,20 @@ pub fn update_view(
             *gb.1 = want_vis;
         }
     }
-    if let Some(ref mut mc) = guide_mat_count {
-        let want_count = if show_guide
-            && let Some(st) = guide_stack
-            && st.count > 1
-        {
-            st.count.to_string()
-        } else {
-            String::new()
-        };
-        if mc.text != want_count {
-            mc.text = want_count;
-        }
-    }
+
+    let eligible_reforge: Vec<(usize, ItemStack)> = inv
+        .as_ref()
+        .map(|inv_ref| {
+            inv_ref.0.slots[..BAG]
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, s)| {
+                    let st = (*s)?;
+                    terravibe_sim::shop::is_reforgeable(st.id).then_some((idx, st))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     if let Some(mut assets) = assets {
         if let Some(ref mut gmi) = guide_mat_icon {
@@ -1462,23 +2041,14 @@ pub fn update_view(
             }
         }
 
-        if show_guide && !guide_recipes.is_empty() {
+        if show_guide && !guide_entries.is_empty() {
             let start = panel
                 .guide_scroll
-                .min(guide_recipes.len().saturating_sub(MAX_GUIDE_ROWS));
-            for (row_icon, mut inode, mut img, mut vis) in &mut guide_recipe_icons {
-                if let Some(r) = guide_recipes.get(start + row_icon.0) {
-                    let (handle, size) =
-                        super::hotbar::icon_of(&mut assets, &mut image_assets, r.output.item);
-                    let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
-                    let scale_factor = max_dim / size.max_element().max(1.0);
-                    let w = (size.x * scale_factor).round().max(1.0);
-                    let h = (size.y * scale_factor).round().max(1.0);
-                    let row_y = 100.0 * k + row_icon.0 as f32 * 22.0 * k;
-                    inode.left = Val::Px(16.0 * k);
-                    inode.top = Val::Px(row_y + (line_h - h) * 0.5);
-                    inode.width = Val::Px(w);
-                    inode.height = Val::Px(h);
+                .min(guide_entries.len().saturating_sub(MAX_GUIDE_ROWS));
+            for (row_icon, _inode, mut img, mut vis) in &mut guide_recipe_icons {
+                if let Some(entry) = guide_entries.get(start + row_icon.0) {
+                    let (handle, _) =
+                        super::hotbar::icon_of(&mut assets, &mut image_assets, entry.output_item);
                     if img.image != handle {
                         img.image = handle;
                     }
@@ -1496,56 +2066,9 @@ pub fn update_view(
                 }
             }
         }
-
-        if show_shop_icons {
-            for (row_icon, mut inode, mut img, mut vis) in &mut shop_icons {
-                if let Some(&(item, _)) = panel.shop.get(row_icon.0) {
-                    let (handle, size) =
-                        super::hotbar::icon_of(&mut assets, &mut image_assets, item);
-                    let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
-                    let scale_factor = max_dim / size.max_element().max(1.0);
-                    let w = (size.x * scale_factor).round().max(1.0);
-                    let h = (size.y * scale_factor).round().max(1.0);
-                    let row_y = 38.0 + (header_lines + row_icon.0) as f32 * line_h;
-                    inode.left = Val::Px(16.0);
-                    inode.top = Val::Px(row_y + (line_h - h) * 0.5);
-                    inode.width = Val::Px(w);
-                    inode.height = Val::Px(h);
-                    if img.image != handle {
-                        img.image = handle;
-                    }
-                    if *vis != Visibility::Inherited {
-                        *vis = Visibility::Inherited;
-                    }
-                } else if *vis != Visibility::Hidden {
-                    *vis = Visibility::Hidden;
-                }
-            }
-        } else {
-            for (_, _, _, mut vis) in &mut shop_icons {
-                if *vis != Visibility::Hidden {
-                    *vis = Visibility::Hidden;
-                }
-            }
-        }
-    } else {
-        if let Some(ref mut gmi) = guide_mat_icon
-            && *gmi.2 != Visibility::Hidden
-        {
-            *gmi.2 = Visibility::Hidden;
-        }
-        for (_, _, _, mut vis) in &mut guide_recipe_icons {
-            if *vis != Visibility::Hidden {
-                *vis = Visibility::Hidden;
-            }
-        }
-        for (_, _, _, mut vis) in &mut shop_icons {
-            if *vis != Visibility::Hidden {
-                *vis = Visibility::Hidden;
-            }
-        }
     }
 
+    // Hover tooltips
     if panel.tab == TownTab::Talk
         && panel.shop_open()
         && let Some(overlay) = tooltip.as_deref_mut()
@@ -1584,19 +2107,19 @@ pub fn update_view(
                 price_override: None,
             });
         } else if let Some(row) =
-            guide_row_at([c.x, c.y], win, guide_recipes.len(), panel.guide_scroll)
-            && let Some(r) = guide_recipes.get(panel.guide_scroll + row)
+            guide_row_at([c.x, c.y], win, guide_entries.len(), panel.guide_scroll)
+            && let Some(entry) = guide_entries.get(panel.guide_scroll + row)
         {
             let eq = equipped_for_comparison(
-                r.output.item,
+                entry.output_item,
                 armor.as_ref().map(|a| &a.0),
                 inv.as_ref().map(|i| &i.0),
             );
             overlay.candidate = Some(super::tooltip::TooltipCandidate {
                 target_id: 4_600 + (panel.guide_scroll + row) as u64,
                 stack: ItemStack {
-                    id: r.output.item,
-                    count: r.output.count,
+                    id: entry.output_item,
+                    count: entry.output_count,
                     prefix: Prefix(0),
                 },
                 equipped: eq,
@@ -1605,118 +2128,16 @@ pub fn update_view(
         }
     }
 
-    let (ref mut label_text, ref mut label_node) = *label;
-    if show_guide {
-        label_node.left = Val::Px(16.0 * k);
-        label_node.top = Val::Px(42.0 * k);
-    } else {
-        label_node.left = Val::Px(16.0);
-        label_node.top = Val::Px(38.0);
-    }
-    if !panel.is_changed() && !guide_slot.is_some_and(|g| g.is_changed()) {
-        return;
-    }
-    let max_text_w = (460.0 * k - 32.0).max(200.0);
-    let s = if panel.tab == TownTab::Housing {
-        let raw = housing_panel_text(&panel);
-        fonts
-            .as_ref()
-            .map(|f| wrap_text(&f.mouse.0, &raw, max_text_w))
-            .unwrap_or(raw)
-    } else if panel.tab == TownTab::Reforge && panel.is_tinkerer {
-        let mut rows =
-            String::from("Reforge (Up/Down to select, Enter to reforge, Tab: switch):\n");
-        if let Some(inv_ref) = inv.as_ref().map(|i| &i.0) {
-            let eligible: Vec<(usize, ItemStack)> = inv_ref.slots[..BAG]
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, s)| {
-                    let st = (*s)?;
-                    terravibe_sim::shop::is_reforgeable(st.id).then_some((idx, st))
-                })
-                .collect();
-            if eligible.is_empty() {
-                rows += "\nNo reforgeable weapons, tools, or accessories in bag.";
-            } else {
-                let sel = panel.reforge_sel.min(eligible.len() - 1);
-                for (i, (slot_idx, st)) in eligible.iter().take(10).enumerate() {
-                    let mark = if i == sel { ">" } else { " " };
-                    let pfx = terravibe_sim::item::prefix_name(st.prefix);
-                    let name = if pfx.is_empty() {
-                        item_data(st.id).name.to_string()
-                    } else {
-                        format!("{pfx} {}", item_data(st.id).name)
-                    };
-                    let cost = price_text(terravibe_sim::shop::reforge_cost(st.id));
-                    rows += &format!("\n{mark} [{slot_idx}] {name} — {cost}");
-                }
-            }
-        }
-        if !panel.note.is_empty() {
-            rows += &format!("\n\n{}", panel.note);
-        }
-        rows
-    } else if show_guide {
-        guide_crafting_body(
-            &panel,
-            guide_stack,
-            &guide_recipes,
-            inv.as_ref().map(|i| &i.0),
-            fonts.as_deref(),
-            max_text_w,
-        )
-    } else {
-        let mut s = wrapped_header;
-        if !panel.shop.is_empty() {
-            s += "\n";
-            let armor_ref = armor.as_ref().map(|a| &a.0);
-            let inv_ref = inv.as_ref().map(|i| &i.0);
-            for (i, (item, price)) in panel.shop.iter().enumerate() {
-                let eq = equipped_for_comparison(*item, armor_ref, inv_ref);
-                s += &format!(
-                    "\n   {}",
-                    format_shop_row(*item, *price, i == panel.sel, eq)
-                );
-            }
-            let footer = "Up/Down, Enter [1x] Shift+Enter [10x] Ctrl+Enter [All]   Shift-click bag: sell   Esc: close";
-            let wrapped_footer = fonts
-                .as_ref()
-                .map(|f| wrap_text(&f.mouse.0, footer, max_text_w))
-                .unwrap_or_else(|| footer.to_string());
-            s += &format!("\n\n{wrapped_footer}");
-        }
-        if panel.npc.is_some() && panel.shop.is_empty() {
-            if panel.is_guide {
-                s += "\n\n[G] Advice: What should I do next?   [C] Crafting   Esc: close";
-            } else if panel.is_nurse {
-                s += "\n\n[Enter] Heal & Clear Debuffs   [G] Advice   Esc: close";
-            } else {
-                s += "\n\n[G] Advice: What should I do next?   Esc: close";
-            }
-        } else if panel.is_tinkerer {
-            s += "\n\n[R] Open Reforge Tab";
-        }
-        if !panel.note.is_empty() {
-            let wrapped_note = fonts
-                .as_ref()
-                .map(|f| wrap_text(&f.mouse.0, &panel.note, max_text_w))
-                .unwrap_or_else(|| panel.note.clone());
-            s += &format!("\n\n{wrapped_note}");
-        }
-        s
-    };
-    **root = if panel.npc.is_some() && !s.is_empty() {
+    // Root visibility: only visible when talking to an NPC
+    *root_and_views.p0().into_inner().0 = if panel.npc.is_some() {
         Visibility::Inherited
     } else {
         Visibility::Hidden
     };
-    if label_text.text != s {
-        label_text.text = s;
-    }
 
     let speaker_name = if panel.tab == TownTab::Housing {
         "Housing"
-    } else if panel.tab == TownTab::Reforge && panel.is_tinkerer {
+    } else if show_reforge {
         "Goblin Tinkerer — Reforge"
     } else if show_guide {
         "Guide — Crafting"
@@ -1748,12 +2169,361 @@ pub fn update_view(
     } else {
         "Housing Query"
     };
-    if speaker.text != speaker_name {
-        speaker.text = speaker_name.to_string();
+    for mut speaker in &mut texts.main.p7() {
+        if speaker.text != speaker_name {
+            speaker.text = speaker_name.to_string();
+        }
+    }
+
+    if !panel.is_changed() && !guide_slot.as_ref().is_some_and(|g| g.is_changed()) {
+        return;
+    }
+
+    // Populate Talk & Shop View
+    for mut t in &mut texts.main.p0() {
+        if t.text != wrapped_header {
+            t.text = wrapped_header.clone();
+        }
+    }
+    let hints = if !panel.shop.is_empty() {
+        if panel.is_tinkerer {
+            "[Enter] 1x  [Shift+Enter] 10x  [Ctrl+Enter] All  [R] Reforge  [Esc] Close"
+        } else {
+            "[Enter] 1x  [Shift+Enter] 10x  [Ctrl+Enter] All  [Shift+Click Bag] Sell  [Esc] Close"
+        }
+    } else if panel.is_guide {
+        "[G] Advice  [C] Crafting  [Esc] Close"
+    } else if panel.is_nurse {
+        "[Enter] Heal & Clear Debuffs  [G] Advice  [Esc] Close"
+    } else {
+        "[G] Advice  [Esc] Close"
+    };
+    for mut t in &mut texts.main.p1() {
+        if t.text != hints {
+            t.text = hints.to_string();
+        }
+    }
+
+    // Populate Guide Crafting View
+    let mat_caption = guide_stack
+        .map(|st| item_data(st.id).name)
+        .unwrap_or("Place material");
+    for mut t in &mut texts.main.p3() {
+        if t.text != mat_caption {
+            t.text = mat_caption.to_string();
+        }
+    }
+    let guide_hdr = if let Some(st) = guide_stack {
+        let total = guide_entries.len();
+        let start = panel.guide_scroll.min(total.saturating_sub(MAX_GUIDE_ROWS));
+        let end = (start + MAX_GUIDE_ROWS).min(total);
+        if total > MAX_GUIDE_ROWS {
+            format!(
+                "{} — {total} recipes ({}-{} / {total})",
+                item_data(st.id).name,
+                start + 1,
+                end
+            )
+        } else {
+            format!("{} — {total} recipes", item_data(st.id).name)
+        }
+    } else {
+        "Click slot with an item or Shift-click bag".to_string()
+    };
+    for mut t in &mut texts.main.p4() {
+        if t.text != guide_hdr {
+            t.text = guide_hdr.clone();
+        }
+    }
+    // Populate Reforge View
+    let reforge_hdr = if eligible_reforge.is_empty() {
+        "No reforgeable weapons, tools, or accessories in bag."
+    } else {
+        "Up/Down to select, Enter to reforge, Tab to switch:"
+    };
+    for mut t in &mut texts.main.p5() {
+        if t.text != reforge_hdr {
+            t.text = reforge_hdr.to_string();
+        }
+    }
+    for mut t in &mut texts.main.p6() {
+        let banner = if show_reforge { &panel.note } else { "" };
+        if t.text != banner {
+            t.text = banner.to_string();
+        }
+    }
+
+    // Footer note
+    for mut t in &mut texts.main.p2() {
+        let note = if show_reforge { "" } else { &panel.note };
+        if t.text != note {
+            t.text = note.to_string();
+        }
+    }
+}
+
+pub fn update_view_housing(
+    panel: Res<TownPanel>,
+    guide_slot: Option<Res<crate::net::LocalGuideSlot>>,
+    mut texts: ParamSet<(
+        Query<&mut HudText, With<HousingStatusBadge>>,
+        Query<&mut HudText, With<HousingDetailsText>>,
+        Query<&mut HudText, With<GuideMaterialCount>>,
+    )>,
+) {
+    if !panel.is_changed() && !guide_slot.as_ref().is_some_and(|g| g.is_changed()) {
+        return;
+    }
+    let show_guide = panel.guide_crafting_open();
+    let guide_stack = guide_slot.and_then(|g| g.0);
+    let want_count = if show_guide
+        && let Some(st) = guide_stack
+        && st.count > 1
+    {
+        st.count.to_string()
+    } else {
+        String::new()
+    };
+    for mut mc in &mut texts.p2() {
+        if mc.text != want_count {
+            mc.text = want_count.clone();
+        }
+    }
+
+    let (h_badge, h_details) = match panel.housing_status {
+        Some((true, _)) => (
+            "Status: Valid Housing".to_string(),
+            housing_panel_text(&panel),
+        ),
+        Some((false, reason)) => (
+            format!("Status: Invalid ({})", house_text(false, reason)),
+            housing_panel_text(&panel),
+        ),
+        None => (
+            "Status: Not Checked".to_string(),
+            housing_panel_text(&panel),
+        ),
+    };
+    for mut t in &mut texts.p0() {
+        if t.text != h_badge {
+            t.text = h_badge.clone();
+        }
+    }
+    for mut t in &mut texts.p1() {
+        if t.text != h_details {
+            t.text = h_details.clone();
+        }
+    }
+}
+
+pub fn update_view_rows(
+    panel: Res<TownPanel>,
+    guide_slot: Option<Res<crate::net::LocalGuideSlot>>,
+    inv: Option<Res<crate::net::LocalInventory>>,
+    armor: Option<Res<crate::net::LocalArmor>>,
+    mut icon_assets: super::inventory::IconAssets,
+    mut row_q: TownRowQueries,
+) {
+    if !panel.is_changed() && !guide_slot.as_ref().is_some_and(|g| g.is_changed()) {
+        return;
+    }
+    let show_guide = panel.guide_crafting_open();
+    let show_reforge = panel.tab == TownTab::Reforge && panel.is_tinkerer;
+    let show_shop = panel.tab == TownTab::Talk && !panel.shop.is_empty();
+    let guide_stack = guide_slot.and_then(|g| g.0);
+    let inv_ref = inv.as_ref().map(|i| &i.0);
+    let armor_ref = armor.as_ref().map(|a| &a.0);
+    let guide_entries = guide_stack
+        .map(|st| guide_crafting_recipes_for(st.id, inv_ref))
+        .unwrap_or_default();
+    let eligible_reforge: Vec<(usize, ItemStack)> = inv_ref
+        .map(|i| {
+            i.slots[..BAG]
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, s)| {
+                    let st = (*s)?;
+                    terravibe_sim::shop::is_reforgeable(st.id).then_some((idx, st))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some(mut assets) = icon_assets.assets.as_deref_mut() {
+        let image_assets = &mut *icon_assets.images;
+        if show_shop {
+            for (row_icon, mut img, mut vis) in &mut row_q.icons.p0() {
+                if let Some(&(item_id, _)) = panel.shop.get(row_icon.0) {
+                    let (handle, _) = super::hotbar::icon_of(&mut assets, image_assets, item_id);
+                    if img.image != handle {
+                        img.image = handle;
+                    }
+                    if *vis != Visibility::Inherited {
+                        *vis = Visibility::Inherited;
+                    }
+                } else if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        } else {
+            for (_, _, mut vis) in &mut row_q.icons.p0() {
+                if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        }
+        if show_reforge {
+            for (row_icon, mut img, mut vis) in &mut row_q.icons.p1() {
+                if let Some((_, st)) = eligible_reforge.get(row_icon.0) {
+                    let (handle, _) = super::hotbar::icon_of(&mut assets, image_assets, st.id);
+                    if img.image != handle {
+                        img.image = handle;
+                    }
+                    if *vis != Visibility::Inherited {
+                        *vis = Visibility::Inherited;
+                    }
+                } else if *vis != Visibility::Hidden {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        }
+    }
+
+    for (row, mut rnode, mut rborder) in &mut row_q.rows.p0() {
+        let active_row = show_shop && row.0 < panel.shop.len();
+        rnode.display = if active_row {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        let want_border = BorderColor::all(if row.0 == panel.sel {
+            super::style::GOLD_BORDER
+        } else {
+            super::style::BORDER_IDLE
+        });
+        if *rborder != want_border {
+            *rborder = want_border;
+        }
+    }
+    for (row_name, mut t) in &mut row_q.labels.p0() {
+        if let Some(&(item, _)) = panel.shop.get(row_name.0) {
+            let eq = equipped_for_comparison(item, armor_ref, inv_ref);
+            let mut label = item_data(item).name.to_string();
+            if let Some(cmp) = shop_comparison_text(item, eq) {
+                label.push_str(&format!("  [{cmp}]"));
+            }
+            if t.text != label {
+                t.text = label;
+            }
+        }
+    }
+    for (row_price, mut t) in &mut row_q.labels.p1() {
+        if let Some(&(_, price)) = panel.shop.get(row_price.0) {
+            let p = price_text(price);
+            if t.text != p {
+                t.text = p;
+            }
+        }
+    }
+
+    let g_start = panel
+        .guide_scroll
+        .min(guide_entries.len().saturating_sub(MAX_GUIDE_ROWS));
+    let g_sel = panel.guide_sel.min(guide_entries.len().saturating_sub(1));
+    for (row, mut rnode, mut rborder) in &mut row_q.rows.p1() {
+        let idx = g_start + row.0;
+        let active_row = show_guide && idx < guide_entries.len();
+        rnode.display = if active_row {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        let want_border = BorderColor::all(if idx == g_sel {
+            super::style::GOLD_BORDER
+        } else {
+            super::style::BORDER_IDLE
+        });
+        if *rborder != want_border {
+            *rborder = want_border;
+        }
+    }
+    for (row_title, mut t) in &mut row_q.labels.p2() {
+        if let Some(entry) = guide_entries.get(g_start + row_title.0) {
+            let s = if entry.output_count > 1 {
+                format!("{} x{}", entry.output_name, entry.output_count)
+            } else {
+                entry.output_name.to_string()
+            };
+            if t.text != s {
+                t.text = s;
+            }
+        }
+    }
+    for (row_station, mut t) in &mut row_q.labels.p3() {
+        if let Some(entry) = guide_entries.get(g_start + row_station.0)
+            && t.text != entry.station
+        {
+            t.text = entry.station.to_string();
+        }
+    }
+    for (row_ing, mut t) in &mut row_q.labels.p4() {
+        if let Some(entry) = guide_entries.get(g_start + row_ing.0) {
+            let s = entry
+                .ingredients
+                .iter()
+                .map(|ing| format!("{} {}/{}", ing.name, ing.have, ing.need))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if t.text != s {
+                t.text = s;
+            }
+        }
+    }
+
+    let r_sel = panel
+        .reforge_sel
+        .min(eligible_reforge.len().saturating_sub(1));
+    for (row, mut rnode, mut rborder) in &mut row_q.rows.p2() {
+        let active_row = show_reforge && row.0 < eligible_reforge.len();
+        rnode.display = if active_row {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        let want_border = BorderColor::all(if row.0 == r_sel {
+            super::style::GOLD_BORDER
+        } else {
+            super::style::BORDER_IDLE
+        });
+        if *rborder != want_border {
+            *rborder = want_border;
+        }
+    }
+    for (row_name, mut t) in &mut row_q.labels.p5() {
+        if let Some((slot_idx, st)) = eligible_reforge.get(row_name.0) {
+            let pfx = terravibe_sim::item::prefix_name(st.prefix);
+            let s = if pfx.is_empty() {
+                format!("[{slot_idx}] {}", item_data(st.id).name)
+            } else {
+                format!("[{slot_idx}] {pfx} {}", item_data(st.id).name)
+            };
+            if t.text != s {
+                t.text = s;
+            }
+        }
+    }
+    for (row_cost, mut t) in &mut row_q.labels.p6() {
+        if let Some((_, st)) = eligible_reforge.get(row_cost.0) {
+            let cost = price_text(terravibe_sim::shop::reforge_cost(st.id));
+            if t.text != cost {
+                t.text = cost;
+            }
+        }
     }
 }
 
 /// Formats the Guide's material-recipe lookup body text.
+#[cfg(test)]
 pub fn guide_crafting_body(
     panel: &TownPanel,
     guide_stack: Option<ItemStack>,
@@ -2333,5 +3103,109 @@ mod tests {
         let slot_cursor = [pos[0] + 30.0 * k, pos[1] + 60.0 * k];
         assert!(panel_hit(slot_cursor, win, true));
         assert!(guide_slot_hit(slot_cursor, win));
+    }
+
+    #[test]
+    fn tab_switching_updates_active_view_visibility_cleanly() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<TownPanel>();
+        app.init_resource::<Assets<Image>>();
+        app.world_mut()
+            .spawn((PrimaryWindow, Window::default(), CursorOptions::default()));
+        app.world_mut()
+            .spawn((TownRoot, Node::default(), Visibility::Hidden));
+        app.world_mut().spawn((
+            TownSpeaker,
+            HudText {
+                text: String::new(),
+                death: false,
+            },
+        ));
+        let talk_view = app.world_mut().spawn((TownTalkView, Node::default())).id();
+        let guide_view = app.world_mut().spawn((TownGuideView, Node::default())).id();
+        let reforge_view = app
+            .world_mut()
+            .spawn((TownReforgeView, Node::default()))
+            .id();
+        let housing_view = app
+            .world_mut()
+            .spawn((TownHousingView, Node::default()))
+            .id();
+        app.add_systems(Update, update_view);
+
+        {
+            let mut panel = app.world_mut().resource_mut::<TownPanel>();
+            panel.npc = Some(EnemyId(1));
+            panel.is_guide = true;
+            panel.is_tinkerer = true;
+            panel.tab = TownTab::Talk;
+        }
+        app.update();
+        assert_eq!(
+            app.world().get::<Node>(talk_view).unwrap().display,
+            Display::Flex
+        );
+        assert_eq!(
+            app.world().get::<Node>(guide_view).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<Node>(reforge_view).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<Node>(housing_view).unwrap().display,
+            Display::None
+        );
+
+        app.world_mut().resource_mut::<TownPanel>().tab = TownTab::Crafting;
+        app.update();
+        assert_eq!(
+            app.world().get::<Node>(talk_view).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<Node>(guide_view).unwrap().display,
+            Display::Flex
+        );
+
+        app.world_mut().resource_mut::<TownPanel>().tab = TownTab::Reforge;
+        app.update();
+        assert_eq!(
+            app.world().get::<Node>(guide_view).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<Node>(reforge_view).unwrap().display,
+            Display::Flex
+        );
+
+        app.world_mut().resource_mut::<TownPanel>().tab = TownTab::Housing;
+        app.update();
+        assert_eq!(
+            app.world().get::<Node>(reforge_view).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<Node>(housing_view).unwrap().display,
+            Display::Flex
+        );
+    }
+
+    #[test]
+    fn guide_crafting_recipes_for_returns_structured_recipes_without_padding() {
+        use terravibe_sim::item::IRON_BAR;
+
+        let entries = guide_crafting_recipes_for(IRON_BAR, None);
+        assert!(!entries.is_empty(), "IRON_BAR should have crafting recipes");
+        for entry in &entries {
+            assert!(!entry.output_name.starts_with(' '));
+            assert!(!entry.station.starts_with(' '));
+            assert!(!entry.ingredients.is_empty());
+            for ing in &entry.ingredients {
+                assert!(ing.need > 0);
+            }
+        }
     }
 }

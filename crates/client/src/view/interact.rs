@@ -105,6 +105,21 @@ struct UseAudio {
     tink: Vec<Handle<AudioSource>>,
 }
 
+pub const RULER_RAY_MAX: f32 = 32.0;
+
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RulerAnchor(pub Option<[i32; 3]>);
+
+/// Compute signed delta `[dx, dy, dz]`, inclusive dimensions `[w, h, d]`, and Euclidean distance.
+pub fn compute_ruler_readout(start: [i32; 3], end: [i32; 3]) -> ([i32; 3], [i32; 3], f32) {
+    let dx = end[0] - start[0];
+    let dy = end[1] - start[1];
+    let dz = end[2] - start[2];
+    let dims = [dx.abs() + 1, dy.abs() + 1, dz.abs() + 1];
+    let dist = ((dx * dx + dy * dy + dz * dz) as f32).sqrt();
+    ([dx, dy, dz], dims, dist)
+}
+
 pub struct InteractPlugin {
     pub cracks: Arc<RgbaImage>,
     #[allow(dead_code)]
@@ -265,6 +280,7 @@ impl Plugin for InteractPlugin {
             .init_resource::<HeldAnimTracker>()
             .init_resource::<GamepadInteractState>()
             .init_resource::<crate::hud::inventory::RulerEnabled>()
+            .init_resource::<RulerAnchor>()
             .init_resource::<crate::hud::inventory::BuildGridEnabled>()
             .init_resource::<crate::hud::inventory::RulerReadout>()
             .add_message::<UseEvents>()
@@ -450,7 +466,7 @@ pub(crate) fn placement_preview_cell(
 #[allow(clippy::too_many_arguments)]
 fn cursor(
     mut commands: Commands,
-    mut gizmos: Gizmos,
+    mut gizmos: Option<Gizmos>,
     cam: Single<&Transform, With<FlyCamera>>,
     stream: Res<ChunkStream>,
     player: Res<LocalPlayer>,
@@ -461,6 +477,9 @@ fn cursor(
     ruler: Option<Res<crate::hud::inventory::RulerEnabled>>,
     build_grid: Option<Res<crate::hud::inventory::BuildGridEnabled>>,
     mut ruler_readout: Option<ResMut<crate::hud::inventory::RulerReadout>>,
+    mut ruler_anchor: Option<ResMut<RulerAnchor>>,
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    settings: Option<Res<crate::settings::Settings>>,
     mut ghost_q: Query<
         (
             &mut Transform,
@@ -476,8 +495,11 @@ fn cursor(
         .as_ref()
         .and_then(|i| i.0.selected_stack())
         .map(|s| s.id);
-    let hit = target_block(&q, &cam, &player.0.body, cam_mode(&orbit, &mode), held);
-    if let Some(h) = hit {
+    let extra = cam_mode(&orbit, &mode);
+    let hit = target_block(&q, &cam, &player.0.body, extra, held);
+    if let Some(h) = hit
+        && let Some(ref mut gizmos) = gizmos
+    {
         let c =
             Vec3::new(h.block[0] as f32, h.block[1] as f32, h.block[2] as f32) + Vec3::splat(0.5);
         // Crisp two-tone wireframe: dark outer frame + subtle bright inner edge.
@@ -495,46 +517,143 @@ fn cursor(
         hit.and_then(|h| held.and_then(|id| placement_preview_cell(&q, &player.0.body, h, id)));
 
     if ruler.is_some_and(|r| r.0) {
-        if let Some(h) = hit {
+        let ruler_hit = raycast_pick(
+            &q,
+            cam.translation.into(),
+            (*cam.forward()).into(),
+            RULER_RAY_MAX + extra,
+            false,
+        );
+        let pin_pressed = keys.as_ref().is_some_and(|k| {
+            let key = settings
+                .as_ref()
+                .map_or(crate::input_map::GameAction::RulerPin.default_key(), |s| {
+                    s.bindings.key(crate::input_map::GameAction::RulerPin)
+                });
+            k.just_pressed(key)
+        });
+        if pin_pressed && let Some(ref mut anchor) = ruler_anchor {
+            if anchor.0.is_some() {
+                anchor.0 = None;
+            } else if let Some(h) = ruler_hit {
+                anchor.0 = Some(h.block);
+            }
+        }
+        if let Some(h) = ruler_hit {
             let p_blk = [
                 player.0.body.pos[0].floor() as i32,
                 player.0.body.pos[1].floor() as i32,
                 player.0.body.pos[2].floor() as i32,
             ];
-            let dx = h.block[0] - p_blk[0];
-            let dy = h.block[1] - p_blk[1];
-            let dz = h.block[2] - p_blk[2];
-            let dist = ((dx * dx + dy * dy + dz * dz) as f32).sqrt();
+            let start = ruler_anchor.as_ref().and_then(|a| a.0).unwrap_or(p_blk);
+            let ([dx, dy, dz], _dims, dist) = compute_ruler_readout(start, h.block);
             if let Some(ref mut ro) = ruler_readout {
                 ro.0 = Some(([dx, dy, dz], dist));
             }
-            let p_c = Vec3::new(
-                p_blk[0] as f32 + 0.5,
-                p_blk[1] as f32 + 0.5,
-                p_blk[2] as f32 + 0.5,
-            );
-            let t_c = Vec3::new(
-                h.block[0] as f32 + 0.5,
-                h.block[1] as f32 + 0.5,
-                h.block[2] as f32 + 0.5,
-            );
-            let p_x = Vec3::new(t_c.x, p_c.y, p_c.z);
-            let p_xy = Vec3::new(t_c.x, t_c.y, p_c.z);
-            gizmos.line(p_c, p_x, Color::srgba(1.0, 0.32, 0.32, 0.92));
-            gizmos.line(p_x, p_xy, Color::srgba(0.32, 1.0, 0.45, 0.92));
-            gizmos.line(p_xy, t_c, Color::srgba(0.35, 0.65, 1.0, 0.92));
-            gizmos.line(p_c, t_c, Color::srgba(1.0, 0.88, 0.35, 0.75));
+            if let Some(ref mut gizmos) = gizmos {
+                let p_c = Vec3::new(
+                    start[0] as f32 + 0.5,
+                    start[1] as f32 + 0.5,
+                    start[2] as f32 + 0.5,
+                );
+                let t_c = Vec3::new(
+                    h.block[0] as f32 + 0.5,
+                    h.block[1] as f32 + 0.5,
+                    h.block[2] as f32 + 0.5,
+                );
+                let p_x = Vec3::new(t_c.x, p_c.y, p_c.z);
+                let p_xy = Vec3::new(t_c.x, t_c.y, p_c.z);
+                let col_x = Color::srgba(1.0, 0.32, 0.32, 0.92);
+                let col_y = Color::srgba(0.32, 1.0, 0.45, 0.92);
+                let col_z = Color::srgba(0.35, 0.65, 1.0, 0.92);
+                gizmos.line(p_c, p_x, col_x);
+                gizmos.line(p_x, p_xy, col_y);
+                gizmos.line(p_xy, t_c, col_z);
+                gizmos.line(p_c, t_c, Color::srgba(1.0, 0.88, 0.35, 0.75));
+
+                // 1-block tick marks along X, Y, Z axes
+                let step_x = dx.signum();
+                for i in 1..dx.abs() {
+                    let x = p_c.x + (i * step_x) as f32;
+                    gizmos.line(
+                        Vec3::new(x, p_c.y - 0.14, p_c.z),
+                        Vec3::new(x, p_c.y + 0.14, p_c.z),
+                        col_x,
+                    );
+                }
+                let step_y = dy.signum();
+                for i in 1..dy.abs() {
+                    let y = p_c.y + (i * step_y) as f32;
+                    gizmos.line(
+                        Vec3::new(p_x.x - 0.14, y, p_x.z),
+                        Vec3::new(p_x.x + 0.14, y, p_x.z),
+                        col_y,
+                    );
+                }
+                let step_z = dz.signum();
+                for i in 1..dz.abs() {
+                    let z = p_c.z + (i * step_z) as f32;
+                    gizmos.line(
+                        Vec3::new(p_xy.x, p_xy.y - 0.14, z),
+                        Vec3::new(p_xy.x, p_xy.y + 0.14, z),
+                        col_z,
+                    );
+                }
+
+                // Start & end wireframe cubes
+                gizmos.cube(
+                    Transform::from_translation(p_c).with_scale(Vec3::splat(1.02)),
+                    Color::srgba(1.0, 0.88, 0.35, 0.9),
+                );
+                gizmos.cube(
+                    Transform::from_translation(t_c).with_scale(Vec3::splat(1.02)),
+                    Color::srgba(0.45, 0.95, 1.0, 0.9),
+                );
+
+                // 5x5 block-aligned grid on aimed face
+                let n = Vec3::new(h.normal[0] as f32, h.normal[1] as f32, h.normal[2] as f32);
+                let (u, v) = if h.normal[1] != 0 {
+                    (Vec3::X, Vec3::Z)
+                } else if h.normal[0] != 0 {
+                    (Vec3::Y, Vec3::Z)
+                } else {
+                    (Vec3::X, Vec3::Y)
+                };
+                let face_center = t_c + n * 0.505;
+                let grid_col = Color::srgba(0.6, 0.92, 1.0, 0.45);
+                for k in -2..=3 {
+                    let offset = k as f32 - 0.5;
+                    gizmos.line(
+                        face_center + u * offset - v * 2.5,
+                        face_center + u * offset + v * 2.5,
+                        grid_col,
+                    );
+                    gizmos.line(
+                        face_center + v * offset - u * 2.5,
+                        face_center + v * offset + u * 2.5,
+                        grid_col,
+                    );
+                }
+            }
         } else if let Some(ref mut ro) = ruler_readout {
             ro.0 = None;
         }
-    } else if let Some(ref mut ro) = ruler_readout
-        && ro.0.is_some()
-    {
-        ro.0 = None;
+    } else {
+        if let Some(ref mut ro) = ruler_readout
+            && ro.0.is_some()
+        {
+            ro.0 = None;
+        }
+        if let Some(ref mut anchor) = ruler_anchor
+            && anchor.0.is_some()
+        {
+            anchor.0 = None;
+        }
     }
 
     if build_grid.is_some_and(|g| g.0)
         && let Some(h) = hit
+        && let Some(ref mut gizmos) = gizmos
     {
         let cell = preview.map(|(c, _, _)| c).unwrap_or([
             h.block[0] + h.normal[0],
@@ -608,7 +727,7 @@ fn cursor(
             assets.invalid_mat.clone()
         };
         *vis = Visibility::Inherited;
-        if valid {
+        if valid && let Some(ref mut gizmos) = gizmos {
             gizmos.cube(
                 Transform::from_translation(center).with_scale(Vec3::splat(1.002)),
                 Color::srgba(0.65, 0.95, 1.0, 0.55),
@@ -1368,5 +1487,14 @@ mod tests {
             placement_preview_cell(&FloorWorld, &body, hit, terravibe_sim::item::COPPER_PICKAXE),
             None
         );
+    }
+
+    #[test]
+    fn compute_ruler_readout_returns_delta_dims_and_distance() {
+        let (delta, dims, dist) = compute_ruler_readout([1, 2, 3], [4, -2, 3]);
+        assert_eq!(delta, [3, -4, 0]);
+        assert_eq!(dims, [4, 5, 1]);
+        assert!((dist - 5.0).abs() < 1e-5);
+        assert_eq!(RULER_RAY_MAX, 32.0);
     }
 }

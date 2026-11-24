@@ -25,10 +25,11 @@ pub enum GameAction {
     BreakWall = 11,
     EquipArmor = 12,
     Throw = 13,
+    RulerPin = 14,
 }
 
 impl GameAction {
-    pub const COUNT: usize = 14;
+    pub const COUNT: usize = 15;
 
     pub const ALL: [GameAction; Self::COUNT] = [
         Self::MoveForward,
@@ -45,6 +46,7 @@ impl GameAction {
         Self::BreakWall,
         Self::EquipArmor,
         Self::Throw,
+        Self::RulerPin,
     ];
 
     /// Key name used in `settings.cfg` and serde maps.
@@ -64,6 +66,7 @@ impl GameAction {
             Self::BreakWall => "bind_break_wall",
             Self::EquipArmor => "bind_equip_armor",
             Self::Throw => "bind_throw",
+            Self::RulerPin => "bind_ruler_pin",
         }
     }
 
@@ -84,6 +87,7 @@ impl GameAction {
             Self::BreakWall => "Break Wall",
             Self::EquipArmor => "Equip Armor",
             Self::Throw => "Throw Item",
+            Self::RulerPin => "Pin Ruler Anchor",
         }
     }
 
@@ -104,6 +108,7 @@ impl GameAction {
             Self::BreakWall => KeyCode::KeyX,
             Self::EquipArmor => KeyCode::KeyE,
             Self::Throw => KeyCode::KeyT,
+            Self::RulerPin => KeyCode::KeyR,
         }
     }
 
@@ -349,5 +354,19 @@ mod tests {
         assert_eq!(from_json.bindings, s.bindings);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ruler_pin_default_and_no_collisions() {
+        let bindings = InputBindings::default();
+        assert_eq!(bindings.key(GameAction::RulerPin), KeyCode::KeyR);
+        let mut seen = std::collections::HashSet::new();
+        for action in GameAction::ALL {
+            assert!(
+                seen.insert(bindings.key(action)),
+                "duplicate default binding for {:?}",
+                action
+            );
+        }
     }
 }

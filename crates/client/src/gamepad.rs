@@ -34,6 +34,7 @@ pub fn gamepad_prompt_glyph(action: GameAction) -> &'static str {
         GameAction::BreakWall => "[X]",
         GameAction::EquipArmor => "[D-Down]",
         GameAction::Throw => "[D-Left]",
+        GameAction::RulerPin => "[R]",
     }
 }
 

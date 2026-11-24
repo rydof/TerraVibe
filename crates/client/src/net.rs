@@ -117,6 +117,10 @@ pub struct LocalHeld(pub Option<terravibe_sim::inventory::ItemStack>);
 #[derive(Resource, Default)]
 pub struct LocalGuideSlot(pub Option<terravibe_sim::inventory::ItemStack>);
 
+/// The item stack in the player's Trash slot, from `ServerMsg::Trash`.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq)]
+pub struct LocalTrash(pub Option<terravibe_sim::inventory::ItemStack>);
+
 /// Whether Creative God Mode is active on the server, synced via `ServerMsg::GodMode`.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClientGodMode(pub bool);
@@ -342,6 +346,7 @@ impl Plugin for NetPlugin {
             .init_resource::<LocalCharacterFacts>()
             .init_resource::<CharacterFacts>()
             .init_resource::<LocalGuideSlot>()
+            .init_resource::<LocalTrash>()
             .init_resource::<ClientVanity>()
             .init_resource::<ClientGodMode>()
             .add_systems(OnExit(AppState::InGame), reset_god_mode)
@@ -416,8 +421,14 @@ pub(crate) struct WorldOut<'w> {
     chat: MessageWriter<'w, ChatReceived>,
 }
 
-fn reset_god_mode(mut god_mode: ResMut<ClientGodMode>) {
+fn reset_god_mode(
+    mut god_mode: ResMut<ClientGodMode>,
+    mut local_trash: Option<ResMut<LocalTrash>>,
+) {
     god_mode.0 = false;
+    if let Some(ref mut trash) = local_trash {
+        trash.0 = None;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -951,6 +962,9 @@ pub(crate) fn pump(
             ServerMsg::GuideSlot(g) => {
                 commands.insert_resource(LocalGuideSlot(g));
             }
+            ServerMsg::Trash(t) => {
+                commands.insert_resource(LocalTrash(t));
+            }
             ServerMsg::Rejected { reason } => {
                 let msg = match reason {
                     terravibe_sim::net::RejectReason::ProtocolMismatch => {
@@ -1444,7 +1458,10 @@ mod tests {
             .cloned()
             .collect();
         assert_eq!(remote_msgs.len(), 4);
-        assert!(matches!(remote_msgs[0], RemotePlayerMsg::Spawn { id: 2, .. }));
+        assert!(matches!(
+            remote_msgs[0],
+            RemotePlayerMsg::Spawn { id: 2, .. }
+        ));
         assert!(matches!(
             remote_msgs[1],
             RemotePlayerMsg::State {

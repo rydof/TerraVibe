@@ -55,8 +55,8 @@ impl BossState {
 }
 
 /// Bar width as a fraction of the screen.
-const BAR_WIDTH_PERCENT: f32 = 40.0;
-const BAR_HEIGHT: f32 = 16.0;
+const BAR_WIDTH_PERCENT: f32 = 42.0;
+const BAR_HEIGHT: f32 = 28.0;
 const BAR_BOTTOM: f32 = 48.0;
 /// Duration of the boss intro title card in seconds.
 pub const TITLE_CARD_DURATION_SECS: f32 = 3.0;
@@ -113,6 +113,10 @@ pub struct BossBarRoot;
 #[derive(Component)]
 pub struct BossBarFill;
 #[derive(Component)]
+pub struct BossBarGhostFill;
+#[derive(Component)]
+pub struct BossBarEmblemImage;
+#[derive(Component)]
 pub struct BossBarLabel;
 #[derive(Component)]
 pub struct BossBarHpLabel;
@@ -120,6 +124,124 @@ pub struct BossBarHpLabel;
 pub struct BossTitleCard;
 #[derive(Component)]
 pub struct BossTitleLabel;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActiveBoss {
+    pub name: &'static str,
+    pub life: i32,
+    pub life_max: i32,
+    pub phase: u8,
+    pub emblem: crate::art::ui_icons::BossEmblem,
+    pub from_enemies: bool,
+}
+
+/// Resolves the currently active boss across WOF, Eye of Cthulhu, King Slime, Queen Bee,
+/// Skeletron, and Eater of Worlds.
+pub fn active_boss_info<'a>(
+    wof_state: Option<&WofBossInfo>,
+    boss_state: Option<&BossInfo>,
+    enemies: impl Iterator<Item = &'a crate::view::enemies::ClientEnemy>,
+) -> Option<ActiveBoss> {
+    use crate::art::ui_icons::BossEmblem;
+    use terravibe_sim::enemy::{EnemyKind, is_eater_of_worlds};
+
+    if let Some(w) = wof_state {
+        return Some(ActiveBoss {
+            name: "Wall of Flesh",
+            life: w.life,
+            life_max: w.life_max,
+            phase: 2,
+            emblem: BossEmblem::WallOfFlesh,
+            from_enemies: false,
+        });
+    }
+    if let Some(b) = boss_state {
+        return Some(ActiveBoss {
+            name: "Eye of Cthulhu",
+            life: b.life,
+            life_max: b.life_max,
+            phase: b.phase,
+            emblem: BossEmblem::EyeOfCthulhu,
+            from_enemies: false,
+        });
+    }
+
+    let mut eow_hp = 0i32;
+    let mut skeletron_hp = None;
+    let mut king_slime_hp = None;
+    let mut queen_bee_hp = None;
+
+    for e in enemies {
+        if e.hp <= 0 {
+            continue;
+        }
+        match e.kind {
+            EnemyKind::KingSlime => king_slime_hp = Some(e.hp),
+            EnemyKind::QueenBee => queen_bee_hp = Some(e.hp),
+            EnemyKind::SkeletronHead => skeletron_hp = Some(e.hp),
+            k if is_eater_of_worlds(k) => eow_hp += e.hp,
+            _ => {}
+        }
+    }
+
+    if let Some(hp) = king_slime_hp {
+        let max = EnemyKind::KingSlime.stats().hp;
+        let phase = if hp * 2 <= max { 2 } else { 1 };
+        return Some(ActiveBoss {
+            name: "King Slime",
+            life: hp,
+            life_max: max,
+            phase,
+            emblem: BossEmblem::KingSlime,
+            from_enemies: true,
+        });
+    }
+    if let Some(hp) = queen_bee_hp {
+        let max = EnemyKind::QueenBee.stats().hp;
+        let phase = if hp * 2 <= max { 2 } else { 1 };
+        return Some(ActiveBoss {
+            name: "Queen Bee",
+            life: hp,
+            life_max: max,
+            phase,
+            emblem: BossEmblem::QueenBee,
+            from_enemies: true,
+        });
+    }
+    if let Some(hp) = skeletron_hp {
+        let max = EnemyKind::SkeletronHead.stats().hp;
+        let phase = if hp * 2 <= max { 2 } else { 1 };
+        return Some(ActiveBoss {
+            name: "Skeletron",
+            life: hp,
+            life_max: max,
+            phase,
+            emblem: BossEmblem::Skeletron,
+            from_enemies: true,
+        });
+    }
+    if eow_hp > 0 {
+        let max = 1800;
+        let phase = if eow_hp * 2 <= max { 2 } else { 1 };
+        return Some(ActiveBoss {
+            name: "Eater of Worlds",
+            life: eow_hp,
+            life_max: max,
+            phase,
+            emblem: BossEmblem::EaterOfWorlds,
+            from_enemies: true,
+        });
+    }
+
+    None
+}
+
+#[derive(Default)]
+pub struct BossGhostState {
+    frac: f32,
+    last_emblem: Option<crate::art::ui_icons::BossEmblem>,
+    emblem_handles: Vec<(crate::art::ui_icons::BossEmblem, Handle<Image>)>,
+}
 
 pub fn setup(mut commands: Commands) {
     commands
@@ -130,56 +252,124 @@ pub fn setup(mut commands: Commands) {
                 left: Val::Percent((100.0 - BAR_WIDTH_PERCENT) / 2.0),
                 bottom: Val::Px(BAR_BOTTOM),
                 width: Val::Percent(BAR_WIDTH_PERCENT),
-                height: Val::Px(BAR_HEIGHT),
-                padding: UiRect::all(Val::Px(2.0)),
-                border: UiRect::all(Val::Px(super::style::BORDER_W)),
-                border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(4.0),
                 ..default()
             },
-            BackgroundColor(super::style::BAR_BG),
-            BorderColor::all(super::style::GOLD_BORDER),
             Visibility::Hidden,
             GlobalZIndex(900),
             DespawnOnExit(AppState::InGame),
         ))
-        .with_children(|p| {
-            p.spawn((
-                BossBarFill,
+        .with_children(|root| {
+            // Header row: Boss name on left, HP / Max (XX%) on right
+            root.spawn(Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|hdr| {
+                hdr.spawn((
+                    BossBarLabel,
+                    HudText {
+                        text: "Eye of Cthulhu".to_string(),
+                        death: false,
+                    },
+                    super::text::HudTextColor(super::style::GOLD_TEXT),
+                ));
+                hdr.spawn((
+                    BossBarHpLabel,
+                    HudText {
+                        text: String::new(),
+                        death: false,
+                    },
+                ));
+            });
+
+            // Framed horizontal flex bar: 36x36 emblem badge + recessed track with ghost & fill
+            root.spawn((
                 Node {
                     width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                    height: Val::Px(BAR_HEIGHT),
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(6.0),
+                    padding: UiRect::all(Val::Px(3.0)),
+                    border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                    border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                     ..default()
                 },
-                BackgroundColor(fill_color(1)),
-            ));
-            p.spawn((
-                BossBarLabel,
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(-24.0),
-                    ..default()
-                },
-                HudText {
-                    text: "Eye of Cthulhu".to_string(),
-                    death: false,
-                },
-                super::text::HudTextColor(super::style::GOLD_TEXT),
-            ));
-            p.spawn((
-                BossBarHpLabel,
-                Node {
-                    position_type: PositionType::Absolute,
-                    right: Val::Px(0.0),
-                    top: Val::Px(-24.0),
-                    ..default()
-                },
-                HudText {
-                    text: String::new(),
-                    death: false,
-                },
-            ));
+                BackgroundColor(super::style::PANEL_BG_SOLID),
+                BorderColor::all(super::style::GOLD_BORDER),
+            ))
+            .with_children(|bar_row| {
+                bar_row
+                    .spawn((
+                        Node {
+                            width: Val::Px(36.0),
+                            height: Val::Px(36.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.5)),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
+                            ..default()
+                        },
+                        BackgroundColor(super::style::BAR_BG),
+                        BorderColor::all(super::style::GOLD_BORDER),
+                    ))
+                    .with_children(|badge| {
+                        badge.spawn((
+                            BossBarEmblemImage,
+                            ImageNode::default(),
+                            Node {
+                                width: Val::Px(32.0),
+                                height: Val::Px(32.0),
+                                ..default()
+                            },
+                        ));
+                    });
+
+                bar_row
+                    .spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            height: Val::Percent(100.0),
+                            border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                            overflow: Overflow::clip(),
+                            ..default()
+                        },
+                        BackgroundColor(super::style::BAR_BG),
+                    ))
+                    .with_children(|track| {
+                        track.spawn((
+                            BossBarGhostFill,
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(0.0),
+                                top: Val::Px(0.0),
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.95, 0.72, 0.25, 0.65)),
+                        ));
+                        track.spawn((
+                            BossBarFill,
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(0.0),
+                                top: Val::Px(0.0),
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BAR)),
+                                ..default()
+                            },
+                            BackgroundColor(fill_color(1)),
+                        ));
+                    });
+            });
         });
 
     commands
@@ -191,11 +381,14 @@ pub fn setup(mut commands: Commands) {
                 top: Val::Percent(18.0),
                 width: Val::Percent(40.0),
                 padding: UiRect::axes(Val::Px(20.0), Val::Px(12.0)),
+                border: UiRect::all(Val::Px(super::style::BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(super::style::RADIUS_BTN)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.05, 0.02, 0.04, 0.0)),
+            BackgroundColor(super::style::PANEL_BG_SOLID),
+            BorderColor::all(super::style::GOLD_BORDER),
             Visibility::Hidden,
             GlobalZIndex(910),
             DespawnOnExit(AppState::InGame),
@@ -207,8 +400,43 @@ pub fn setup(mut commands: Commands) {
                     text: "Eye of Cthulhu".to_string(),
                     death: false,
                 },
+                super::text::HudTextColor(super::style::GOLD_TEXT),
             ));
         });
+}
+
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct BossLabels<'w, 's> {
+    bar_label: Query<
+        'w,
+        's,
+        &'static mut HudText,
+        (
+            With<BossBarLabel>,
+            Without<BossTitleLabel>,
+            Without<BossBarHpLabel>,
+        ),
+    >,
+    hp_label: Query<
+        'w,
+        's,
+        &'static mut HudText,
+        (
+            With<BossBarHpLabel>,
+            Without<BossBarLabel>,
+            Without<BossTitleLabel>,
+        ),
+    >,
+    title_label: Query<
+        'w,
+        's,
+        &'static mut HudText,
+        (
+            With<BossTitleLabel>,
+            Without<BossBarLabel>,
+            Without<BossBarHpLabel>,
+        ),
+    >,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -220,34 +448,30 @@ pub fn update(
     time: Option<Res<Time<Real>>>,
     settings: Option<Res<crate::settings::Settings>>,
     mut card: Option<ResMut<BossTitleCardState>>,
+    mut ghost: Local<BossGhostState>,
+    mut images: Option<ResMut<Assets<Image>>>,
     mut root: Query<(&mut Visibility, &mut Node), With<BossBarRoot>>,
-    mut fill: Query<(&mut Node, &mut BackgroundColor), (With<BossBarFill>, Without<BossBarRoot>)>,
-    mut bar_label: Query<
-        &mut HudText,
+    mut fill: Query<
+        (&mut Node, &mut BackgroundColor),
         (
-            With<BossBarLabel>,
-            Without<BossTitleLabel>,
-            Without<BossBarHpLabel>,
+            With<BossBarFill>,
+            Without<BossBarRoot>,
+            Without<BossBarGhostFill>,
+            Without<BossTitleCard>,
         ),
     >,
-    mut hp_label: Query<
-        &mut HudText,
+    mut ghost_fill: Query<
+        &mut Node,
         (
-            With<BossBarHpLabel>,
-            Without<BossBarLabel>,
-            Without<BossTitleLabel>,
+            With<BossBarGhostFill>,
+            Without<BossBarRoot>,
+            Without<BossBarFill>,
         ),
     >,
-    mut title_label: Query<
-        &mut HudText,
-        (
-            With<BossTitleLabel>,
-            Without<BossBarLabel>,
-            Without<BossBarHpLabel>,
-        ),
-    >,
+    mut emblem_img: Query<&mut ImageNode, With<BossBarEmblemImage>>,
+    mut labels: BossLabels,
     mut title_card: Query<
-        (&mut Visibility, &mut BackgroundColor),
+        (&mut Visibility, &mut BackgroundColor, &mut BorderColor),
         (
             With<BossTitleCard>,
             Without<BossBarRoot>,
@@ -255,38 +479,15 @@ pub fn update(
         ),
     >,
 ) {
-    use terravibe_sim::enemy::{EnemyKind, is_eater_of_worlds};
     let dt = time.as_ref().map_or(1.0 / 60.0, |t| t.delta_secs());
     let reduced_motion = settings.as_ref().is_some_and(|s| s.reduced_motion);
-    let mut from_enemies = false;
-    let active = if let Some(w) = wof_state.as_ref().and_then(|s| s.0) {
-        Some(("Wall of Flesh", w.life, w.life_max, 2u8))
-    } else if let Some(b) = state.0 {
-        Some(("Eye of Cthulhu", b.life, b.life_max, b.phase))
-    } else if let Some(sk) = enemies
-        .iter()
-        .find(|e| e.kind == EnemyKind::SkeletronHead && e.hp > 0)
-    {
-        from_enemies = true;
-        let max = EnemyKind::SkeletronHead.stats().hp;
-        let phase = if sk.hp * 2 <= max { 2 } else { 1 };
-        Some(("Skeletron", sk.hp, max, phase))
-    } else {
-        let eow_hp: i32 = enemies
-            .iter()
-            .filter(|e| is_eater_of_worlds(e.kind) && e.hp > 0)
-            .map(|e| e.hp)
-            .sum();
-        if eow_hp > 0 {
-            from_enemies = true;
-            let max = 1800;
-            let phase = if eow_hp * 2 <= max { 2 } else { 1 };
-            Some(("Eater of Worlds", eow_hp, max, phase))
-        } else {
-            None
-        }
-    };
+    let active = active_boss_info(
+        wof_state.as_ref().and_then(|s| s.0.as_ref()),
+        state.0.as_ref(),
+        enemies.iter(),
+    );
     let boss_alive = active.is_some();
+    let from_enemies = active.is_some_and(|a| a.from_enemies);
 
     let mut card_alpha = 0.0;
     let mut bar_offset = 0.0;
@@ -313,10 +514,18 @@ pub fn update(
         }
     }
 
-    if let Ok((mut card_vis, mut card_bg)) = title_card.single_mut() {
+    if let Ok((mut card_vis, mut card_bg, mut card_border)) = title_card.single_mut() {
         if card_alpha > 0.01 {
             *card_vis = Visibility::Inherited;
-            card_bg.0 = Color::srgba(0.05, 0.02, 0.04, 0.75 * card_alpha);
+            let bg = super::style::PANEL_BG_SOLID.to_srgba();
+            card_bg.0 = Color::srgba(bg.red, bg.green, bg.blue, bg.alpha * card_alpha);
+            let bd = super::style::GOLD_BORDER.to_srgba();
+            *card_border = BorderColor::all(Color::srgba(
+                bd.red,
+                bd.green,
+                bd.blue,
+                bd.alpha * card_alpha,
+            ));
         } else {
             *card_vis = Visibility::Hidden;
         }
@@ -325,31 +534,76 @@ pub fn update(
     let Ok((mut vis, mut root_node)) = root.single_mut() else {
         return;
     };
-    let Some((name, life, life_max, phase)) = active else {
+    let Some(boss) = active else {
         *vis = Visibility::Hidden;
+        ghost.last_emblem = None;
+        ghost.frac = 0.0;
         return;
     };
     *vis = Visibility::Inherited;
     root_node.bottom = Val::Px(BAR_BOTTOM + bar_offset);
-    if let Ok(mut t) = bar_label.single_mut()
-        && t.text != name
+
+    if let Ok(mut t) = labels.bar_label.single_mut()
+        && t.text != boss.name
     {
-        t.text = name.to_string();
+        t.text = boss.name.to_string();
     }
-    let hp_str = format!("{life} / {life_max}");
-    if let Ok(mut t) = hp_label.single_mut()
+    let frac = bar_fill(boss.life, boss.life_max);
+    let pct = (frac * 100.0).round() as i32;
+    let phase_suffix = if boss.phase >= 2 { " · P2" } else { "" };
+    let hp_str = format!("{} / {} ({pct}%){phase_suffix}", boss.life, boss.life_max);
+    if let Ok(mut t) = labels.hp_label.single_mut()
         && t.text != hp_str
     {
         t.text = hp_str;
     }
-    if let Ok(mut t) = title_label.single_mut()
-        && t.text != name
+    if let Ok(mut t) = labels.title_label.single_mut()
+        && t.text != boss.name
     {
-        t.text = name.to_string();
+        t.text = boss.name.to_string();
     }
+
+    if ghost.last_emblem != Some(boss.emblem) || frac > ghost.frac {
+        ghost.frac = frac;
+    } else {
+        ghost.frac = (ghost.frac - 0.35 * dt).max(frac);
+    }
+    ghost.last_emblem = Some(boss.emblem);
+
+    if let Some(ref mut img_assets) = images
+        && let Ok(mut img_node) = emblem_img.single_mut()
+    {
+        let handle =
+            if let Some((_, h)) = ghost.emblem_handles.iter().find(|(e, _)| *e == boss.emblem) {
+                h.clone()
+            } else {
+                let rgba = crate::art::ui_icons::boss_emblem_icon(boss.emblem);
+                let bevy_img = Image::new(
+                    bevy::render::render_resource::Extent3d {
+                        width: rgba.width,
+                        height: rgba.height,
+                        depth_or_array_layers: 1,
+                    },
+                    bevy::render::render_resource::TextureDimension::D2,
+                    rgba.pixels.into_iter().flatten().collect(),
+                    bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+                    default(),
+                );
+                let h = img_assets.add(bevy_img);
+                ghost.emblem_handles.push((boss.emblem, h.clone()));
+                h
+            };
+        if img_node.image != handle {
+            img_node.image = handle;
+        }
+    }
+
     if let Ok((mut node, mut bg)) = fill.single_mut() {
-        node.width = Val::Percent(100.0 * bar_fill(life, life_max));
-        bg.0 = fill_color(phase);
+        node.width = Val::Percent(100.0 * frac);
+        bg.0 = fill_color(boss.phase);
+    }
+    if let Ok(mut ghost_node) = ghost_fill.single_mut() {
+        ghost_node.width = Val::Percent(100.0 * ghost.frac);
     }
 }
 
@@ -557,5 +811,45 @@ mod tests {
             .clone();
         assert_eq!(label, "Eater of Worlds");
         assert!(app.world().resource::<BossTitleCardState>().active);
+    }
+
+    #[test]
+    fn boss_bar_detects_king_slime_and_queen_bee_and_zero_max() {
+        use crate::art::ui_icons::BossEmblem;
+        use crate::view::enemies::ClientEnemy;
+        use terravibe_sim::enemy::{EnemyId, EnemyKind};
+
+        assert_eq!(bar_fill(0, 0), 0.0);
+
+        let king_slime = ClientEnemy {
+            id: EnemyId(30),
+            kind: EnemyKind::KingSlime,
+            hp: 1500,
+            moving: false,
+            vel: Vec3::ZERO,
+            hurt: 0,
+            telegraph_t: 0.0,
+        };
+        let queen_bee = ClientEnemy {
+            id: EnemyId(31),
+            kind: EnemyKind::QueenBee,
+            hp: 1700,
+            moving: false,
+            vel: Vec3::ZERO,
+            hurt: 0,
+            telegraph_t: 0.0,
+        };
+
+        let ks_info = active_boss_info(None, None, std::iter::once(&king_slime))
+            .expect("King Slime should be detected");
+        assert_eq!(ks_info.name, "King Slime");
+        assert_eq!(ks_info.emblem, BossEmblem::KingSlime);
+        assert_eq!(ks_info.life, 1500);
+
+        let qb_info = active_boss_info(None, None, std::iter::once(&queen_bee))
+            .expect("Queen Bee should be detected");
+        assert_eq!(qb_info.name, "Queen Bee");
+        assert_eq!(qb_info.emblem, BossEmblem::QueenBee);
+        assert_eq!(qb_info.life, 1700);
     }
 }

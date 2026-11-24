@@ -504,6 +504,125 @@ pub fn sort_icon() -> RgbaImage {
     img
 }
 
+/// Procedural 32x32 boss emblem icons for the Terraria-style boss healthbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BossEmblem {
+    KingSlime,
+    EyeOfCthulhu,
+    EaterOfWorlds,
+    QueenBee,
+    Skeletron,
+    WallOfFlesh,
+}
+
+fn fill_circle(img: &mut RgbaImage, cx: f32, cy: f32, r: f32, color: Rgba) {
+    let r2 = r * r;
+    for y in 0..img.height as i32 {
+        for x in 0..img.width as i32 {
+            let dx = x as f32 + 0.5 - cx;
+            let dy = y as f32 + 0.5 - cy;
+            if dx * dx + dy * dy <= r2 {
+                set_px(img, x, y, color);
+            }
+        }
+    }
+}
+
+/// 32x32 pixel-art emblem for each of the 6 Pre-Hardmode bosses.
+pub fn boss_emblem_icon(emblem: BossEmblem) -> RgbaImage {
+    let mut img = RgbaImage::new(32, 32);
+    let outline: Rgba = [14, 16, 24, 255];
+
+    match emblem {
+        BossEmblem::KingSlime => {
+            // Royal blue gelatinous dome + gold crown
+            fill_circle(&mut img, 16.0, 20.0, 10.5, outline);
+            fill_circle(&mut img, 16.0, 20.0, 9.0, [42, 128, 224, 255]);
+            fill_circle(&mut img, 14.0, 18.0, 6.0, [74, 168, 248, 255]);
+            fill_rect(&mut img, 11, 15, 3, 3, [190, 232, 255, 255]);
+            // Gold crown
+            let gold: Rgba = [235, 188, 62, 255];
+            let crown_dark: Rgba = [150, 104, 24, 255];
+            fill_rect(&mut img, 9, 9, 14, 4, crown_dark);
+            fill_rect(&mut img, 10, 10, 12, 2, gold);
+            fill_rect(&mut img, 10, 6, 3, 4, gold);
+            fill_rect(&mut img, 15, 5, 2, 5, gold);
+            fill_rect(&mut img, 19, 6, 3, 4, gold);
+            set_px(&mut img, 16, 10, [220, 42, 64, 255]); // ruby
+        }
+        BossEmblem::EyeOfCthulhu => {
+            fill_circle(&mut img, 16.0, 16.0, 11.5, outline);
+            fill_circle(&mut img, 16.0, 16.0, 10.0, [238, 234, 228, 255]);
+            // Veins
+            draw_line(&mut img, 8, 12, 12, 14, [196, 48, 54, 255]);
+            draw_line(&mut img, 9, 20, 13, 18, [196, 48, 54, 255]);
+            // Iris + pupil
+            fill_circle(&mut img, 17.5, 16.0, 5.2, [64, 142, 212, 255]);
+            fill_circle(&mut img, 18.0, 16.0, 2.6, [18, 18, 26, 255]);
+            set_px(&mut img, 19, 14, [255, 255, 255, 255]);
+        }
+        BossEmblem::EaterOfWorlds => {
+            // Segmented purple worm head with glowing green eyes
+            fill_circle(&mut img, 16.0, 16.0, 11.0, outline);
+            fill_circle(&mut img, 16.0, 16.0, 9.5, [112, 68, 148, 255]);
+            fill_circle(&mut img, 16.0, 15.0, 6.5, [142, 92, 182, 255]);
+            // Eyes
+            fill_rect(&mut img, 11, 12, 3, 3, [164, 238, 86, 255]);
+            fill_rect(&mut img, 18, 12, 3, 3, [164, 238, 86, 255]);
+            // Mandibles
+            draw_line(&mut img, 11, 22, 14, 26, [214, 196, 156, 255]);
+            draw_line(&mut img, 21, 22, 18, 26, [214, 196, 156, 255]);
+        }
+        BossEmblem::QueenBee => {
+            // Translucent wings
+            fill_circle(&mut img, 10.0, 10.0, 5.0, [186, 230, 248, 210]);
+            fill_circle(&mut img, 22.0, 10.0, 5.0, [186, 230, 248, 210]);
+            // Striped bee body
+            fill_circle(&mut img, 16.0, 17.0, 8.5, outline);
+            fill_circle(&mut img, 16.0, 17.0, 7.2, [238, 194, 48, 255]);
+            fill_rect(&mut img, 10, 15, 12, 2, [42, 30, 20, 255]);
+            fill_rect(&mut img, 11, 19, 10, 2, [42, 30, 20, 255]);
+            // Eyes
+            fill_rect(&mut img, 12, 12, 2, 2, [24, 18, 22, 255]);
+            fill_rect(&mut img, 18, 12, 2, 2, [24, 18, 22, 255]);
+        }
+        BossEmblem::Skeletron => {
+            // Bone-white skull
+            fill_circle(&mut img, 16.0, 14.0, 10.0, outline);
+            fill_circle(&mut img, 16.0, 14.0, 8.6, [232, 224, 204, 255]);
+            fill_rect(&mut img, 11, 20, 10, 6, outline);
+            fill_rect(&mut img, 12, 20, 8, 5, [218, 208, 186, 255]);
+            // Eye sockets + nose
+            fill_rect(&mut img, 11, 12, 3, 3, [22, 18, 24, 255]);
+            fill_rect(&mut img, 18, 12, 3, 3, [22, 18, 24, 255]);
+            fill_rect(&mut img, 15, 16, 2, 2, [22, 18, 24, 255]);
+            // Teeth
+            for x in [13, 15, 17, 19] {
+                set_px(&mut img, x, 22, [40, 34, 34, 255]);
+            }
+        }
+        BossEmblem::WallOfFlesh => {
+            // Fleshy crimson wall with staring eyes and toothed maw
+            fill_rect(&mut img, 5, 4, 22, 24, outline);
+            fill_rect(&mut img, 6, 5, 20, 22, [164, 38, 48, 255]);
+            fill_rect(&mut img, 8, 7, 16, 18, [196, 54, 64, 255]);
+            // Eyes
+            fill_circle(&mut img, 11.5, 11.0, 3.0, [244, 240, 232, 255]);
+            fill_circle(&mut img, 20.5, 11.0, 3.0, [244, 240, 232, 255]);
+            set_px(&mut img, 12, 11, [24, 16, 20, 255]);
+            set_px(&mut img, 20, 11, [24, 16, 20, 255]);
+            // Maw + teeth
+            fill_rect(&mut img, 10, 18, 12, 6, [34, 12, 18, 255]);
+            for x in (11..22).step_by(2) {
+                set_px(&mut img, x, 18, [238, 232, 220, 255]);
+                set_px(&mut img, x, 23, [238, 232, 220, 255]);
+            }
+        }
+    }
+
+    img
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -572,6 +691,39 @@ mod tests {
                 assert_ne!(
                     armor[i].pixels, armor[j].pixels,
                     "armor_ghost({i}) and armor_ghost({j}) must be distinct"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn boss_emblem_icons_are_32x32_non_empty_and_distinct() {
+        let emblems = [
+            BossEmblem::KingSlime,
+            BossEmblem::EyeOfCthulhu,
+            BossEmblem::EaterOfWorlds,
+            BossEmblem::QueenBee,
+            BossEmblem::Skeletron,
+            BossEmblem::WallOfFlesh,
+        ];
+        let imgs: Vec<RgbaImage> = emblems.iter().map(|&e| boss_emblem_icon(e)).collect();
+        for (emblem, img) in emblems.iter().zip(imgs.iter()) {
+            assert_eq!(
+                (img.width, img.height),
+                (32, 32),
+                "{emblem:?} must be 32x32"
+            );
+            assert!(
+                opaque_count(img) > 0,
+                "{emblem:?} must have non-zero opaque pixels"
+            );
+        }
+        for i in 0..imgs.len() {
+            for j in (i + 1)..imgs.len() {
+                assert_ne!(
+                    imgs[i].pixels, imgs[j].pixels,
+                    "{:?} and {:?} must be distinct",
+                    emblems[i], emblems[j]
                 );
             }
         }

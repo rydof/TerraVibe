@@ -1345,7 +1345,11 @@ impl Server {
         }
 
         for (cid, text) in chat_msgs {
-            let Some(c) = self.conns.get(cid).filter(|c| !c.dead && c.player.is_some()) else {
+            let Some(c) = self
+                .conns
+                .get(cid)
+                .filter(|c| !c.dead && c.player.is_some())
+            else {
                 continue;
             };
             let trimmed = text.trim();
@@ -2849,7 +2853,11 @@ impl Server {
         let p = c.player.as_ref().unwrap();
         let j_id = c.id;
         let j_name = c.name.clone();
-        let j_app = c.character.as_ref().map(|ch| ch.appearance).unwrap_or_default();
+        let j_app = c
+            .character
+            .as_ref()
+            .map(|ch| ch.appearance)
+            .unwrap_or_default();
         let j_pos = p.body.pos;
         let j_yaw = c.yaw;
         let j_armor = p.armor;
@@ -2954,7 +2962,11 @@ impl Server {
             let Some(p) = c.player.as_ref() else {
                 continue;
             };
-            let equip = (p.armor, p.vanity_armor, c.inv.selected_stack().map(|s| s.id));
+            let equip = (
+                p.armor,
+                p.vanity_armor,
+                c.inv.selected_stack().map(|s| s.id),
+            );
             if c.sent_remote_equip != Some(equip) {
                 c.sent_remote_equip = Some(equip);
                 equip_updates.push((c.id, equip.0, equip.1, equip.2));
@@ -3063,13 +3075,11 @@ impl Server {
                 for c in &mut self.conns {
                     if !c.dead && c.player.is_some() {
                         c.known_remotes.remove(&left_id);
-                        c.dead |= c
-                            .io
-                            .send(ServerMsg::RemotePlayerDespawn { id: left_id })
-                            .is_err();
-                        c.dead |= c
-                            .io
-                            .send(ServerMsg::Chat {
+                        c.dead |=
+                            c.io.send(ServerMsg::RemotePlayerDespawn { id: left_id })
+                                .is_err();
+                        c.dead |=
+                            c.io.send(ServerMsg::Chat {
                                 sender: None,
                                 text: format!("{left_name} left the game."),
                             })
@@ -6309,9 +6319,7 @@ pub fn spawn_host_cfg(
                 break;
             }
             server.tick();
-            if !server.has_conn(host_id)
-                || shutdown.load(std::sync::atomic::Ordering::Relaxed)
-            {
+            if !server.has_conn(host_id) || shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                 server.shutdown_host();
                 break;
             }
@@ -16031,9 +16039,9 @@ mod tests {
         host_msgs.clear();
         drain(&host, &mut host_msgs);
         assert!(
-            host_msgs
-                .iter()
-                .any(|m| matches!(m, ServerMsg::RemotePlayerSpawn { name, .. } if name == "Guest1")),
+            host_msgs.iter().any(
+                |m| matches!(m, ServerMsg::RemotePlayerSpawn { name, .. } if name == "Guest1")
+            ),
             "host must receive RemotePlayerSpawn for accepted Guest1"
         );
 
@@ -16476,7 +16484,10 @@ mod tests {
         s.tick();
         drain(&c, &mut got);
         assert_eq!(s.conns[0].held.0, None);
-        assert_eq!(s.conns[0].trash.map(|st| (st.id, st.count)), Some((WOOD, 5)));
+        assert_eq!(
+            s.conns[0].trash.map(|st| (st.id, st.count)),
+            Some((WOOD, 5))
+        );
         assert!(got.iter().any(|m| matches!(
             m,
             ServerMsg::Trash(Some(st)) if st.id == WOOD && st.count == 5
@@ -16506,7 +16517,10 @@ mod tests {
         s.tick();
         drain(&c, &mut got);
         assert_eq!(s.conns[0].inv.slots[0], None);
-        assert_eq!(s.conns[0].trash.map(|st| (st.id, st.count)), Some((WOOD, 5)));
+        assert_eq!(
+            s.conns[0].trash.map(|st| (st.id, st.count)),
+            Some((WOOD, 5))
+        );
         assert!(got.iter().any(|m| matches!(
             m,
             ServerMsg::Trash(Some(st)) if st.id == WOOD && st.count == 5
