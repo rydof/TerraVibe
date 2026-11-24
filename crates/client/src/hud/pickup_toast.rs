@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use terravibe_sim::item::{COPPER_COIN, GOLD_COIN, ItemId, PLATINUM_COIN, SILVER_COIN, item_data};
 
-use super::hotbar::{HotbarAssets, ItemIconSource, icon_of};
+use super::hotbar::{HotbarAssets, icon_of};
 use super::text::{HudText, HudTextColor};
 use super::tooltip::rarity_color_for;
 use crate::audio::{SfxEvent, SfxKind};
@@ -145,7 +145,6 @@ pub fn update(
     mut labels: Query<&mut HudTextColor, With<PickupToastLabel>>,
     mut assets: ResMut<HotbarAssets>,
     mut images: ResMut<Assets<Image>>,
-    icon_src: Option<Res<ItemIconSource>>,
     settings: Option<Res<crate::settings::Settings>>,
     mut sfx: Option<ResMut<Messages<SfxEvent>>>,
 ) {
@@ -181,8 +180,7 @@ pub fn update(
                 let data = item_data(entry.item);
                 let base_color = rarity_color_for(data.rarity, colorblind);
                 let alpha = PickupToastQueue::alpha_for(entry, now);
-                let (icon_handle, native_size) =
-                    icon_of(&mut assets, &mut images, icon_src.as_deref(), entry.item);
+                let (icon_handle, native_size) = icon_of(&mut assets, &mut images, entry.item);
                 let icon_size = fit_icon_max(native_size, ICON_MAX);
 
                 let row_entity = commands

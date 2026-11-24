@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use terravibe_sim::item::{ItemId, Prefix, accessory_prefix_bonus, item_data};
 use terravibe_sim::net::ClientMsg;
 
-use super::hotbar::{HotbarAssets, ItemIconSource, icon_of};
+use super::hotbar::{HotbarAssets, icon_of};
 use super::inventory::fit_icon;
 use super::text::HudText;
 use crate::net::{LocalAccessories, LocalAccessoryPrefixes, LocalArmor, LocalInventory, Net};
@@ -101,7 +101,6 @@ pub fn update(
     accessories: Option<Res<LocalAccessories>>,
     acc_prefixes: Option<Res<LocalAccessoryPrefixes>>,
     mut assets: ResMut<HotbarAssets>,
-    icon_source: Option<Res<ItemIconSource>>,
     mut image_assets: ResMut<Assets<Image>>,
     mut icons: Query<(&ArmorIcon, &mut Node, &mut ImageNode, &mut Visibility)>,
     mut text: Single<&mut HudText, With<DefenseText>>,
@@ -114,7 +113,7 @@ pub fn update(
             }
             continue;
         };
-        let (handle, size) = icon_of(&mut assets, &mut image_assets, icon_source.as_deref(), item);
+        let (handle, size) = icon_of(&mut assets, &mut image_assets, item);
         let [x, y, s] = slot_rect(ic.0);
         let d = fit_icon(size, 0.85);
         node.left = Val::Px((x + (s - d.x) / 2.0).round());

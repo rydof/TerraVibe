@@ -26,9 +26,7 @@ use super::crafting::{
     RowState, STATIONS, craft_feedback, filter_recipes, missing_ingredients, row_state,
     sorted_order, station_ok, title_text,
 };
-use super::hotbar::{
-    HotbarAssets, ItemIconSource, ORIGIN, SLOT_PITCH, SLOT_SCALE, SLOT_TEX, icon_of,
-};
+use super::hotbar::{HotbarAssets, ORIGIN, SLOT_PITCH, SLOT_SCALE, SLOT_TEX, icon_of};
 use super::text::{HudText, StackText, measure};
 use super::town::{TownPanel, sell_click};
 use crate::audio::{SfxEvent, SfxKind};
@@ -462,12 +460,11 @@ pub struct InventoryUi {
     pub equip_tab: EquipTab,
 }
 
-/// Item-icon cache and the on-demand content source, bundled to keep `update_view`'s
+/// Item-icon cache, bundled to keep `update_view`'s
 /// parameter list inside Bevy's system-parameter limit.
 #[derive(SystemParam)]
 pub struct IconAssets<'w> {
     pub assets: Option<ResMut<'w, HotbarAssets>>,
-    pub source: Option<Res<'w, ItemIconSource>>,
     pub images: ResMut<'w, Assets<Image>>,
 }
 
@@ -1563,7 +1560,6 @@ pub fn update_view(
     }
     let IconAssets {
         assets,
-        source: icon_source,
         images: mut image_assets,
     } = icon_assets;
     let (Some(inv), Some(mut assets)) = (inv, assets) else {
@@ -1677,10 +1673,9 @@ pub fn update_view(
         }
     }
     let _visible: Vec<RecipeId> = ui.list.iter().skip(ui.scroll).take(ROWS).copied().collect();
-    // Loads missing icons on demand and caches them in `HotbarAssets`.
-    let mut icon_for = |item: terravibe_sim::item::ItemId| {
-        icon_of(&mut assets, &mut image_assets, icon_source.as_deref(), item)
-    };
+    // Loads icons from `HotbarAssets`.
+    let mut icon_for =
+        |item: terravibe_sim::item::ItemId| icon_of(&mut assets, &mut image_assets, item);
 
     for (p, mut node, mut img, mut vis) in &mut images {
         match *p {

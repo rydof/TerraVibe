@@ -503,19 +503,13 @@ pub fn update_cells(
     }
     let IconAssets {
         assets,
-        source: icon_source,
         images: mut image_assets,
     } = icon_assets;
     if let Some(mut assets) = assets {
         for (ic, mut node, mut img, mut vis) in &mut q.p2() {
             if let Some(st) = stack(ic.0) {
                 let [x, y, sz] = cell_rect(ic.0, win);
-                let (handle, icon_size) = icon_of(
-                    &mut assets,
-                    &mut image_assets,
-                    icon_source.as_deref(),
-                    st.id,
-                );
+                let (handle, icon_size) = icon_of(&mut assets, &mut image_assets, st.id);
                 let d = fit_icon(icon_size, SLOT_SCALE);
                 place(
                     &mut node,

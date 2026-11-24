@@ -8,10 +8,9 @@
 //! `(slot.x + 10 * scale, slot.y + 26 * scale)`.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use bevy::prelude::*;
-use terravibe_assets::{RgbaImage, TerrariaContent};
+use terravibe_assets::RgbaImage;
 use terravibe_sim::inventory::ItemStack;
 use terravibe_sim::item::{ItemId, display_name};
 
@@ -77,14 +76,7 @@ pub struct HotbarAssets {
     pub(super) icons: HashMap<u16, (Handle<Image>, Vec2)>,
 }
 
-/// Content source used to load item icons that were not preloaded.
-///
-/// Inserted by `ViewPlugin`; when absent (tests, headless apps) `icon_of` falls back to the
-/// generic icon instead of panicking.
-#[derive(Resource)]
-pub struct ItemIconSource(pub Arc<TerrariaContent>);
-
-/// Native-size RGBA fallback used when `Images/Item_<id>` cannot be loaded.
+/// Native-size RGBA fallback used when an item icon is missing from `HotbarAssets`.
 fn fallback_image() -> RgbaImage {
     const S: u32 = 16;
     let mut pixels = vec![[0; 4]; (S * S) as usize];
@@ -121,29 +113,16 @@ fn fallback_icon(assets: &mut HotbarAssets, images: &mut Assets<Image>) -> (Hand
 
 /// Icon handle and native pixel size for `item`.
 ///
-/// Icons are cached in `HotbarAssets`; a miss is loaded on demand from `Images/Item_<id>`
-/// (when the content source is available) and cached. If the texture does not exist either,
-/// a generic 16x16 icon is returned so every item always has a visible icon.
-pub(super) fn icon_of(
+/// Icons are cached in `HotbarAssets`. If an icon was not preloaded, a generic 16x16 icon
+/// is returned and cached so every item always has a visible icon.
+pub(crate) fn icon_of(
     assets: &mut HotbarAssets,
     images: &mut Assets<Image>,
-    source: Option<&ItemIconSource>,
     item: ItemId,
 ) -> (Handle<Image>, Vec2) {
     if let Some((handle, size)) = assets.icons.get(&item.0) {
         return (handle.clone(), *size);
     }
-    if let Some(source) = source {
-        let name = format!("Images/Item_{}", item.0);
-        if let Ok(img) = source.0.texture(&name) {
-            let size = Vec2::new(img.width as f32, img.height as f32);
-            let handle = images.add(to_bevy_image(&img));
-            assets.icons.insert(item.0, (handle.clone(), size));
-            return (handle, size);
-        }
-    }
-    // Cache the fallback for this id too, so a texture that truly does not exist is not
-    // looked up from disk again every frame.
     let (handle, size) = fallback_icon(assets, images);
     assets.icons.insert(item.0, (handle.clone(), size));
     (handle, size)
@@ -259,7 +238,6 @@ pub fn update(
     open: Option<Res<InventoryOpen>>,
     settings: Option<Res<crate::settings::Settings>>,
     mut assets: ResMut<HotbarAssets>,
-    icon_source: Option<Res<ItemIconSource>>,
     mut image_assets: ResMut<Assets<Image>>,
     fonts: Res<HudFonts>,
     mut backs: Query<
@@ -334,12 +312,7 @@ pub fn update(
             set_vis(&mut vis, false);
             continue;
         };
-        let (handle, size) = icon_of(
-            &mut assets,
-            &mut image_assets,
-            icon_source.as_deref(),
-            stack.id,
-        );
+        let (handle, size) = icon_of(&mut assets, &mut image_assets, stack.id);
         let [x, y, s] = slot_rect(ic.0);
         let d = fit_icon(size, SLOT_SCALE);
         node.left = Val::Px((x + (s - d.x) / 2.0).round());
@@ -419,6 +392,7 @@ pub fn update(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn hotbar_slot_rects() {
@@ -436,14 +410,14 @@ mod tests {
             back_selected: Handle::default(),
             icons: HashMap::new(),
         };
-        // No content source and no preloaded icon: a generic 16x16 icon is cached.
+        // No preloaded icon: a generic 16x16 icon is cached.
         let item = ItemId(65_000);
-        let (handle, size) = icon_of(&mut assets, &mut images, None, item);
+        let (handle, size) = icon_of(&mut assets, &mut images, item);
         assert_eq!(size, Vec2::splat(16.0));
         assert!(images.get(&handle).is_some());
         assert!(assets.icons.contains_key(&FALLBACK_ICON));
         // Asking again reuses the same cached fallback (no duplicate image).
-        let (again, again_size) = icon_of(&mut assets, &mut images, None, item);
+        let (again, again_size) = icon_of(&mut assets, &mut images, item);
         assert_eq!(handle, again);
         assert_eq!(size, again_size);
         assert_eq!(images.len(), 1);
@@ -453,7 +427,7 @@ mod tests {
         assets
             .icons
             .insert(item.0, (preloaded.clone(), Vec2::new(8.0, 8.0)));
-        let (cached, cached_size) = icon_of(&mut assets, &mut images, None, item);
+        let (cached, cached_size) = icon_of(&mut assets, &mut images, item);
         assert_eq!(cached, preloaded);
         assert_eq!(cached_size, Vec2::new(8.0, 8.0));
     }

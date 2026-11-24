@@ -65,15 +65,11 @@ impl Plugin for ViewPlugin {
         let cracks = c
             .texture("Images/TileCracks")
             .unwrap_or_else(|e| fatal(format!("Images/TileCracks: {e}")));
-        // Preload every known item icon; any that are missing are loaded on demand by the
-        // HUD (with a generic fallback if the texture does not exist either).
-        let icons: std::collections::HashMap<u16, RgbaImage> = terravibe_sim::item::all_item_ids()
-            .filter_map(|id| {
-                let n = format!("Images/Item_{}", id.0);
-                c.texture(&n).ok().map(|img| (id.0, img))
-            })
-            .collect();
-        let icons = Arc::new(icons);
+        // Pre-render crisp 32x32 icons for all 225 items from BlockArt + .vox models.
+        let icons = Arc::new(crate::art::item_icons::render_all_item_icons(
+            &art,
+            &crate::art::art_dir().join("models"),
+        ));
         info!(
             "assets from {} ({})",
             c.root().display(),
@@ -143,9 +139,6 @@ impl Plugin for ViewPlugin {
         let sounds = player::PlayerSounds::load(c);
 
         app.insert_resource(BenchMode(self.bench))
-            .insert_resource(crate::hud::hotbar::ItemIconSource(Arc::new(
-                self.content.clone(),
-            )))
             .insert_resource(mode)
             .insert_resource(GlobalAmbientLight {
                 color: Color::WHITE,

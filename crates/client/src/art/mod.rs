@@ -12,6 +12,7 @@ use terravibe_sim::{
 pub mod blocks;
 pub mod chunk_mesh;
 pub mod contact_sheet;
+pub mod item_icons;
 pub mod mesh_data;
 pub mod rig;
 pub mod rig_view;

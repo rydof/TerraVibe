@@ -1405,7 +1405,6 @@ pub fn update_view(
 
     let super::inventory::IconAssets {
         assets,
-        source: icon_source,
         images: mut image_assets,
     } = icon_assets;
     let show_shop_icons = panel.tab == TownTab::Talk && !panel.shop.is_empty();
@@ -1447,12 +1446,7 @@ pub fn update_view(
     if let Some(mut assets) = assets {
         if let Some(ref mut gmi) = guide_mat_icon {
             if show_guide && let Some(st) = guide_stack {
-                let (handle, size) = super::hotbar::icon_of(
-                    &mut assets,
-                    &mut image_assets,
-                    icon_source.as_deref(),
-                    st.id,
-                );
+                let (handle, size) = super::hotbar::icon_of(&mut assets, &mut image_assets, st.id);
                 let max_dim = 32.0 * k;
                 let scale_factor = max_dim / size.max_element().max(1.0);
                 gmi.1.width = Val::Px((size.x * scale_factor).round().max(1.0));
@@ -1474,12 +1468,8 @@ pub fn update_view(
                 .min(guide_recipes.len().saturating_sub(MAX_GUIDE_ROWS));
             for (row_icon, mut inode, mut img, mut vis) in &mut guide_recipe_icons {
                 if let Some(r) = guide_recipes.get(start + row_icon.0) {
-                    let (handle, size) = super::hotbar::icon_of(
-                        &mut assets,
-                        &mut image_assets,
-                        icon_source.as_deref(),
-                        r.output.item,
-                    );
+                    let (handle, size) =
+                        super::hotbar::icon_of(&mut assets, &mut image_assets, r.output.item);
                     let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
                     let scale_factor = max_dim / size.max_element().max(1.0);
                     let w = (size.x * scale_factor).round().max(1.0);
@@ -1510,12 +1500,8 @@ pub fn update_view(
         if show_shop_icons {
             for (row_icon, mut inode, mut img, mut vis) in &mut shop_icons {
                 if let Some(&(item, _)) = panel.shop.get(row_icon.0) {
-                    let (handle, size) = super::hotbar::icon_of(
-                        &mut assets,
-                        &mut image_assets,
-                        icon_source.as_deref(),
-                        item,
-                    );
+                    let (handle, size) =
+                        super::hotbar::icon_of(&mut assets, &mut image_assets, item);
                     let max_dim = (line_h - 2.0).clamp(12.0, 20.0);
                     let scale_factor = max_dim / size.max_element().max(1.0);
                     let w = (size.x * scale_factor).round().max(1.0);

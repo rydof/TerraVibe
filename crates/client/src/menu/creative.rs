@@ -25,7 +25,6 @@ use crate::hud::inventory::IconAssets;
 use crate::net::{ClientGodMode, Net};
 use crate::session::{AppState, SessionError};
 use crate::view::camera::set_grab;
-use crate::view::to_bevy_image;
 
 const GRID_COLS: usize = 5;
 const GRID_ROWS: usize = 5;
@@ -234,10 +233,8 @@ fn load_item_icon(
     if let Some(handle) = cache.0.get(&id.0) {
         return Some(handle.clone());
     }
-    let source = icon_assets.source.as_ref()?;
-    let name = format!("Images/Item_{}", id.0);
-    let img = source.0.texture(&name).ok()?;
-    let handle = icon_assets.images.add(to_bevy_image(&img));
+    let assets = icon_assets.assets.as_mut()?;
+    let (handle, _) = crate::hud::hotbar::icon_of(assets, &mut icon_assets.images, id);
     cache.0.insert(id.0, handle.clone());
     Some(handle)
 }
