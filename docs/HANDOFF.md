@@ -10,6 +10,10 @@ the rules. Everything older lives in `docs/HANDOFF.md` and is history only.
 - **UI & Item Icon Rework — Phase 1 (Tasks 1–6 landed on `dev`: `ddd248c`, `ec01b66`, `2d924e9`, `f869201`, `3ed1bc8`)**:
   - Unified obsidian-slate design system (`crates/client/src/ui_theme.rs` re-exported via `hud/style.rs` & `menu/style.rs`), procedural HUD chrome & ghost/action icons (`art/ui_icons.rs`), 32×32 hybrid item icon renderer for all `225` items (`art/item_icons.rs`), upgraded `9×5` Creative Mode browser with all 6 boss summons & hover tooltips (`menu/creative.rs`), and full `hud/` + `menu/` UI polish with `0` legacy `Images/` or `ItemIconSource` matches.
   - Verified: `1,460` passed, `0` failed, `6` ignored (`terravibe_assets`: 51+6; `terravibe_client`: 593; `terravibe_server`: 208; `terravibe_sim`: 602); `cargo fmt --check`, `cargo check --workspace --all-targets` (0 warnings), `python3 -I tools/art/check_art.py` pass; `7/7` headless QA passed (`menu_title`, `first_hour`, `tooltips_economy`, `combat_feedback`, `town_housing`, `held_items`, `minimap`).
+- **Pass P1 QA & Bench Audit (`3ed1bc8`, `Quadro T1000` Vulkan)**:
+  - `13/13` headless QA scenarios passed (`+6` extra: `death_respawn`, `weather_audio`, `wall_of_flesh`, `accessibility_options`, `boss`, `molten_gear`).
+  - `./tools/bench-headless.sh`: `avg_fps=88.4`, `p50_ms=10.86`, `p99_ms=16.97`, `over_16_7=36`, `quads=1,117,783`, `pass=false` (`p99_ms` 0.30ms over 16.67ms).
+  - Top Pass P2 polish targets: `menu/diorama.rs` first-frame race, bespoke `.vox` models for iconic shared items, held-bow aim pose, chunk mesh/upload pacing (`p99_ms`), boss bar vs interaction prompt overlap, onboarding card auto-hide on combat/boss, and close-range flyer/enemy camera clipping.
 - **Landed & pushed since `4e4177d`**:
   - Terraria-accurate vertical depth bands (Surface `y≈280..320`, Underground `y≈180..279`, Cavern `y≈64..179`, Underworld `y≈0..63`, deep lava `y<=90`, Underworld ruins `y=26..56`).
   - Guide Crafting slot (`SlotRef::Guide`, `GuideSlotShift`, `CloseGuideCrafting`, `ServerMsg::GuideSlot`, live recipe lookup UI) and fixed Welcome toast reappearing.
