@@ -250,9 +250,19 @@ pub(crate) fn sample_input(
     town: Option<Res<crate::hud::town::TownPanel>>,
     victory: Option<Res<crate::hud::victory::VictoryModalState>>,
     creative: Option<Res<crate::menu::creative::CreativeMenuOpen>>,
+    chat_open: Option<Res<crate::hud::chat::ChatInputOpen>>,
     settings: Option<Res<crate::settings::Settings>>,
     gamepads: Query<&Gamepad>,
 ) {
+    if chat_open.as_ref().is_some_and(|c| c.0) {
+        s.input = PlayerInput {
+            yaw: cam.yaw,
+            pitch: cam.pitch,
+            slot: s.input.slot,
+            ..default()
+        };
+        return;
+    }
     let mut slot = s.input.slot;
     for (i, k) in DIGITS.iter().enumerate() {
         if keys.just_pressed(*k) {

@@ -15,7 +15,8 @@ use super::text::{MenuText, MenuTextColor};
 use super::{Action, MenuButton};
 use crate::net::{LoadingStage, NetState};
 use crate::session::{
-    AppState, GameMenu, GamePanel, MenuScreen, SelectedWorld, SessionError, SessionStopping,
+    AppState, GameMenu, GamePanel, MenuScreen, MultiplayerSessionInfo, SelectedWorld, SessionError,
+    SessionStopping,
 };
 use crate::settings::Settings;
 use crate::view::camera::set_grab;
@@ -31,6 +32,91 @@ pub fn menu_closed(
 /// Marker component for in-game root pause menu entities.
 #[derive(Component)]
 pub struct GameRootUi;
+
+/// Marker component for the compact multiplayer info card shown in the pause menu.
+#[derive(Component)]
+pub struct MultiplayerInfoCardUi;
+
+/// Local button component for copying the active multiplayer join code / ticket.
+#[derive(Component, Clone, Debug)]
+pub struct CopyJoinCodeBtn {
+    pub code: String,
+}
+
+/// Marker for the text label inside [`CopyJoinCodeBtn`].
+#[derive(Component)]
+pub struct CopyJoinCodeLabel;
+
+/// Tracks transient `"Copied!"` feedback on the pause-menu Copy Code button.
+#[derive(Resource, Default, Debug)]
+pub struct CopyCodeFeedback {
+    pub remaining: f32,
+}
+
+/// Formats a join code or raw `iroh` ticket for compact pause-menu display.
+pub fn format_join_code_display(code: &str) -> String {
+    let char_count = code.chars().count();
+    if char_count <= 16 {
+        code.to_string()
+    } else {
+        let prefix: String = code.chars().take(8).collect();
+        let suffix: String = code
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("{prefix}...{suffix}")
+    }
+}
+
+/// Copies `text` to the OS clipboard using platform CLI tools, returning `true` on success.
+pub fn copy_to_clipboard(text: &str) -> bool {
+    #[cfg(test)]
+    {
+        let _ = text;
+        true
+    }
+    #[cfg(not(test))]
+    {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        #[cfg(target_os = "macos")]
+        let candidates: &[(&str, &[&str])] = &[("pbcopy", &[])];
+        #[cfg(target_os = "windows")]
+        let candidates: &[(&str, &[&str])] = &[("clip", &[])];
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let candidates: &[(&str, &[&str])] = &[
+            ("wl-copy", &[]),
+            ("xclip", &["-selection", "clipboard"]),
+            ("xsel", &["--clipboard", "--input"]),
+        ];
+
+        for (bin, args) in candidates {
+            let Ok(mut child) = Command::new(bin)
+                .args(*args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+            else {
+                continue;
+            };
+            if let Some(mut stdin) = child.stdin.take()
+                && stdin.write_all(text.as_bytes()).is_ok()
+            {
+                drop(stdin);
+                if child.wait().is_ok_and(|s| s.success()) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
 
 /// Marker component for the world loading card UI.
 #[derive(Component)]
@@ -146,12 +232,16 @@ pub fn handle_game_menu_input(
     mut action_writer: MessageWriter<Action>,
     mut esc_panels: crate::hud::inventory::EscPanels,
     mut menu_focus: Option<ResMut<MenuFocus>>,
+    chat_open: Option<Res<crate::hud::chat::ChatInputOpen>>,
     settings: Option<Res<crate::settings::Settings>>,
 ) {
     if app_state.as_ref().map(|s| s.get()) != Some(&AppState::InGame) {
         return;
     }
     if session_error.0.is_some() {
+        return;
+    }
+    if chat_open.as_ref().is_some_and(|c| c.0) {
         return;
     }
     let Some(kb) = keyboard else { return };
@@ -485,21 +575,176 @@ fn spawn_game_root_ui(commands: &mut Commands, advice: &str, viewport: (f32, f32
     let _ = panel;
 }
 
+#[allow(deprecated)]
+fn spawn_multiplayer_info_card(
+    commands: &mut Commands,
+    info: &MultiplayerSessionInfo,
+    viewport: (f32, f32),
+) {
+    let (win_w, win_h) = viewport;
+    let center_x = win_w * 0.5;
+    let panel_w = 460.0;
+    let panel_h = 444.0;
+    let panel_x = center_x - panel_w / 2.0;
+    let panel_y = ((win_h - panel_h) * 0.5).max(36.0);
+
+    let card_w = 270.0;
+    let card_x = (panel_x + panel_w + 16.0).min((win_w - card_w - 16.0).max(16.0));
+    let raw_code = info.join_code.as_deref().or(info.ticket.as_deref());
+    let max_players = info.max_players.max(info.players.len() as u8).max(1);
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(card_x),
+                top: Val::Px(panel_y),
+                width: Val::Px(card_w),
+                border: UiRect::all(Val::Px(BORDER_W)),
+                border_radius: BorderRadius::all(Val::Px(RADIUS_PANEL)),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexStart,
+                padding: UiRect::all(Val::Px(16.0)),
+                row_gap: Val::Px(10.0),
+                ..default()
+            },
+            BackgroundColor(COLOR_PANEL_INNER),
+            BorderColor::all(COLOR_PANEL_BORDER),
+            GlobalZIndex(1300),
+            GameRootUi,
+            MultiplayerInfoCardUi,
+        ))
+        .with_children(|card| {
+            card.spawn((
+                Node::default(),
+                MenuText::new("Multiplayer", 1.1),
+                MenuTextColor(COLOR_TEXT_GOLD),
+                GameRootUi,
+                MultiplayerInfoCardUi,
+            ));
+
+            if let Some(code) = raw_code {
+                let display = format_join_code_display(code);
+                card.spawn((
+                    Node::default(),
+                    MenuText::new(&format!("Join Code: {display}"), 0.85),
+                    GameRootUi,
+                    MultiplayerInfoCardUi,
+                ));
+
+                card.spawn((
+                    Interaction::default(),
+                    CopyJoinCodeBtn {
+                        code: code.to_string(),
+                    },
+                    Node {
+                        width: Val::Px(150.0),
+                        height: Val::Px(32.0),
+                        border: UiRect::all(Val::Px(BORDER_W)),
+                        border_radius: BorderRadius::all(Val::Px(RADIUS_BTN)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(COLOR_BUTTON_NORMAL),
+                    BorderColor::all(COLOR_BORDER_NORMAL),
+                    GlobalZIndex(1301),
+                    GameRootUi,
+                    MultiplayerInfoCardUi,
+                ))
+                .with_children(|btn| {
+                    btn.spawn((
+                        CopyJoinCodeLabel,
+                        Node::default(),
+                        MenuText::new("Copy Code", 0.85),
+                        GameRootUi,
+                        MultiplayerInfoCardUi,
+                    ));
+                });
+            }
+
+            card.spawn((
+                Node {
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                },
+                MenuText::new(
+                    &format!("Players ({}/{max_players})", info.players.len()),
+                    0.9,
+                ),
+                MenuTextColor(COLOR_TEXT_GOLD),
+                GameRootUi,
+                MultiplayerInfoCardUi,
+            ));
+
+            for (_id, name) in &info.players {
+                card.spawn((
+                    Node::default(),
+                    MenuText::new(&format!("- {name}"), 0.82),
+                    GameRootUi,
+                    MultiplayerInfoCardUi,
+                ));
+            }
+        });
+}
+
+/// Handles clicks on the pause-menu Copy Code button and updates `"Copied!"` feedback.
+#[allow(deprecated)]
+pub fn handle_copy_join_code_button(
+    time: Option<Res<Time>>,
+    mut feedback: ResMut<CopyCodeFeedback>,
+    mut buttons: Query<
+        (&Interaction, &CopyJoinCodeBtn, &Children),
+        Changed<Interaction>,
+    >,
+    mut labels: Query<&mut MenuText, With<CopyJoinCodeLabel>>,
+) {
+    let mut copied_now = false;
+    for (interaction, btn, children) in &mut buttons {
+        if *interaction == Interaction::Pressed {
+            let _ = copy_to_clipboard(&btn.code);
+            feedback.remaining = 2.0;
+            copied_now = true;
+            for child in children.iter() {
+                if let Ok(mut text) = labels.get_mut(child) {
+                    text.text = "Copied!".to_string();
+                }
+            }
+        }
+    }
+
+    if !copied_now && feedback.remaining > 0.0 {
+        if let Some(t) = time {
+            feedback.remaining = (feedback.remaining - t.delta_secs()).max(0.0);
+        }
+        if feedback.remaining == 0.0 {
+            for mut text in &mut labels {
+                if text.text != "Copy Code" {
+                    text.text = "Copy Code".to_string();
+                }
+            }
+        }
+    }
+}
+
 /// Synchronizes the root UI of the pause menu with GameMenu.panel.
 #[allow(clippy::too_many_arguments)]
 pub fn sync_game_root_ui(
     game_menu: Res<GameMenu>,
     session_error: Res<SessionError>,
     root_entities: Query<Entity, With<GameRootUi>>,
+    mp_card_entities: Query<Entity, With<MultiplayerInfoCardUi>>,
     confirm_entities: Query<Entity, With<ConfirmQuitUi>>,
     controls_entities: Query<Entity, With<ControlsUiRoot>>,
     advice_state: Option<Res<GuideAdviceState>>,
+    mp_info: Option<Res<MultiplayerSessionInfo>>,
     settings: Option<Res<crate::settings::Settings>>,
     primary_window: Option<Query<&Window, With<PrimaryWindow>>>,
     mut commands: Commands,
 ) {
     let should_show = game_menu.panel == Some(GamePanel::Root) && session_error.0.is_none();
     let root_exists = root_entities.iter().next().is_some();
+    let viewport = super::style::viewport_size(primary_window.as_ref());
 
     if should_show && !root_exists {
         let default_advice = terravibe_sim::facts::current_guide_advice(
@@ -509,13 +754,37 @@ pub fn sync_game_root_ui(
         let advice = advice_state
             .as_ref()
             .map_or(default_advice, |a| a.current_advice.as_str());
-        spawn_game_root_ui(
-            &mut commands,
-            advice,
-            super::style::viewport_size(primary_window.as_ref()),
-        );
+        spawn_game_root_ui(&mut commands, advice, viewport);
     } else if !should_show && root_exists {
         for e in &root_entities {
+            commands
+                .entity(e)
+                .queue_silenced(move |entity: EntityWorldMut| {
+                    entity.despawn();
+                });
+        }
+    }
+
+    let mp_has_info = mp_info
+        .as_ref()
+        .is_some_and(|m| m.join_code.is_some() || !m.players.is_empty());
+    let mp_should_show = should_show && mp_has_info;
+    let mp_exists = mp_card_entities.iter().next().is_some();
+    let mp_changed = mp_info.as_ref().is_some_and(|m| m.is_changed());
+
+    if mp_should_show && (!mp_exists || mp_changed) {
+        for e in &mp_card_entities {
+            commands
+                .entity(e)
+                .queue_silenced(move |entity: EntityWorldMut| {
+                    entity.despawn();
+                });
+        }
+        if let Some(ref info) = mp_info {
+            spawn_multiplayer_info_card(&mut commands, info, viewport);
+        }
+    } else if !mp_should_show && mp_exists {
+        for e in &mp_card_entities {
             commands
                 .entity(e)
                 .queue_silenced(move |entity: EntityWorldMut| {
@@ -1277,6 +1546,7 @@ impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GuideAdviceState>()
             .init_resource::<LoadingTipState>()
+            .init_resource::<CopyCodeFeedback>()
             .add_systems(
                 Update,
                 (
@@ -1286,6 +1556,7 @@ impl Plugin for GameMenuPlugin {
                     handle_game_menu_actions
                         .after(crate::menu::nav::handle_nav_input)
                         .after(crate::menu::nav::handle_mouse_input),
+                    handle_copy_join_code_button.run_if(in_state(AppState::InGame)),
                     sync_error_modal,
                 ),
             )
@@ -3073,5 +3344,69 @@ mod tests {
                 .get_resource::<crate::session::SessionRetryPending>()
                 .is_some()
         );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn pause_menu_shows_join_code_and_players_when_hosting() {
+        let mut app = base_test_app();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::InGame);
+        app.update();
+        app.insert_resource(MultiplayerSessionInfo {
+            join_code: Some("TV4K9P".to_string()),
+            ticket: Some("iroh-ticket-full-value".to_string()),
+            is_host: true,
+            max_players: 8,
+            players: vec![(1, "Alice".to_string()), (2, "Bob".to_string())],
+        });
+        open_pause_menu(&mut app);
+
+        let texts: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&MenuText, With<MultiplayerInfoCardUi>>()
+            .iter(app.world())
+            .map(|t| t.text.clone())
+            .collect();
+        assert!(
+            texts.iter().any(|t| t.contains("TV4K9P")),
+            "pause menu multiplayer card must show join code, got {texts:?}"
+        );
+        assert!(
+            texts.iter().any(|t| t.contains("Players (2/8)")),
+            "pause menu multiplayer card must show player count, got {texts:?}"
+        );
+        assert!(
+            texts.iter().any(|t| t.contains("Alice")) && texts.iter().any(|t| t.contains("Bob")),
+            "pause menu multiplayer card must list connected players, got {texts:?}"
+        );
+
+        let mut btn_q = app.world_mut().query::<(Entity, &CopyJoinCodeBtn)>();
+        let (btn_ent, btn) = btn_q
+            .iter(app.world())
+            .next()
+            .expect("CopyJoinCodeBtn must be spawned");
+        assert_eq!(btn.code, "TV4K9P");
+
+        // Pressing Copy Code sets the label to "Copied!".
+        *app.world_mut().get_mut::<Interaction>(btn_ent).unwrap() = Interaction::Pressed;
+        app.update();
+
+        let label_text: String = app
+            .world_mut()
+            .query_filtered::<&MenuText, With<CopyJoinCodeLabel>>()
+            .single(app.world())
+            .expect("CopyJoinCodeLabel must exist")
+            .text
+            .clone();
+        assert_eq!(label_text, "Copied!");
+
+        // Raw ticket display is truncated cleanly.
+        assert_eq!(
+            format_join_code_display("iroh_ticket_1234567890abcdef"),
+            "iroh_tic...cdef"
+        );
+        assert_eq!(format_join_code_display("TV4K9P"), "TV4K9P");
     }
 }

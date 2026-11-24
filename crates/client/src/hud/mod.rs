@@ -6,6 +6,7 @@
 
 pub mod armor;
 pub mod boss_bar;
+pub mod chat;
 pub mod chest;
 pub mod combat_feedback;
 pub mod crafting;
@@ -432,6 +433,7 @@ impl Plugin for HudPlugin {
         .add_message::<crate::net::ChestMsg>()
         .add_message::<crate::net::CraftResults>()
         .add_message::<bevy::input::mouse::MouseWheel>()
+        .add_plugins(chat::ChatPlugin)
         .add_systems(PreStartup, setup_hud_resources)
         .add_systems(Update, apply_hud_settings)
         .add_systems(
@@ -464,14 +466,19 @@ impl Plugin for HudPlugin {
                 update_crosshair,
                 armor::equip_input
                     .run_if(not(crate::view::camera::fly_mode))
-                    .run_if(not(chest::is_open)),
+                    .run_if(not(chest::is_open))
+                    .run_if(not(chat::is_open)),
                 chest::open_input
                     .run_if(not(crate::view::camera::fly_mode))
-                    .run_if(not(chest::is_open)),
+                    .run_if(not(chest::is_open))
+                    .run_if(not(chat::is_open)),
                 town::talk_input
                     .run_if(not(crate::view::camera::fly_mode))
-                    .run_if(not(chest::is_open)),
-                town::house_keys.run_if(not(crate::view::camera::fly_mode)),
+                    .run_if(not(chest::is_open))
+                    .run_if(not(chat::is_open)),
+                town::house_keys
+                    .run_if(not(crate::view::camera::fly_mode))
+                    .run_if(not(chat::is_open)),
                 town::receive,
                 town::handle_input.after(town::receive),
                 town::update_view.after(town::handle_input),
@@ -494,7 +501,8 @@ impl Plugin for HudPlugin {
                     .after(tooltip::render_tooltip)
                     .after(death::update)
                     .after(onboarding::update_contextual_prompts)
-                    .after(combat_feedback::update_combat_feedback),
+                    .after(combat_feedback::update_combat_feedback)
+                    .after(chat::update_chat_ui),
             )
                 .run_if(in_state(AppState::InGame)),
         )
@@ -547,14 +555,16 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
-            inventory::handle_throw_key.run_if(in_state(AppState::InGame)),
+            inventory::handle_throw_key
+                .run_if(in_state(AppState::InGame))
+                .run_if(not(chat::is_open)),
         )
         .add_systems(
             Update,
             (
                 onboarding::sync_onboarding_ui,
                 onboarding::update_contextual_prompts,
-                map::handle_map_input,
+                map::handle_map_input.run_if(not(chat::is_open)),
                 map::update_map_exploration,
                 map::update_compass,
                 map::update_minimap_rendering,
