@@ -429,6 +429,7 @@ pub struct Conn {
     pub held: Held,
     /// Guide crafting lookup slot; never persisted, returned on close, disconnect and save.
     pub guide_slot: Option<terravibe_sim::inventory::ItemStack>,
+    pub trash: Option<terravibe_sim::inventory::ItemStack>,
     /// `ClickSlot` / `CloseInventory` requests, handled after chest requests.
     pub slot_reqs: Vec<ClientMsg>,
     pub use_state: UseState,
@@ -929,6 +930,7 @@ impl Server {
             inv: Inventory::starting(&mut Rng::new(self.seed as u64 ^ id as u64)),
             held: Held::default(),
             guide_slot: None,
+            trash: None,
             slot_reqs: Vec::new(),
             use_state: UseState::default(),
             rng: Rng::new(self.seed as u64 ^ id as u64),
@@ -1291,6 +1293,7 @@ impl Server {
                         | ClientMsg::CloseInventory
                         | ClientMsg::CloseGuideCrafting
                         | ClientMsg::GuideSlotShift { .. }
+                        | ClientMsg::TrashShift { .. }
                         | ClientMsg::SortInventory { .. }
                         | ClientMsg::DropItem { .. }
                         | ClientMsg::QuickHeal
@@ -2623,6 +2626,13 @@ impl Server {
             for r in reqs {
                 match r {
                     ClientMsg::ClickSlot { at, kind } => {
+                        if at == slots::SlotRef::Trash {
+                            if slots::click_trash(&mut c.trash, &mut c.held, kind) {
+                                c.dead |= c.io.send(ServerMsg::Trash(c.trash)).is_err();
+                                c.dead |= c.io.send(ServerMsg::Held(c.held.0)).is_err();
+                            }
+                            continue;
+                        }
                         let p = c.player.as_mut().unwrap();
                         let chest_pos = c.open_chest.filter(|&pos| {
                             !p.dead
@@ -2687,6 +2697,15 @@ impl Server {
                             let prev = c.guide_slot.replace(stack);
                             c.inv.slots[idx] = prev;
                             c.dead |= c.io.send(ServerMsg::GuideSlot(c.guide_slot)).is_err();
+                        }
+                    }
+                    ClientMsg::TrashShift { slot } => {
+                        let idx = slot as usize;
+                        if idx < terravibe_sim::inventory::BAG
+                            && let Some(stack) = c.inv.slots[idx].take()
+                        {
+                            c.trash = Some(stack);
+                            c.dead |= c.io.send(ServerMsg::Trash(c.trash)).is_err();
                         }
                     }
                     ClientMsg::SortInventory { mode } => {
@@ -16414,5 +16433,83 @@ mod tests {
             eye2.pos[0],
             before_x
         );
+    }
+
+    #[test]
+    fn server_trash_slot_and_shift_trash() {
+        use terravibe_sim::item::{IRON_BAR, WOOD};
+        let mut s = Server::with_cfg(1, ServerCfg::default());
+        let (c, c_srv) = in_process_pair();
+        s.connect(Box::new(c_srv));
+        c.send(ClientMsg::Hello {
+            seed: 1,
+            name: Some("Tester".into()),
+            character: None,
+            protocol_version: PROTOCOL_VERSION,
+            password: None,
+        })
+        .unwrap();
+        s.tick();
+        let mut got = Vec::new();
+        s.conns[0].inv.slots[0] = Some(ItemStack {
+            id: WOOD,
+            count: 5,
+            prefix: Prefix(0),
+        });
+        s.conns[0].inv.slots[1] = Some(ItemStack {
+            id: IRON_BAR,
+            count: 3,
+            prefix: Prefix(0),
+        });
+
+        // Pick up WOOD from slot 0 and click SlotRef::Trash.
+        c.send(ClientMsg::ClickSlot {
+            at: SlotRef::Inv(0),
+            kind: ClickKind::Left,
+        })
+        .unwrap();
+        c.send(ClientMsg::ClickSlot {
+            at: SlotRef::Trash,
+            kind: ClickKind::Left,
+        })
+        .unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert_eq!(s.conns[0].held.0, None);
+        assert_eq!(s.conns[0].trash.map(|st| (st.id, st.count)), Some((WOOD, 5)));
+        assert!(got.iter().any(|m| matches!(
+            m,
+            ServerMsg::Trash(Some(st)) if st.id == WOOD && st.count == 5
+        )));
+
+        // Second click on SlotRef::Trash with empty cursor retrieves WOOD back to held, then place back in slot 0.
+        c.send(ClientMsg::ClickSlot {
+            at: SlotRef::Trash,
+            kind: ClickKind::Left,
+        })
+        .unwrap();
+        c.send(ClientMsg::ClickSlot {
+            at: SlotRef::Inv(0),
+            kind: ClickKind::Left,
+        })
+        .unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert_eq!(s.conns[0].trash, None);
+        assert_eq!(
+            s.conns[0].inv.slots[0].map(|st| (st.id, st.count)),
+            Some((WOOD, 5))
+        );
+
+        // Shift-trash slot 0 moves WOOD into trash and clears bag slot 0.
+        c.send(ClientMsg::TrashShift { slot: 0 }).unwrap();
+        s.tick();
+        drain(&c, &mut got);
+        assert_eq!(s.conns[0].inv.slots[0], None);
+        assert_eq!(s.conns[0].trash.map(|st| (st.id, st.count)), Some((WOOD, 5)));
+        assert!(got.iter().any(|m| matches!(
+            m,
+            ServerMsg::Trash(Some(st)) if st.id == WOOD && st.count == 5
+        )));
     }
 }

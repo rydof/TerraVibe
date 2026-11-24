@@ -204,6 +204,10 @@ pub enum ClientMsg {
     GuideSlotShift {
         slot: u8,
     },
+    /// Shift-click a bag slot to move it into the Trash slot.
+    TrashShift {
+        slot: u8,
+    },
     /// Request full heal + debuff clear from the Nurse (reach & funds checked).
     HealAtNurse {
         npc: EnemyId,
@@ -428,6 +432,8 @@ pub enum ServerMsg {
     GodMode(bool),
     /// Current item placed in the Guide's crafting lookup slot.
     GuideSlot(Option<ItemStack>),
+    /// Current item in the player's Trash slot.
+    Trash(Option<ItemStack>),
     /// Outcome of `HealAtNurse`.
     NurseHealed {
         ok: bool,

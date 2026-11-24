@@ -14,6 +14,7 @@ pub enum SlotRef {
     VanityAccessory(u8),
     Chest(u8),
     Guide,
+    Trash,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -51,6 +52,7 @@ fn accepts(at: SlotRef, s: &ItemStack) -> bool {
         }
         SlotRef::Chest(_) => true,
         SlotRef::Guide => crate::crafting::is_material(s.id),
+        SlotRef::Trash => true,
     }
 }
 
@@ -60,6 +62,11 @@ fn armor_stack(id: Option<crate::item::ItemId>) -> Option<ItemStack> {
         count: 1,
         prefix: crate::item::Prefix(0),
     })
+}
+
+/// Left/Right click on the player's Trash slot.
+pub fn click_trash(trash: &mut Option<ItemStack>, held: &mut Held, kind: ClickKind) -> bool {
+    click_slot(trash, held, true, kind)
 }
 
 /// Left/Right click on one slot's contents.
@@ -298,6 +305,7 @@ pub fn click_with_guide(
             Some(slot) => click_slot(slot, held, ok, kind),
             None => false,
         },
+        SlotRef::Trash => false,
         SlotRef::Armor(a) => click_armor_slot(&mut armor[armor_index(a)], held, ok, kind),
         SlotRef::VanityArmor(a) => {
             let i = armor_index(a);
@@ -870,5 +878,23 @@ mod tests {
         ));
         assert_eq!(guide, None);
         assert_eq!(inv.count_of(IRON_BAR), 3);
+    }
+
+    #[test]
+    fn trash_slot_stores_retrieves_and_overwrites() {
+        let mut trash: Option<ItemStack> = None;
+        let mut held = Held(Some(ItemStack {
+            id: WOOD,
+            count: 5,
+            prefix: Prefix(0),
+        }));
+        assert!(click_trash(&mut trash, &mut held, ClickKind::Left));
+        assert_eq!(held.0, None);
+        assert_eq!(trash.map(|s| (s.id, s.count)), Some((WOOD, 5)));
+
+        // Second click with empty cursor retrieves trash back to held.
+        assert!(click_trash(&mut trash, &mut held, ClickKind::Left));
+        assert_eq!(trash, None);
+        assert_eq!(held.0.map(|s| (s.id, s.count)), Some((WOOD, 5)));
     }
 }
