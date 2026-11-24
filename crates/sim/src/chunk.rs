@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::block::{AIR, BlockId};
 use crate::codec::{DecodeError, Reader, Writer};
 use crate::liquid_cell::{Liquid, LiquidKind};
@@ -11,7 +13,7 @@ const CS: usize = CHUNK_SIZE as usize;
 const VOLUME: usize = CS * CS * CS;
 
 /// Chunk coordinates (block coordinates floor-divided by `CHUNK_SIZE`).
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct ChunkPos {
     pub x: i32,
     pub y: i32,
@@ -61,6 +63,44 @@ impl LiquidLayer {
 }
 
 const WALL_WORDS: usize = VOLUME / 64;
+
+impl Serialize for Chunk {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bytes(&self.to_bytes())
+    }
+}
+
+impl<'de> Deserialize<'de> for Chunk {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ChunkVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ChunkVisitor {
+            type Value = Chunk;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("encoded chunk bytes")
+            }
+
+            fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Chunk, E> {
+                Chunk::from_bytes(v).map_err(|_| E::custom("invalid chunk bytes"))
+            }
+
+            fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<Chunk, E> {
+                Chunk::from_bytes(&v).map_err(|_| E::custom("invalid chunk bytes"))
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Chunk, A::Error> {
+                let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(b) = seq.next_element::<u8>()? {
+                    bytes.push(b);
+                }
+                Chunk::from_bytes(&bytes).map_err(|_| serde::de::Error::custom("invalid chunk bytes"))
+            }
+        }
+
+        deserializer.deserialize_bytes(ChunkVisitor)
+    }
+}
 
 impl Chunk {
     pub fn filled(b: BlockId) -> Self {

@@ -5,7 +5,7 @@ use crate::chunk::BlockQuery;
 use crate::item::Rng;
 use crate::world_bounds::WorldBounds;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Star {
     pub id: u32,
     pub pos: [f32; 3],

@@ -11,7 +11,7 @@ use crate::player::Vitals;
 use crate::player::consts::{MAX_FALL_SPEED, PX_TO_BLOCKS};
 use crate::player::vitals::HEART_HEAL;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DropId(pub u32);
 
 #[derive(Clone, Debug, PartialEq)]

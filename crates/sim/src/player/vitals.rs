@@ -22,7 +22,7 @@ pub const RESPAWN_TICKS: i32 = 600;
 /// Player.Update fall check: `num10 = 25` tiles of free fall.
 const SAFE_FALL_TILES: i32 = 25;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Vitals {
     pub life: i32,
     pub life_max: i32,

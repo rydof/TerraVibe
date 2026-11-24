@@ -1,7 +1,9 @@
 //! Block identifiers. The numeric value is Terraria's tile id.
 
+use serde::{Deserialize, Serialize};
+
 /// A block type; the inner value is Terraria's tile id (`u16::MAX` = air).
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct BlockId(pub u16);
 
 pub const AIR: BlockId = BlockId(u16::MAX);

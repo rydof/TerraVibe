@@ -1,7 +1,7 @@
 //! Deterministic world weather state driven by world seed and `WorldClock`.
 
 /// Current weather condition.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum WeatherKind {
     #[default]
     Clear,
@@ -29,7 +29,7 @@ impl WeatherKind {
 }
 
 /// Authoritative weather state persisted with the world.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WeatherState {
     pub kind: WeatherKind,
     pub intensity: f32,

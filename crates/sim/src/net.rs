@@ -7,7 +7,10 @@
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 
+use serde::{Deserialize, Serialize};
+
 use crate::block::BlockId;
+use crate::character::Appearance;
 use crate::chunk::{Chunk, ChunkPos};
 use crate::crafting::{CraftError, RecipeId};
 use crate::drop::DropId;
@@ -41,8 +44,20 @@ pub fn vertical_layers_for_y(y: f32) -> std::ops::Range<i32> {
 
 pub type PlayerId = u32;
 
+/// Wire protocol version checked during the `ClientMsg::Hello` handshake.
+pub const PROTOCOL_VERSION: u32 = 1;
+
+/// Reason a client connection was rejected or terminated by the host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RejectReason {
+    ProtocolMismatch,
+    BadPassword,
+    ServerFull,
+    HostClosing,
+}
+
 /// Classification of damage source for combat feedback (audio/particles/numbers).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DamageKind {
     Melee,
     Ranged,
@@ -54,21 +69,21 @@ pub enum DamageKind {
 }
 
 /// Classification of the entity that was hit.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HitTargetKind {
     Enemy,
     Boss,
     Player,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CreativeCmd {
     FullHeal,
     ToggleGodMode,
     SetTime(u32),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientMsg {
     Hello {
         seed: u32,
@@ -76,6 +91,8 @@ pub enum ClientMsg {
         name: Option<String>,
         /// Encoded Character bytes (M4).
         character: Option<Vec<u8>>,
+        protocol_version: u32,
+        password: Option<String>,
     },
     Input {
         seq: u32,
@@ -196,10 +213,14 @@ pub enum ClientMsg {
         npc: EnemyId,
         slot: u8,
     },
+    /// Send an in-game chat message.
+    Chat {
+        text: String,
+    },
     Bye,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ServerMsg {
     Welcome {
         id: PlayerId,
@@ -420,6 +441,48 @@ pub enum ServerMsg {
         new_prefix: Prefix,
         cost_copper: u32,
     },
+    /// Handshake rejected or session terminated by host.
+    Rejected {
+        reason: RejectReason,
+    },
+    /// Another player joined or entered view.
+    RemotePlayerSpawn {
+        id: PlayerId,
+        name: String,
+        appearance: Appearance,
+        pos: [f32; 3],
+        yaw: f32,
+    },
+    /// 20 Hz remote player movement/animation state snapshot.
+    RemotePlayerState {
+        id: PlayerId,
+        pos: [f32; 3],
+        vel: [f32; 3],
+        yaw: f32,
+        pitch: f32,
+        swinging: bool,
+        dead: bool,
+    },
+    /// Remote player worn armor, vanity armor, and held item.
+    RemotePlayerEquipment {
+        id: PlayerId,
+        armor: [Option<ItemId>; 3],
+        vanity_armor: [Option<ItemId>; 3],
+        held: Option<ItemId>,
+    },
+    /// Remote player disconnected or left view.
+    RemotePlayerDespawn {
+        id: PlayerId,
+    },
+    /// Broadcast chat or system message (`sender == None` for system announcements).
+    Chat {
+        sender: Option<String>,
+        text: String,
+    },
+    /// Current connected player roster.
+    PlayerList {
+        players: Vec<(PlayerId, String)>,
+    },
 }
 
 /// The other end of a transport has been dropped.
@@ -504,6 +567,8 @@ mod tests {
                 seed: 1,
                 name: None,
                 character: None,
+                protocol_version: PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
         let got = server.try_recv().unwrap();
@@ -529,6 +594,8 @@ mod tests {
                 seed: 42,
                 name: Some("Hero".into()),
                 character: Some(char_bytes.clone()),
+                protocol_version: PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
         let got = server.try_recv().unwrap();
@@ -538,6 +605,7 @@ mod tests {
                 seed: 42,
                 name: Some(ref n),
                 character: Some(ref b),
+                ..
             }) if n == "Hero" && b == &char_bytes
         ));
     }
@@ -630,6 +698,296 @@ mod tests {
                 assert_eq!(vitals.potion_delay_ticks, 3600);
             }
             _ => panic!("expected PlayerState message"),
+        }
+    }
+
+    #[test]
+    fn protocol_messages_roundtrip_over_in_proc() {
+        use crate::character::{Appearance, HairStyle};
+        use crate::item::COPPER_PICKAXE;
+
+        assert_eq!(PROTOCOL_VERSION, 1);
+
+        let (client, server) = in_process_pair();
+
+        // ClientMsg::Hello with protocol_version & password
+        client
+            .send(ClientMsg::Hello {
+                seed: 99,
+                name: Some("Alice".into()),
+                character: Some(vec![7, 8, 9]),
+                protocol_version: PROTOCOL_VERSION,
+                password: Some("secret".into()),
+            })
+            .unwrap();
+        assert!(matches!(
+            server.try_recv().unwrap(),
+            Some(ClientMsg::Hello {
+                seed: 99,
+                name: Some(ref n),
+                character: Some(ref c),
+                protocol_version: 1,
+                password: Some(ref p),
+            }) if n == "Alice" && c == &[7, 8, 9] && p == "secret"
+        ));
+
+        // ClientMsg::Chat
+        client
+            .send(ClientMsg::Chat {
+                text: "hello world".into(),
+            })
+            .unwrap();
+        assert!(matches!(
+            server.try_recv().unwrap(),
+            Some(ClientMsg::Chat { ref text }) if text == "hello world"
+        ));
+
+        // ServerMsg::Rejected
+        for reason in [
+            RejectReason::ProtocolMismatch,
+            RejectReason::BadPassword,
+            RejectReason::ServerFull,
+            RejectReason::HostClosing,
+        ] {
+            server.send(ServerMsg::Rejected { reason }).unwrap();
+            assert!(matches!(
+                client.try_recv().unwrap(),
+                Some(ServerMsg::Rejected { reason: r }) if r == reason
+            ));
+        }
+
+        // ServerMsg::RemotePlayerSpawn
+        let appearance = Appearance {
+            hair: HairStyle::Spiky,
+            skin: [255, 206, 175],
+            hair_color: [60, 40, 20],
+            eyes: [40, 120, 200],
+            shirt: [180, 50, 50],
+            pants: [40, 60, 140],
+        };
+        server
+            .send(ServerMsg::RemotePlayerSpawn {
+                id: 2,
+                name: "Bob".into(),
+                appearance,
+                pos: [1.0, 2.0, 3.0],
+                yaw: 1.5,
+            })
+            .unwrap();
+        assert!(matches!(
+            client.try_recv().unwrap(),
+            Some(ServerMsg::RemotePlayerSpawn {
+                id: 2,
+                ref name,
+                appearance: a,
+                pos,
+                yaw,
+            }) if name == "Bob" && a == appearance && pos == [1.0, 2.0, 3.0] && yaw == 1.5
+        ));
+
+        // ServerMsg::RemotePlayerState
+        server
+            .send(ServerMsg::RemotePlayerState {
+                id: 2,
+                pos: [4.0, 5.0, 6.0],
+                vel: [0.5, 0.0, -0.5],
+                yaw: 0.25,
+                pitch: -0.1,
+                swinging: true,
+                dead: false,
+            })
+            .unwrap();
+        assert!(matches!(
+            client.try_recv().unwrap(),
+            Some(ServerMsg::RemotePlayerState {
+                id: 2,
+                pos,
+                vel,
+                yaw,
+                pitch,
+                swinging: true,
+                dead: false,
+            }) if pos == [4.0, 5.0, 6.0]
+                && vel == [0.5, 0.0, -0.5]
+                && yaw == 0.25
+                && pitch == -0.1
+        ));
+
+        // ServerMsg::RemotePlayerEquipment
+        server
+            .send(ServerMsg::RemotePlayerEquipment {
+                id: 2,
+                armor: [Some(COPPER_PICKAXE), None, None],
+                vanity_armor: [None, None, None],
+                held: Some(COPPER_PICKAXE),
+            })
+            .unwrap();
+        assert!(matches!(
+            client.try_recv().unwrap(),
+            Some(ServerMsg::RemotePlayerEquipment {
+                id: 2,
+                armor: [Some(a0), None, None],
+                vanity_armor: [None, None, None],
+                held: Some(h),
+            }) if a0 == COPPER_PICKAXE && h == COPPER_PICKAXE
+        ));
+
+        // ServerMsg::RemotePlayerDespawn
+        server
+            .send(ServerMsg::RemotePlayerDespawn { id: 2 })
+            .unwrap();
+        assert!(matches!(
+            client.try_recv().unwrap(),
+            Some(ServerMsg::RemotePlayerDespawn { id: 2 })
+        ));
+
+        // ServerMsg::Chat
+        server
+            .send(ServerMsg::Chat {
+                sender: Some("Bob".into()),
+                text: "hi!".into(),
+            })
+            .unwrap();
+        assert!(matches!(
+            client.try_recv().unwrap(),
+            Some(ServerMsg::Chat {
+                sender: Some(ref s),
+                ref text,
+            }) if s == "Bob" && text == "hi!"
+        ));
+
+        // ServerMsg::PlayerList
+        server
+            .send(ServerMsg::PlayerList {
+                players: vec![(1, "Alice".into()), (2, "Bob".into())],
+            })
+            .unwrap();
+        assert!(matches!(
+            client.try_recv().unwrap(),
+            Some(ServerMsg::PlayerList { ref players })
+                if players.as_slice() == [(1, "Alice".into()), (2, "Bob".into())]
+        ));
+    }
+
+    #[test]
+    fn serde_roundtrip_protocol_types() {
+        use crate::block::STONE;
+        use crate::character::{Appearance, HairStyle};
+        use crate::item::{COPPER_PICKAXE, Prefix};
+        use crate::liquid_cell::{Liquid, LiquidKind};
+
+        // Chunk roundtrip via custom Serialize/Deserialize
+        let mut chunk = Chunk::filled(crate::block::AIR);
+        chunk.set(1, 2, 3, STONE);
+        chunk.set_wall(4, 5, 6, true);
+        chunk.set_liquid(
+            7,
+            8,
+            9,
+            Some(Liquid {
+                kind: LiquidKind::Water,
+                amount: 200,
+            }),
+        );
+        let chunk_json = serde_json::to_string(&chunk).unwrap();
+        let chunk_back: Chunk = serde_json::from_str(&chunk_json).unwrap();
+        assert_eq!(chunk_back, chunk);
+
+        // Inventory roundtrip via custom Serialize/Deserialize (SLOTS = 58)
+        let mut inv = Inventory::empty();
+        inv.selected = 3;
+        inv.slots[0] = Some(ItemStack {
+            id: COPPER_PICKAXE,
+            count: 1,
+            prefix: Prefix(0),
+        });
+        inv.slots[57] = Some(ItemStack {
+            id: COPPER_PICKAXE,
+            count: 5,
+            prefix: Prefix(0),
+        });
+        let inv_json = serde_json::to_string(&inv).unwrap();
+        let inv_back: Inventory = serde_json::from_str(&inv_json).unwrap();
+        assert_eq!(inv_back, inv);
+
+        // ClientMsg roundtrip
+        let client_msgs = [
+            ClientMsg::Hello {
+                seed: 123,
+                name: Some("Tester".into()),
+                character: Some(vec![1, 2, 3]),
+                protocol_version: PROTOCOL_VERSION,
+                password: Some("pw".into()),
+            },
+            ClientMsg::Chat {
+                text: "hello".into(),
+            },
+            ClientMsg::Bye,
+        ];
+        for msg in client_msgs {
+            let encoded = serde_json::to_string(&msg).unwrap();
+            let decoded: ClientMsg = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(format!("{decoded:?}"), format!("{msg:?}"));
+        }
+
+        // ServerMsg roundtrip (including Chunk, Inventory, and new multiplayer variants)
+        let appearance = Appearance {
+            hair: HairStyle::Long,
+            skin: [255, 206, 175],
+            hair_color: [20, 20, 20],
+            eyes: [50, 150, 50],
+            shirt: [100, 100, 200],
+            pants: [30, 30, 50],
+        };
+        let server_msgs = [
+            ServerMsg::Welcome {
+                id: 1,
+                spawn: [10.0, 20.0, 30.0],
+                size: WorldSize::Medium,
+            },
+            ServerMsg::Chunk {
+                pos: ChunkPos { x: 1, y: 2, z: 3 },
+                chunk: Arc::new(chunk),
+            },
+            ServerMsg::Inventory(inv),
+            ServerMsg::Rejected {
+                reason: RejectReason::BadPassword,
+            },
+            ServerMsg::RemotePlayerSpawn {
+                id: 2,
+                name: "Bob".into(),
+                appearance,
+                pos: [1.0, 2.0, 3.0],
+                yaw: 0.5,
+            },
+            ServerMsg::RemotePlayerState {
+                id: 2,
+                pos: [1.0, 2.0, 3.0],
+                vel: [0.0, 1.0, 0.0],
+                yaw: 0.5,
+                pitch: -0.2,
+                swinging: false,
+                dead: true,
+            },
+            ServerMsg::RemotePlayerEquipment {
+                id: 2,
+                armor: [None, Some(COPPER_PICKAXE), None],
+                vanity_armor: [None, None, None],
+                held: Some(COPPER_PICKAXE),
+            },
+            ServerMsg::RemotePlayerDespawn { id: 2 },
+            ServerMsg::Chat {
+                sender: None,
+                text: "Bob joined".into(),
+            },
+            ServerMsg::PlayerList {
+                players: vec![(1, "Alice".into()), (2, "Bob".into())],
+            },
+        ];
+        for msg in server_msgs {
+            let encoded = serde_json::to_string(&msg).unwrap();
+            let decoded: ServerMsg = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(format!("{decoded:?}"), format!("{msg:?}"));
         }
     }
 }

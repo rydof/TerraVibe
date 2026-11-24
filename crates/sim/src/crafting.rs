@@ -33,7 +33,7 @@ use crate::item::{
     WOODEN_DOOR, WOODEN_HAMMER, WOODEN_SWORD, WOODEN_TABLE, WORKBENCH_ITEM, WORM_FOOD,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RecipeId(pub u16);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -949,7 +949,7 @@ pub fn recipes_using_material(item: ItemId) -> Vec<&'static Recipe> {
         .collect()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CraftError {
     UnknownRecipe,
     InvalidCount,

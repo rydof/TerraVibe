@@ -5,7 +5,7 @@ use crate::codec::{DecodeError, Reader, Writer};
 pub const FACTS_MAGIC: &[u8; 4] = b"TVWF";
 pub const FACTS_VERSION: u8 = 5;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WorldFacts {
     pub merchant_housed: bool,
     pub downed_eye: bool,
@@ -20,7 +20,7 @@ pub struct WorldFacts {
     pub downed_queen_bee: bool,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CharacterFacts {
     pub onboarding_dismissed: bool,
     pub advice_seen: u32,

@@ -1,5 +1,7 @@
 //! Character data model, appearance presets, validation and versioned file format.
 
+use serde::{Deserialize, Serialize};
+
 use crate::codec::{DecodeError, Reader, Writer};
 use crate::facts::CharacterFacts;
 use crate::inventory::Inventory;
@@ -8,7 +10,7 @@ use crate::item::{ItemId, Prefix, Rng};
 pub const FORMAT_VERSION: u8 = 5;
 pub const MAGIC: &[u8; 4] = b"TVCH";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Difficulty {
     #[default]
     Softcore,
@@ -29,7 +31,7 @@ impl Difficulty {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum HairStyle {
     #[default]
     Short,
@@ -85,7 +87,7 @@ impl HairStyle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Appearance {
     pub hair: HairStyle,
     pub skin: [u8; 3],

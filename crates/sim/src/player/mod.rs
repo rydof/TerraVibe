@@ -15,7 +15,7 @@ use crate::projectile::ProjKind;
 use crate::world_bounds::WorldBounds;
 pub use vitals::{Vitals, fall_damage};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum DeathCause {
     Contact(EnemyKind),
     Projectile(ProjKind),
@@ -568,7 +568,7 @@ impl Player {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PlayerEvent {
     Hurt { amount: i32 },
     Died { cause: DeathCause },
@@ -746,7 +746,7 @@ pub fn tick_player_bounded(
     ev
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct PlayerInput {
     /// -1..=1, +1 = forward.
     pub forward: f32,
@@ -765,7 +765,7 @@ pub struct PlayerInput {
     pub slot: u8,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PlayerBody {
     /// Feet centre.
     pub pos: [f32; 3],

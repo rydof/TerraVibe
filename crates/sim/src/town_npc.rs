@@ -6,7 +6,7 @@ use crate::enemy::{Enemy, EnemyKind, JUMP_SPEED, tick_enemy};
 use crate::item::Rng;
 use crate::player::consts::PX_TO_BLOCKS as PX;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TownKind {
     Guide,
     Merchant,

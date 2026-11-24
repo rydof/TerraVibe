@@ -5,7 +5,7 @@ use crate::block::BlockId;
 use crate::chunk::BlockQuery;
 use crate::player::consts::{GRAVITY, MAX_FALL_SPEED, PX_TO_BLOCKS as PX};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum EnemyKind {
     Slime,
     DemonEye,
@@ -696,7 +696,7 @@ impl EnemyKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct EnemyId(pub u32);
 
 /// `pos` is the feet centre; the box spans `half[0]` either side in x/z and

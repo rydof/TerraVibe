@@ -1242,6 +1242,7 @@ impl Server {
                     )) => {
                         creative_reqs.push((cid, m));
                     }
+                    Ok(Some(ClientMsg::Chat { .. })) => {}
                     Ok(Some(ClientMsg::Bye)) | Err(Disconnected) => {
                         c.dead = true;
                         break;
@@ -5952,6 +5953,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -5968,6 +5971,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -5994,6 +5999,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         let sp = spawn_point(1);
@@ -6009,6 +6016,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         let sp = spawn_point(1);
@@ -6056,6 +6065,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         let sp = spawn_point(1);
@@ -6088,6 +6099,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         let sp = spawn_point(1);
@@ -6205,6 +6218,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         let sp = spawn_point(1);
@@ -6272,6 +6287,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         let sp = spawn_point(1);
@@ -8564,6 +8581,8 @@ mod tests {
             seed: 1,
             name: Some("ann".into()),
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         a.tick();
@@ -8591,6 +8610,8 @@ mod tests {
             seed: 1,
             name: Some("ann".into()),
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         b.tick();
@@ -9314,6 +9335,8 @@ mod tests {
             seed: 1,
             name: Some("b".into()),
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -9906,6 +9929,8 @@ mod tests {
                 seed: 7,
                 name: None,
                 character: None,
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
         let sp = spawn_point(7);
@@ -10039,6 +10064,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10091,12 +10118,16 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         c2.send(ClientMsg::Hello {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10162,6 +10193,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10221,6 +10254,8 @@ mod tests {
                 seed: 1,
                 name: None,
                 character: None,
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
         s.tick();
@@ -10278,6 +10313,8 @@ mod tests {
                 seed: 1,
                 name: None,
                 character: None,
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
         s.tick();
@@ -10331,6 +10368,8 @@ mod tests {
                 seed: 1,
                 name: None,
                 character: None,
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
         s.tick();
@@ -10393,6 +10432,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10499,6 +10540,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10597,6 +10640,8 @@ mod tests {
             seed: 1,
             name: Some("Hero".into()),
             character: Some(ch.to_bytes()),
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10651,6 +10696,8 @@ mod tests {
             seed: 1,
             name: Some("Hero".into()),
             character: Some(ch.to_bytes()),
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10673,6 +10720,8 @@ mod tests {
             seed: 1,
             name: Some("Regular".into()),
             character: Some(vec![0xDE, 0xAD, 0xBE, 0xEF]),
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10698,6 +10747,8 @@ mod tests {
             seed: 1,
             name: Some("Hero".into()),
             character: Some(ch.to_bytes()),
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10757,6 +10808,8 @@ mod tests {
             seed: 1,
             name: Some("Runner".into()),
             character: Some(ch.to_bytes()),
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -10802,6 +10855,8 @@ mod tests {
             seed: 1,
             name: None,
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -11014,6 +11069,8 @@ mod tests {
                 seed: 1,
                 name: Some("Hero".into()),
                 character: Some(ch.to_bytes()),
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
             let sp = spawn_point(1);
@@ -11148,6 +11205,8 @@ mod tests {
                 seed: 1,
                 name: Some("Hero".into()),
                 character: Some(char_bytes),
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
             let mut got2 = Vec::new();
@@ -13401,6 +13460,8 @@ mod tests {
                     seed: 1,
                     name: None,
                     character: None,
+                    protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                    password: None,
                 })
                 .unwrap();
             s.tick();
@@ -14515,6 +14576,8 @@ mod tests {
             seed: 1,
             name: Some("p2".into()),
             character: None,
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();
@@ -15249,6 +15312,8 @@ mod tests {
             seed: 1,
             name: None,
             character: Some(ch.to_bytes()),
+            protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+            password: None,
         })
         .unwrap();
         s.tick();

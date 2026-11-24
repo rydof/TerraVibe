@@ -5,7 +5,7 @@
 use super::{ItemClass, ItemId, item_data};
 
 /// A prefix id (0 = none). Ids are `PrefixID`'s.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Prefix(pub u8);
 
 /// Multipliers a prefix applies. 1.0 / 0 mean "unchanged".

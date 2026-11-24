@@ -11,7 +11,7 @@ use crate::block::{
 mod prefix;
 pub use prefix::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ItemId(pub u16);
 
 // Ids from `Terraria/ID/gameplay spec.
@@ -362,7 +362,7 @@ pub enum ItemClass {
     Other,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ArmorSlot {
     Head,
     Body,

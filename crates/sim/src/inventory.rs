@@ -1,12 +1,14 @@
 //! 58-slot inventory (bag, coins, ammo) and the starting kit.
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::codec::{DecodeError, Reader, Writer};
 use crate::item::{
     COPPER_AXE, COPPER_PICKAXE, COPPER_SHORTSWORD, ItemClass, ItemId, Prefix, Rng, is_ammo,
     is_coin, item_data, roll_prefix,
 };
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortMode {
     #[default]
     ByType,
@@ -37,7 +39,7 @@ pub const COIN0: usize = 50;
 pub const AMMO0: usize = 54;
 pub const SLOTS: usize = 58;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ItemStack {
     pub id: ItemId,
     pub count: u32,
@@ -49,6 +51,42 @@ pub struct Inventory {
     pub slots: [Option<ItemStack>; SLOTS],
     /// Hotbar selection, 0..10.
     pub selected: usize,
+}
+
+impl Serialize for Inventory {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct InventorySer<'a> {
+            slots: &'a [Option<ItemStack>],
+            selected: usize,
+        }
+        InventorySer {
+            slots: self.slots.as_slice(),
+            selected: self.selected,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Inventory {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct InventoryDe {
+            slots: Vec<Option<ItemStack>>,
+            selected: usize,
+        }
+        let de = InventoryDe::deserialize(deserializer)?;
+        let slots: [Option<ItemStack>; SLOTS] = de
+            .slots
+            .try_into()
+            .map_err(|v: Vec<_>| {
+                serde::de::Error::invalid_length(v.len(), &"58 inventory slots")
+            })?;
+        Ok(Inventory {
+            slots,
+            selected: de.selected,
+        })
+    }
 }
 
 impl Inventory {

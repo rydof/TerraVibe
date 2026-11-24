@@ -438,6 +438,8 @@ pub(crate) fn pump(
                     seed,
                     name: char_name,
                     character: char_bytes,
+                    protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                    password: None,
                 })
                 .is_err();
         }
@@ -457,6 +459,8 @@ pub(crate) fn pump(
                         seed,
                         name: char_name,
                         character: char_bytes,
+                        protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                        password: None,
                     })
                     .is_err();
             }
@@ -892,6 +896,13 @@ pub(crate) fn pump(
             ServerMsg::GuideSlot(g) => {
                 commands.insert_resource(LocalGuideSlot(g));
             }
+            ServerMsg::Rejected { .. }
+            | ServerMsg::RemotePlayerSpawn { .. }
+            | ServerMsg::RemotePlayerState { .. }
+            | ServerMsg::RemotePlayerEquipment { .. }
+            | ServerMsg::RemotePlayerDespawn { .. }
+            | ServerMsg::Chat { .. }
+            | ServerMsg::PlayerList { .. } => {}
         }
     }
 

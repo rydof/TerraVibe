@@ -40,7 +40,7 @@ pub const YOYO_MAX_DIST: f32 = 10.0;
 pub const VILETHORN_REACH: f32 = 10.0;
 pub const BULLET_TIME_LEFT: i32 = 600;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProjKind {
     Arrow,
     FlamingArrow,
@@ -123,7 +123,7 @@ impl ProjKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Projectile {
     pub id: u32,
     /// Centre, blocks.

@@ -1,11 +1,11 @@
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LiquidKind {
     Water,
     Lava,
     Honey,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Liquid {
     pub kind: LiquidKind,
     pub amount: u8, // 1..=255; 0 means none

@@ -306,7 +306,7 @@ pub struct UseState {
     burst_prefix: Option<Prefix>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum UseEvent {
     Swing {
         item: ItemId,

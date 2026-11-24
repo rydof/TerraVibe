@@ -701,6 +701,8 @@ mod tests {
                 seed: crate::qa::FIXTURE_SEED,
                 name: Some("player".to_string()),
                 character: None,
+                protocol_version: terravibe_sim::net::PROTOCOL_VERSION,
+                password: None,
             })
             .unwrap();
 

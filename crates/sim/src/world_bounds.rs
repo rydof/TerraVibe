@@ -3,7 +3,7 @@
 use crate::chunk::{CHUNK_SIZE, ChunkPos};
 
 /// World size preset, matching Terraria's widths scaled by `TILE_BLOCKS` (0.686).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum WorldSize {
     #[default]
     Small,
@@ -64,7 +64,7 @@ pub const BEACH_WIDTH: i32 = 40;
 pub const SEA_LEVEL_Y: i32 = 276;
 
 /// Square world bounds centred on the origin: `x, z` in `[-half, half)`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WorldBounds {
     pub half: i32,
 }

@@ -5,7 +5,7 @@ use crate::inventory::{AMMO0, COIN0, Inventory, ItemStack, SLOTS};
 use crate::item::{ArmorSlot, Prefix, is_ammo, is_coin, item_data};
 use crate::player::armor_index;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SlotRef {
     Inv(u8),
     Armor(ArmorSlot),
@@ -16,7 +16,7 @@ pub enum SlotRef {
     Guide,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ClickKind {
     Left,
     Right,
