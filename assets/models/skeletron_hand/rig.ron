@@ -1,0 +1,12 @@
+(
+    parts: [
+        (name: "hand", file: "hand.vox", pivot: (14.000, 18.000, 8.000), offset: (0.000, 0.000, 0.000), parent: None),
+    ],
+    anims: {
+        "idle": (len: 1.2, looping: true, keys: [
+            (t: 0.0, part: "hand", rot_deg: (0.000, 0.000, -6.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.6, part: "hand", rot_deg: (0.000, 0.000, 6.000), offset: (0.000, 0.000, 0.000)),
+            (t: 1.2, part: "hand", rot_deg: (0.000, 0.000, -6.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)

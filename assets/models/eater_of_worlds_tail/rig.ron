@@ -1,0 +1,12 @@
+(
+    parts: [
+        (name: "tail", file: "tail.vox", pivot: (13.000, 13.000, 16.000), offset: (0.000, 0.000, 0.000), parent: None),
+    ],
+    anims: {
+        "idle": (len: 1.0, looping: true, keys: [
+            (t: 0.0, part: "tail", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.5, part: "tail", rot_deg: (0.000, 0.000, -8.000), offset: (0.000, 0.000, 0.000)),
+            (t: 1.0, part: "tail", rot_deg: (0.000, 0.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)

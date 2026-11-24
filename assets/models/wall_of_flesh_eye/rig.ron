@@ -1,0 +1,13 @@
+(
+    parts: [
+        (name: "stalk", file: "stalk.vox", pivot: (6.000, 6.000, 0.000), offset: (0.000, 0.000, 0.000), parent: None),
+        (name: "eye", file: "eye.vox", pivot: (20.000, 20.000, 20.000), offset: (0.000, 0.000, 28.000), parent: Some("stalk")),
+    ],
+    anims: {
+        "idle": (len: 1.4, looping: true, keys: [
+            (t: 0.0, part: "eye", rot_deg: (0.000, -14.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 0.7, part: "eye", rot_deg: (0.000, 14.000, 0.000), offset: (0.000, 0.000, 0.000)),
+            (t: 1.4, part: "eye", rot_deg: (0.000, -14.000, 0.000), offset: (0.000, 0.000, 0.000)),
+        ]),
+    },
+)
