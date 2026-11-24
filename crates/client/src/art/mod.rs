@@ -18,6 +18,7 @@ pub mod rig;
 pub mod rig_view;
 #[allow(dead_code)]
 pub mod sprite;
+pub mod ui_icons;
 pub mod vox;
 pub mod voxmesh;
 

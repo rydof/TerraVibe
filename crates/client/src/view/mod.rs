@@ -86,45 +86,33 @@ impl Plugin for ViewPlugin {
             death: font("Fonts/Death_Text"),
             stack: font("Fonts/Item_Stack"),
             hotbar: crate::hud::hotbar::HotbarSource {
-                back: c
-                    .texture("Images/Inventory_Back")
-                    .unwrap_or_else(|e| fatal(format!("Images/Inventory_Back: {e}"))),
-                back_selected: c
-                    .texture("Images/Inventory_Back14")
-                    .unwrap_or_else(|e| fatal(format!("Images/Inventory_Back14: {e}"))),
+                back: crate::art::ui_icons::slot_frame(false),
+                back_selected: crate::art::ui_icons::slot_frame(true),
                 icons: icons.iter().map(|(k, v)| (*k, v.clone())).collect(),
             },
-            heart: c
-                .texture("Images/Heart")
-                .unwrap_or_else(|e| fatal(format!("Images/Heart: {e}"))),
-            mana: c
-                .texture("Images/Mana")
-                .unwrap_or_else(|e| fatal(format!("Images/Mana: {e}"))),
+            heart: crate::art::ui_icons::heart_icon(),
+            mana: crate::art::ui_icons::mana_icon(),
             extra_ui: crate::hud::ExtraUiSource {
                 coin_ghosts: [
-                    c.texture("Images/Coin_0").ok(),
-                    c.texture("Images/Coin_1").ok(),
-                    c.texture("Images/Coin_2").ok(),
-                    c.texture("Images/Coin_3").ok(),
+                    Some(crate::art::ui_icons::coin_ghost(0)),
+                    Some(crate::art::ui_icons::coin_ghost(1)),
+                    Some(crate::art::ui_icons::coin_ghost(2)),
+                    Some(crate::art::ui_icons::coin_ghost(3)),
                 ],
-                ammo_ghost: c.texture("Images/Item_40").ok(),
-                trash_ghost: c.texture("Images/Trash").ok(),
-                armor_head_ghost: c.texture("Images/UI/DisplaySlots_0").ok(),
-                armor_body_ghost: c.texture("Images/UI/DisplaySlots_1").ok(),
-                armor_legs_ghost: c.texture("Images/UI/DisplaySlots_2").ok(),
-                accessory_ghost: c.texture("Images/UI/DisplaySlots_3").ok(),
-                hammer_btn: c.texture("Images/UI/Craft_Toggle_0").ok(),
-                quick_stack_btn: c.texture("Images/UI/ChestStack_0").ok(),
-                sort_btn: c.texture("Images/UI/Sort_0").ok(),
-                shield_icon: c.texture("Images/UI/Bestiary/Stat_Defense").ok(),
-                chat_back: c.texture("Images/Chat_Back").ok(),
-                heart_fancy: c
-                    .texture("Images/UI/PlayerResourceSets/FancyClassic/Heart_Single_Fancy")
-                    .ok(),
-                star_fancy: c
-                    .texture("Images/UI/PlayerResourceSets/FancyClassic/Star_Single")
-                    .ok(),
-                buff_potion_sickness: c.texture("Images/Buff_21").ok(),
+                ammo_ghost: Some(crate::art::ui_icons::ammo_ghost()),
+                trash_ghost: Some(crate::art::ui_icons::trash_ghost()),
+                armor_head_ghost: Some(crate::art::ui_icons::armor_ghost(0)),
+                armor_body_ghost: Some(crate::art::ui_icons::armor_ghost(1)),
+                armor_legs_ghost: Some(crate::art::ui_icons::armor_ghost(2)),
+                accessory_ghost: Some(crate::art::ui_icons::accessory_ghost()),
+                hammer_btn: Some(crate::art::ui_icons::hammer_icon()),
+                quick_stack_btn: Some(crate::art::ui_icons::quick_stack_icon()),
+                sort_btn: Some(crate::art::ui_icons::sort_icon()),
+                shield_icon: Some(crate::art::ui_icons::defense_shield_icon()),
+                chat_back: None,
+                heart_fancy: Some(crate::art::ui_icons::heart_icon()),
+                star_fancy: Some(crate::art::ui_icons::mana_icon()),
+                buff_potion_sickness: Some(crate::art::ui_icons::potion_sickness_icon()),
             },
         };
 
